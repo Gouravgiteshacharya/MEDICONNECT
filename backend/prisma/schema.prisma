@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -10,4 +5,731 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  phone        String?  @unique
+  passwordHash String
+  role         UserRole
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  addresses                Address[]           @relation("UserAddresses")
+  pharmacyStaffMemberships PharmacyStaff[]     @relation("PharmacyStaffUser")
+  carts                    Cart[]              @relation("CustomerCarts")
+  orders                   Order[]             @relation("CustomerOrders")
+  deliveryPartnerProfile   DeliveryPartner?    @relation("DeliveryPartnerUser")
+  deliveryQuotes           DeliveryQuote[]     @relation("CustomerDeliveryQuotes")
+  inventoryUpdates         PharmacyInventory[] @relation("InventoryUpdatedByUser")
+  reportedSupportTickets   SupportTicket[]     @relation("SupportReporter")
+  assignedSupportTickets   SupportTicket[]     @relation("SupportAssignedAdmin")
+  supportMessages          SupportMessage[]    @relation("SupportMessageSender")
+  riskAssessments          RiskAssessment[]    @relation("RiskTargetUser")
+  reviewedRiskAssessments  RiskAssessment[]    @relation("RiskReviewedByAdmin")
+
+  @@index([role])
+  @@index([isActive])
+}
+
+model Address {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  label        String
+  addressLine1 String
+  addressLine2 String?
+  landmark     String?
+  city         String
+  state        String
+  postalCode   String
+  latitude     Float?
+  longitude    Float?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user           User            @relation("UserAddresses", fields: [userId], references: [id], onDelete: Cascade)
+  carts          Cart[]          @relation("CartDeliveryAddress")
+  orders         Order[]         @relation("OrderDeliveryAddress")
+  deliveryQuotes DeliveryQuote[] @relation("QuoteDeliveryAddress")
+
+  @@index([userId])
+  @@index([city, state])
+}
+
+model Pharmacy {
+  id                      String                  @id @default(uuid()) @db.Uuid
+  name                    String
+  description             String?
+  phone                   String
+  email                   String?
+  licenseNumber           String?                 @unique
+  addressLine1            String
+  addressLine2            String?
+  city                    String
+  state                   String
+  postalCode              String
+  latitude                Float?
+  longitude               Float?
+  isVerified              Boolean                 @default(false)
+  isActive                Boolean                 @default(true)
+  partnerStatus           PharmacyPartnerStatus   @default(PENDING)
+  inventoryManagementMode InventoryManagementMode @default(SELF_MANAGED)
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  staff          PharmacyStaff[]
+  inventory      PharmacyInventory[]
+  carts          Cart[]
+  orders         Order[]
+  deliveryQuotes DeliveryQuote[]
+
+  @@index([city, state])
+  @@index([isActive, isVerified])
+  @@index([partnerStatus])
+}
+
+model PharmacyStaff {
+  id         String            @id @default(uuid()) @db.Uuid
+  userId     String            @db.Uuid
+  pharmacyId String            @db.Uuid
+  role       PharmacyStaffRole
+  isActive   Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  user                  User           @relation("PharmacyStaffUser", fields: [userId], references: [id], onDelete: Restrict)
+  pharmacy              Pharmacy       @relation(fields: [pharmacyId], references: [id], onDelete: Restrict)
+  reviewedPrescriptions Prescription[] @relation("PrescriptionReviewer")
+
+  @@unique([userId, pharmacyId])
+  @@index([pharmacyId, role])
+  @@index([isActive])
+}
+
+model Medicine {
+  id                   String   @id @default(uuid()) @db.Uuid
+  name                 String
+  brandName            String?
+  genericName          String?
+  manufacturer         String?
+  description          String?
+  requiresPrescription Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  compositions MedicineComposition[]
+  inventory    PharmacyInventory[]
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+
+  @@index([name])
+  @@index([brandName])
+  @@index([genericName])
+  @@index([manufacturer])
+  @@index([isActive])
+}
+
+model ActiveIngredient {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  compositions MedicineComposition[]
+}
+
+model MedicineComposition {
+  id                 String  @id @default(uuid()) @db.Uuid
+  medicineId         String  @db.Uuid
+  activeIngredientId String  @db.Uuid
+  strength           Decimal @db.Decimal(10, 3)
+  strengthUnit       String  @db.VarChar(32)
+
+  medicine         Medicine         @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  activeIngredient ActiveIngredient @relation(fields: [activeIngredientId], references: [id], onDelete: Restrict)
+
+  @@unique([medicineId, activeIngredientId, strength, strengthUnit])
+  @@index([activeIngredientId])
+}
+
+model PharmacyInventory {
+  id              String          @id @default(uuid()) @db.Uuid
+  pharmacyId      String          @db.Uuid
+  medicineId      String          @db.Uuid
+  quantity        Int             @default(0)
+  sellingPrice    Decimal         @db.Decimal(10, 2)
+  availability    InventoryStatus @default(AVAILABLE)
+  lastUpdated     DateTime        @default(now())
+  updatedByUserId String?         @db.Uuid
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  pharmacy      Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Restrict)
+  medicine      Medicine @relation(fields: [medicineId], references: [id], onDelete: Restrict)
+  updatedByUser User?    @relation("InventoryUpdatedByUser", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([pharmacyId, medicineId])
+  @@index([pharmacyId, lastUpdated])
+  @@index([medicineId])
+  @@index([availability])
+}
+
+model Cart {
+  id                String             @id @default(uuid()) @db.Uuid
+  customerId        String             @db.Uuid
+  pharmacyId        String?            @db.Uuid
+  deliveryAddressId String?            @db.Uuid
+  fulfillmentMethod FulfillmentMethod?
+  status            CartStatus         @default(ACTIVE)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  customer        User       @relation("CustomerCarts", fields: [customerId], references: [id], onDelete: Cascade)
+  pharmacy        Pharmacy?  @relation(fields: [pharmacyId], references: [id], onDelete: SetNull)
+  deliveryAddress Address?   @relation("CartDeliveryAddress", fields: [deliveryAddressId], references: [id], onDelete: SetNull)
+  items           CartItem[]
+
+  @@index([customerId, status])
+  @@index([pharmacyId])
+}
+
+model CartItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  cartId     String   @db.Uuid
+  medicineId String   @db.Uuid
+  quantity   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  cart     Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, medicineId])
+  @@index([medicineId])
+}
+
+model Order {
+  id                           String            @id @default(uuid()) @db.Uuid
+  orderNumber                  String            @unique
+  customerId                   String            @db.Uuid
+  pharmacyId                   String            @db.Uuid
+  deliveryAddressId            String?           @db.Uuid
+  fulfillmentMethod            FulfillmentMethod
+  status                       OrderStatus       @default(CREATED)
+  deliveryAddressLabelSnapshot String?
+  deliveryAddressLine1Snapshot String?
+  deliveryAddressLine2Snapshot String?
+  deliveryLandmarkSnapshot     String?
+  deliveryCitySnapshot         String?
+  deliveryStateSnapshot        String?
+  deliveryPostalCodeSnapshot   String?
+  deliveryLatitudeSnapshot     Float?
+  deliveryLongitudeSnapshot    Float?
+  medicineSubtotal             Decimal           @db.Decimal(10, 2)
+  deliveryFee                  Decimal           @default(0) @db.Decimal(10, 2)
+  totalAmount                  Decimal           @db.Decimal(10, 2)
+  deliveryDistanceKm           Float?
+  quotedEtaMinutes             Int?
+  placedAt                     DateTime          @default(now())
+  confirmedAt                  DateTime?
+  completedAt                  DateTime?
+  cancelledAt                  DateTime?
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
+
+  customer            User                 @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Restrict)
+  pharmacy            Pharmacy             @relation(fields: [pharmacyId], references: [id], onDelete: Restrict)
+  deliveryAddress     Address?             @relation("OrderDeliveryAddress", fields: [deliveryAddressId], references: [id], onDelete: SetNull)
+  items               OrderItem[]
+  prescriptions       Prescription[]
+  deliveryAssignments DeliveryAssignment[]
+  dispatchAttempts    DispatchAttempt[]
+  deliveryEvents      DeliveryEvent[]
+  deliveryStops       DeliveryStop[]
+  deliveryQuote       DeliveryQuote?       @relation("OrderDeliveryQuote")
+  supportTickets      SupportTicket[]
+  riskAssessments     RiskAssessment[]
+
+  @@index([customerId, createdAt])
+  @@index([pharmacyId, createdAt])
+  @@index([status])
+}
+
+model OrderItem {
+  id                   String   @id @default(uuid()) @db.Uuid
+  orderId              String   @db.Uuid
+  medicineId           String?  @db.Uuid
+  medicineNameSnapshot String
+  brandNameSnapshot    String?
+  manufacturerSnapshot String?
+  requiresPrescription Boolean  @default(false)
+  quantity             Int
+  unitPrice            Decimal  @db.Decimal(10, 2)
+  lineTotal            Decimal  @db.Decimal(10, 2)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  medicine Medicine? @relation(fields: [medicineId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([medicineId])
+}
+
+model Prescription {
+  id               String             @id @default(uuid()) @db.Uuid
+  orderId          String             @db.Uuid
+  fileUrl          String
+  storagePath      String?
+  originalFilename String?
+  status           PrescriptionStatus @default(PENDING_REVIEW)
+  uploadedAt       DateTime           @default(now())
+  reviewedAt       DateTime?
+  reviewerStaffId  String?            @db.Uuid
+  reviewNotes      String?
+  rejectionReason  String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  reviewerStaff PharmacyStaff? @relation("PrescriptionReviewer", fields: [reviewerStaffId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([status])
+  @@index([reviewerStaffId])
+}
+
+model DeliveryPartner {
+  id               String                      @id @default(uuid()) @db.Uuid
+  userId           String                      @unique @db.Uuid
+  availability     DeliveryPartnerAvailability @default(OFFLINE)
+  vehicleType      VehicleType
+  vehicleNumber    String?
+  rating           Decimal?                    @db.Decimal(3, 2)
+  currentLatitude  Float?
+  currentLongitude Float?
+  lastLocationAt   DateTime?
+  isActive         Boolean                     @default(true)
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  user             User                 @relation("DeliveryPartnerUser", fields: [userId], references: [id], onDelete: Restrict)
+  assignments      DeliveryAssignment[]
+  dispatchAttempts DispatchAttempt[]
+  deliveryEvents   DeliveryEvent[]
+  batches          DeliveryBatch[]
+  locationUpdates  LocationUpdate[]
+  riskAssessments  RiskAssessment[]
+
+  @@index([availability, isActive])
+  @@index([lastLocationAt])
+}
+
+model DeliveryAssignment {
+  id              String                   @id @default(uuid()) @db.Uuid
+  orderId         String                   @db.Uuid
+  riderId         String                   @db.Uuid
+  batchId         String?                  @db.Uuid
+  status          DeliveryAssignmentStatus @default(OFFERED)
+  assignmentScore Float?
+  assignedAt      DateTime                 @default(now())
+  acceptedAt      DateTime?
+  declinedAt      DateTime?
+  timedOutAt      DateTime?
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+  cancelledAt     DateTime?
+  reassignedAt    DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  order            Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  rider            DeliveryPartner   @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  batch            DeliveryBatch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  dispatchAttempts DispatchAttempt[]
+  deliveryEvents   DeliveryEvent[]
+  stops            DeliveryStop[]
+  locationUpdates  LocationUpdate[]
+
+  @@index([orderId, status])
+  @@index([riderId, status])
+  @@index([batchId])
+  @@index([assignedAt])
+}
+
+model DispatchAttempt {
+  id                        String                @id @default(uuid()) @db.Uuid
+  orderId                   String                @db.Uuid
+  riderId                   String                @db.Uuid
+  assignmentId              String?               @db.Uuid
+  suitabilityScore          Float?
+  riderDistanceToPharmacyKm Float?
+  workloadSignal            Int?
+  routeCompatibilityScore   Float?
+  status                    DispatchAttemptStatus
+  attemptedAt               DateTime              @default(now())
+
+  order      Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  rider      DeliveryPartner     @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  assignment DeliveryAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, attemptedAt])
+  @@index([riderId, attemptedAt])
+  @@index([assignmentId])
+  @@index([status])
+}
+
+model DeliveryEvent {
+  id           String            @id @default(uuid()) @db.Uuid
+  orderId      String            @db.Uuid
+  assignmentId String?           @db.Uuid
+  riderId      String?           @db.Uuid
+  eventType    DeliveryEventType
+  occurredAt   DateTime          @default(now())
+  note         String?
+  metadata     Json?
+
+  order      Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  assignment DeliveryAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  rider      DeliveryPartner?    @relation(fields: [riderId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, occurredAt])
+  @@index([assignmentId, occurredAt])
+  @@index([riderId, occurredAt])
+  @@index([eventType])
+}
+
+model DeliveryBatch {
+  id          String              @id @default(uuid()) @db.Uuid
+  riderId     String              @db.Uuid
+  status      DeliveryBatchStatus @default(PLANNED)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  rider           DeliveryPartner      @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  assignments     DeliveryAssignment[]
+  stops           DeliveryStop[]
+  locationUpdates LocationUpdate[]
+
+  @@index([riderId, status])
+  @@index([createdAt])
+}
+
+model DeliveryStop {
+  id                 String             @id @default(uuid()) @db.Uuid
+  batchId            String             @db.Uuid
+  assignmentId       String?            @db.Uuid
+  orderId            String?            @db.Uuid
+  stopType           DeliveryStopType
+  sequence           Int
+  latitude           Float
+  longitude          Float
+  addressLabel       String?
+  status             DeliveryStopStatus @default(PENDING)
+  estimatedArrivalAt DateTime?
+  arrivedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  batch      DeliveryBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  assignment DeliveryAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  order      Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([batchId, sequence])
+  @@unique([batchId, assignmentId, stopType])
+  @@index([orderId])
+  @@index([status])
+}
+
+model LocationUpdate {
+  id             String   @id @default(uuid()) @db.Uuid
+  riderId        String   @db.Uuid
+  assignmentId   String?  @db.Uuid
+  batchId        String?  @db.Uuid
+  latitude       Float
+  longitude      Float
+  accuracyMeters Float?
+  recordedAt     DateTime @default(now())
+
+  rider      DeliveryPartner     @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  assignment DeliveryAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  batch      DeliveryBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([riderId, recordedAt])
+  @@index([assignmentId, recordedAt])
+  @@index([batchId, recordedAt])
+}
+
+model DeliveryQuote {
+  id                       String    @id @default(uuid()) @db.Uuid
+  customerId               String    @db.Uuid
+  pharmacyId               String    @db.Uuid
+  // Nullable so pre-checkout quotes can exist; unique when attached as the accepted quote for an order.
+  orderId                  String?   @unique @db.Uuid
+  deliveryAddressId        String?   @db.Uuid
+  deliveryLatitude         Float?
+  deliveryLongitude        Float?
+  distanceKm               Float
+  baseFee                  Decimal   @db.Decimal(10, 2)
+  distanceFee              Decimal   @db.Decimal(10, 2)
+  demandAdjustment         Decimal   @default(0) @db.Decimal(10, 2)
+  demandMultiplier         Decimal   @default(1) @db.Decimal(5, 2)
+  finalDeliveryFee         Decimal   @db.Decimal(10, 2)
+  estimatedDurationMinutes Int?
+  createdAt                DateTime  @default(now())
+  expiresAt                DateTime?
+
+  customer        User     @relation("CustomerDeliveryQuotes", fields: [customerId], references: [id], onDelete: Restrict)
+  pharmacy        Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Restrict)
+  order           Order?   @relation("OrderDeliveryQuote", fields: [orderId], references: [id], onDelete: SetNull)
+  deliveryAddress Address? @relation("QuoteDeliveryAddress", fields: [deliveryAddressId], references: [id], onDelete: SetNull)
+
+  @@index([customerId, createdAt])
+  @@index([pharmacyId, createdAt])
+  @@index([expiresAt])
+}
+
+model SupportTicket {
+  id              String                @id @default(uuid()) @db.Uuid
+  userId          String                @db.Uuid
+  orderId         String?               @db.Uuid
+  assignedAdminId String?               @db.Uuid
+  subject         String
+  description     String
+  status          SupportTicketStatus   @default(OPEN)
+  category        SupportTicketCategory
+  priority        SupportTicketPriority @default(NORMAL)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  resolvedAt      DateTime?
+
+  reporter      User             @relation("SupportReporter", fields: [userId], references: [id], onDelete: Restrict)
+  order         Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  assignedAdmin User?            @relation("SupportAssignedAdmin", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  messages      SupportMessage[]
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([assignedAdminId])
+  @@index([status])
+}
+
+model SupportMessage {
+  id            String   @id @default(uuid()) @db.Uuid
+  ticketId      String   @db.Uuid
+  senderId      String   @db.Uuid
+  message       String
+  attachmentUrl String?
+  createdAt     DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  sender User          @relation("SupportMessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt])
+  @@index([senderId])
+}
+
+model RiskAssessment {
+  id                String           @id @default(uuid()) @db.Uuid
+  targetUserId      String?          @db.Uuid
+  orderId           String?          @db.Uuid
+  deliveryPartnerId String?          @db.Uuid
+  riskScore         Int
+  signalDetails     Json?
+  rulesVersion      String?
+  modelVersion      String?
+  reviewStatus      RiskReviewStatus @default(PENDING_REVIEW)
+  reviewedByAdminId String?          @db.Uuid
+  reviewedAt        DateTime?
+  createdAt         DateTime         @default(now())
+
+  targetUser      User?            @relation("RiskTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  order           Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  deliveryPartner DeliveryPartner? @relation(fields: [deliveryPartnerId], references: [id], onDelete: SetNull)
+  reviewedByAdmin User?            @relation("RiskReviewedByAdmin", fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([targetUserId])
+  @@index([orderId])
+  @@index([deliveryPartnerId])
+  @@index([reviewStatus])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  CUSTOMER
+  PHARMACY_STAFF
+  DELIVERY_PARTNER
+  ADMIN
+}
+
+enum PharmacyPartnerStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  OFFBOARDED
+}
+
+enum InventoryManagementMode {
+  SELF_MANAGED
+  MEDICONNECT_MANAGED
+}
+
+enum PharmacyStaffRole {
+  OWNER
+  MANAGER
+  PHARMACIST
+  STAFF
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  LOW_STOCK
+  OUT_OF_STOCK
+  UNAVAILABLE
+}
+
+enum CartStatus {
+  ACTIVE
+  CHECKED_OUT
+  ABANDONED
+}
+
+enum FulfillmentMethod {
+  DELIVERY
+  SELF_PICKUP
+}
+
+enum OrderStatus {
+  CREATED
+  PRESCRIPTION_PENDING
+  PRESCRIPTION_APPROVED
+  PRESCRIPTION_REJECTED
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  RIDER_ASSIGNED
+  PICKED_UP
+  PICKED_UP_BY_CUSTOMER
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REJECTED_BY_PHARMACY
+}
+
+enum PrescriptionStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  ADDITIONAL_INFO_REQUIRED
+}
+
+enum DeliveryPartnerAvailability {
+  OFFLINE
+  AVAILABLE
+  BUSY
+  PAUSED
+}
+
+enum VehicleType {
+  BICYCLE
+  BIKE
+  SCOOTER
+  CAR
+  WALKER
+}
+
+enum DeliveryAssignmentStatus {
+  OFFERED
+  ACCEPTED
+  DECLINED
+  TIMED_OUT
+  PICKED_UP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REASSIGNED
+  FAILED
+}
+
+enum DispatchAttemptStatus {
+  CANDIDATE
+  OFFERED
+  ACCEPTED
+  DECLINED
+  TIMED_OUT
+  SKIPPED
+  FAILED
+}
+
+enum DeliveryEventType {
+  RIDER_ASSIGNED
+  RIDER_ACCEPTED
+  ARRIVED_AT_PHARMACY
+  PICKED_UP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED_DELIVERY
+  REASSIGNED
+  CANCELLED
+}
+
+enum DeliveryBatchStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryStopType {
+  PHARMACY_PICKUP
+  CUSTOMER_DROPOFF
+}
+
+enum DeliveryStopStatus {
+  PENDING
+  EN_ROUTE
+  ARRIVED
+  COMPLETED
+  SKIPPED
+  CANCELLED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum SupportTicketCategory {
+  DELAYED_DELIVERY
+  WRONG_ORDER
+  MISSING_ITEM
+  PAYMENT
+  RIDER
+  PHARMACY
+  PRESCRIPTION
+  OTHER
+}
+
+enum SupportTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum RiskReviewStatus {
+  PENDING_REVIEW
+  REVIEWED
+  DISMISSED
+  ACTION_REQUIRED
 }
