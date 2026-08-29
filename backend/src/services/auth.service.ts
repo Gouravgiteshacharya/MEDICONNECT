@@ -1,9 +1,10 @@
-import { Prisma, UserRole } from "../../generated/prisma/client.js";
+import { UserRole } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import type { LoginInput, RegisterInput } from "../validators/auth.schemas.js";
 import { ApiError } from "../utils/ApiError.js";
 import { signAuthToken } from "../utils/jwt.js";
 import { comparePassword, hashPassword } from "../utils/password.js";
+import { isUniqueConstraintError } from "../utils/prismaErrors.js";
 
 type AuthUserRecord = {
   id: string;
@@ -85,15 +86,6 @@ function buildAuthResponse(user: AuthUserRecord): AuthResponse {
     }),
     user: toSafeUser(user),
   };
-}
-
-function isUniqueConstraintError(error: unknown, field: string) {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002" &&
-    Array.isArray(error.meta?.target) &&
-    error.meta.target.includes(field)
-  );
 }
 
 export async function registerCustomer(
