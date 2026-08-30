@@ -11,6 +11,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import type { CreateOrderInput } from "../validators/order.schemas.js";
+import type { OrderHistoryQuery } from "../validators/order.schemas.js";
 import {
   getOrderableInventorySnapshot,
   type OrderableInventorySnapshot,
@@ -99,6 +100,79 @@ type CheckoutCart = Prisma.CartGetPayload<{
 }>;
 type CreatedOrder = Prisma.OrderGetPayload<{ select: typeof orderSelect }>;
 
+const orderHistorySelect = {
+  id: true,
+  orderNumber: true,
+  pharmacyId: true,
+  fulfillmentMethod: true,
+  status: true,
+  medicineSubtotal: true,
+  deliveryFee: true,
+  totalAmount: true,
+  placedAt: true,
+  confirmedAt: true,
+  completedAt: true,
+  cancelledAt: true,
+  _count: { select: { items: true } },
+} satisfies Prisma.OrderSelect;
+
+const customerOrderDetailSelect = {
+  id: true,
+  orderNumber: true,
+  pharmacyId: true,
+  fulfillmentMethod: true,
+  status: true,
+  medicineSubtotal: true,
+  deliveryFee: true,
+  totalAmount: true,
+  deliveryAddressId: true,
+  deliveryAddressLabelSnapshot: true,
+  deliveryAddressLine1Snapshot: true,
+  deliveryAddressLine2Snapshot: true,
+  deliveryLandmarkSnapshot: true,
+  deliveryCitySnapshot: true,
+  deliveryStateSnapshot: true,
+  deliveryPostalCodeSnapshot: true,
+  deliveryLatitudeSnapshot: true,
+  deliveryLongitudeSnapshot: true,
+  deliveryDistanceKm: true,
+  quotedEtaMinutes: true,
+  placedAt: true,
+  confirmedAt: true,
+  completedAt: true,
+  cancelledAt: true,
+  createdAt: true,
+  updatedAt: true,
+  items: {
+    select: {
+      id: true,
+      medicineId: true,
+      medicineNameSnapshot: true,
+      brandNameSnapshot: true,
+      manufacturerSnapshot: true,
+      requiresPrescription: true,
+      quantity: true,
+      unitPrice: true,
+      lineTotal: true,
+    },
+    orderBy: { id: "asc" },
+  },
+  prescriptions: {
+    select: {
+      id: true,
+      orderId: true,
+      fileUrl: true,
+      originalFilename: true,
+      status: true,
+      uploadedAt: true,
+      reviewedAt: true,
+      reviewNotes: true,
+      rejectionReason: true,
+    },
+    orderBy: [{ uploadedAt: "asc" }, { id: "asc" }],
+  },
+} satisfies Prisma.OrderSelect;
+
 type PreparedItem = {
   cartItemId: string;
   medicineId: string;
@@ -120,6 +194,53 @@ type PreparedCheckout = {
 
 function cartNotFoundError() {
   return new ApiError(404, "Cart not found.", "CART_NOT_FOUND");
+}
+
+function orderNotFoundError() {
+  return new ApiError(404, "Order not found.", "ORDER_NOT_FOUND");
+}
+
+export async function listCustomerOrders(
+  customerId: string,
+  query: OrderHistoryQuery,
+  dataSource: Pick<PrismaClient, "order"> = prisma,
+) {
+  const records = await dataSource.order.findMany({
+    where: {
+      customerId,
+      ...(query.status === undefined ? {} : { status: query.status }),
+    },
+    select: orderHistorySelect,
+    orderBy: [{ placedAt: "desc" }, { id: "desc" }],
+    take: query.limit + 1,
+    ...(query.cursor === undefined
+      ? {}
+      : { cursor: { id: query.cursor }, skip: 1 }),
+  });
+  const hasMore = records.length > query.limit;
+  const page = hasMore ? records.slice(0, query.limit) : records;
+
+  return {
+    orders: page.map(({ _count, ...order }) => ({
+      ...order,
+      itemCount: _count.items,
+    })),
+    nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+  };
+}
+
+export async function getCustomerOrder(
+  customerId: string,
+  orderId: string,
+  dataSource: Pick<PrismaClient, "order"> = prisma,
+) {
+  const order = await dataSource.order.findFirst({
+    where: { id: orderId, customerId },
+    select: customerOrderDetailSelect,
+  });
+
+  if (!order) throw orderNotFoundError();
+  return order;
 }
 
 function cartStateConflictError() {
