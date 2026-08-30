@@ -32,7 +32,14 @@ export function validateRequest(
       }
 
       if (schemas.query) {
-        req.query = schemas.query.parse(req.query) as Request["query"];
+        const parsedQuery = schemas.query.parse(req.query) as Request["query"];
+
+        Object.defineProperty(req, "query", {
+          configurable: true,
+          enumerable: true,
+          value: parsedQuery,
+          writable: true,
+        });
       }
 
       next();
