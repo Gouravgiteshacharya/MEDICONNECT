@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { emailSchema, trimmedText } from "./common.schemas.js";
+
 const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters long.")
@@ -7,8 +9,8 @@ const passwordSchema = z
 
 export const registerSchema = z
   .object({
-    name: z.string().trim().min(1).max(120),
-    email: z.string().trim().toLowerCase().email(),
+    name: trimmedText(120),
+    email: emailSchema,
     phone: z.string().trim().min(7).max(20).optional(),
     password: passwordSchema,
   })
@@ -16,7 +18,7 @@ export const registerSchema = z
 
 export const loginSchema = z
   .object({
-    email: z.string().trim().toLowerCase().email(),
+    email: emailSchema,
     password: z.string().min(1),
   })
   .strict();

@@ -10,6 +10,7 @@ import { getMe, updateMe } from "../controllers/user.controller.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { validateRequest } from "../middleware/validateRequest.js";
 import {
+  addressParamsSchema,
   createAddressSchema,
   updateAddressSchema,
 } from "../validators/address.schemas.js";
@@ -33,8 +34,14 @@ userRoutes.post(
 );
 userRoutes.patch(
   "/me/addresses/:addressId",
+  validateRequest({ params: addressParamsSchema }),
   authenticate,
   validateRequest(updateAddressSchema),
   updateAddress,
 );
-userRoutes.delete("/me/addresses/:addressId", authenticate, deleteAddress);
+userRoutes.delete(
+  "/me/addresses/:addressId",
+  validateRequest({ params: addressParamsSchema }),
+  authenticate,
+  deleteAddress,
+);

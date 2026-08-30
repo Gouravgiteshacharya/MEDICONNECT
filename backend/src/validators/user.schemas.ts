@@ -1,9 +1,11 @@
 import { z } from "zod";
 
+import { emailSchema, trimmedText } from "./common.schemas.js";
+
 export const updateUserProfileSchema = z
   .object({
-    name: z.string().trim().min(1).max(120).optional(),
-    email: z.string().trim().toLowerCase().email().optional(),
+    name: trimmedText(120).optional(),
+    email: emailSchema.optional(),
     phone: z.string().trim().min(7).max(20).nullable().optional(),
   })
   .strict()

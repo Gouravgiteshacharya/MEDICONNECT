@@ -4,10 +4,37 @@ import { ZodError } from "zod";
 
 import { ApiError } from "../utils/ApiError.js";
 
-export function validateRequest<TBody>(schema: ZodType<TBody>) {
+type RequestValidationSchema = {
+  body?: ZodType<unknown>;
+  params?: ZodType<Record<string, string>>;
+  query?: ZodType<unknown>;
+};
+
+function isZodSchema(
+  schema: ZodType<unknown> | RequestValidationSchema,
+): schema is ZodType<unknown> {
+  return typeof (schema as ZodType<unknown>).parse === "function";
+}
+
+export function validateRequest(
+  schema: ZodType<unknown> | RequestValidationSchema,
+) {
+  const schemas = isZodSchema(schema) ? { body: schema } : schema;
+
   return (req: Request, _res: Response, next: NextFunction) => {
     try {
-      req.body = schema.parse(req.body);
+      if (schemas.body) {
+        req.body = schemas.body.parse(req.body);
+      }
+
+      if (schemas.params) {
+        req.params = schemas.params.parse(req.params);
+      }
+
+      if (schemas.query) {
+        req.query = schemas.query.parse(req.query) as Request["query"];
+      }
+
       next();
     } catch (error) {
       if (error instanceof ZodError) {

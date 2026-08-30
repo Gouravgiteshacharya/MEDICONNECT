@@ -1,20 +1,29 @@
 import { z } from "zod";
 
-const optionalText = (max: number) =>
-  z.string().trim().min(1).max(max).nullable().optional();
+import {
+  optionalNullableTrimmedText,
+  trimmedText,
+  uuidSchema,
+} from "./common.schemas.js";
 
 const addressFields = {
-  label: z.string().trim().min(1).max(80),
-  addressLine1: z.string().trim().min(1).max(240),
-  addressLine2: optionalText(240),
-  landmark: optionalText(160),
-  city: z.string().trim().min(1).max(120),
-  state: z.string().trim().min(1).max(120),
-  postalCode: z.string().trim().min(1).max(20),
+  label: trimmedText(80),
+  addressLine1: trimmedText(240),
+  addressLine2: optionalNullableTrimmedText(240),
+  landmark: optionalNullableTrimmedText(160),
+  city: trimmedText(120),
+  state: trimmedText(120),
+  postalCode: trimmedText(20),
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   isDefault: z.boolean().optional(),
 };
+
+export const addressParamsSchema = z
+  .object({
+    addressId: uuidSchema,
+  })
+  .strict();
 
 export const createAddressSchema = z.object(addressFields).strict();
 
