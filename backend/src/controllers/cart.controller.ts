@@ -5,6 +5,7 @@ import {
   getActiveCustomerCart,
   removeActiveCartItem,
   updateActiveCartItemQuantity,
+  updateActiveCartFulfillment,
 } from "../services/cart.service.js";
 import { ApiError } from "../utils/ApiError.js";
 
@@ -37,6 +38,15 @@ export async function addCartItem(req: Request, res: Response) {
   );
 
   res.status(200).json({ item });
+}
+
+export async function updateCartFulfillment(req: Request, res: Response) {
+  const cart = await updateActiveCartFulfillment(
+    getAuthenticatedCustomerId(req),
+    req.body,
+  );
+
+  res.status(200).json({ cart });
 }
 
 export async function updateCartItem(req: Request, res: Response) {

@@ -18,11 +18,13 @@ import { signAuthToken } from "../src/utils/jwt.js";
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
+    address: { findFirst: vi.fn() },
     cart: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
       updateMany: vi.fn(),
+      updateManyAndReturn: vi.fn(),
     },
     cartItem: {
       findFirst: vi.fn(),
@@ -46,7 +48,14 @@ const { getOrderableInventorySnapshot } = await import(
 
 const prismaMock = prisma as unknown as {
   user: { findUnique: Mock };
-  cart: { findFirst: Mock; findMany: Mock; create: Mock; updateMany: Mock };
+  address: { findFirst: Mock };
+  cart: {
+    findFirst: Mock;
+    findMany: Mock;
+    create: Mock;
+    updateMany: Mock;
+    updateManyAndReturn: Mock;
+  };
   cartItem: {
     findFirst: Mock;
     findUnique: Mock;
@@ -65,6 +74,7 @@ const itemId = "44444444-4444-4444-8444-444444444444";
 const medicineId = "55555555-5555-4555-8555-555555555555";
 const pharmacyId = "66666666-6666-4666-8666-666666666666";
 const otherPharmacyId = "77777777-7777-4777-8777-777777777777";
+const addressId = "88888888-8888-4888-8888-888888888888";
 const createdAt = new Date("2026-08-01T10:00:00.000Z");
 const updatedAt = new Date("2026-08-02T10:00:00.000Z");
 
@@ -100,6 +110,11 @@ const cartContext = {
   _count: { items: 1 },
 };
 const addInput = { pharmacyId, medicineId, quantity: 2 };
+const fulfillmentCartContext = {
+  id: cartId,
+  pharmacyId,
+  _count: { items: 1 },
+};
 
 function snapshot(quantity = 10) {
   return {
@@ -174,6 +189,23 @@ function knownError(code: string, target?: unknown) {
   });
 }
 
+function mockFulfillmentSuccess(
+  fulfillmentMethod: FulfillmentMethod,
+  deliveryAddressId: string | null,
+) {
+  prismaMock.cart.findMany.mockResolvedValue([fulfillmentCartContext]);
+  if (deliveryAddressId) {
+    prismaMock.address.findFirst.mockResolvedValue({ id: deliveryAddressId });
+  }
+  prismaMock.cart.updateManyAndReturn.mockResolvedValue([
+    {
+      ...activeCart,
+      fulfillmentMethod,
+      deliveryAddressId,
+    },
+  ]);
+}
+
 describe("customer cart API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -214,6 +246,226 @@ describe("customer cart API", () => {
         .get("/api/v1/cart")
         .set("Authorization", authenticateAs());
       expect(response.body).toEqual({ cart: null });
+    });
+  });
+
+  describe("PATCH /api/v1/cart", () => {
+    it("rejects unauthenticated and non-customer requests", async () => {
+      const body = {
+        fulfillmentMethod: FulfillmentMethod.SELF_PICKUP,
+      };
+      expect((await request(app).patch("/api/v1/cart").send(body)).status).toBe(
+        401,
+      );
+      const forbidden = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs(UserRole.PHARMACY_STAFF))
+        .send(body);
+      expect(forbidden.status).toBe(403);
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["empty body", {}],
+      ["unknown method", { fulfillmentMethod: "COURIER" }],
+      ["delivery without address", { fulfillmentMethod: "DELIVERY" }],
+      [
+        "delivery with invalid address",
+        { fulfillmentMethod: "DELIVERY", deliveryAddressId: "bad" },
+      ],
+      [
+        "self pickup with address",
+        { fulfillmentMethod: "SELF_PICKUP", deliveryAddressId: addressId },
+      ],
+      [
+        "delivery with unknown field",
+        {
+          fulfillmentMethod: "DELIVERY",
+          deliveryAddressId: addressId,
+          distanceKm: 2,
+        },
+      ],
+      [
+        "self pickup with unknown field",
+        { fulfillmentMethod: "SELF_PICKUP", deliveryFee: 10 },
+      ],
+    ])("strictly rejects %s", async (_name, body) => {
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send(body);
+      expectError(response, 400, "VALIDATION_ERROR");
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("returns CART_NOT_FOUND when no active cart exists", async () => {
+      prismaMock.cart.findMany.mockResolvedValue([]);
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
+      expectError(response, 404, "CART_NOT_FOUND");
+      expect(prismaMock.cart.updateManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it("rejects multiple active carts", async () => {
+      prismaMock.cart.findMany.mockResolvedValue([
+        fulfillmentCartContext,
+        { ...fulfillmentCartContext, id: itemId },
+      ]);
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
+      expectError(response, 409, "CART_STATE_CONFLICT");
+    });
+
+    it.each([
+      ["empty", { ...fulfillmentCartContext, _count: { items: 0 } }],
+      ["null-pharmacy", { ...fulfillmentCartContext, pharmacyId: null }],
+    ])("rejects an %s active cart", async (_name, context) => {
+      prismaMock.cart.findMany.mockResolvedValue([context]);
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
+      expectError(response, 409, "CART_STATE_CONFLICT");
+      expect(prismaMock.cart.updateManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it("sets DELIVERY for an owned address and returns the existing cart shape", async () => {
+      mockFulfillmentSuccess(FulfillmentMethod.DELIVERY, addressId);
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({
+          fulfillmentMethod: FulfillmentMethod.DELIVERY,
+          deliveryAddressId: addressId,
+        });
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        cart: expect.objectContaining({
+          id: cartId,
+          fulfillmentMethod: FulfillmentMethod.DELIVERY,
+          deliveryAddressId: addressId,
+          items: expect.any(Array),
+        }),
+      });
+      expect(prismaMock.address.findFirst).toHaveBeenCalledWith({
+        where: { id: addressId, userId: customerId },
+        select: { id: true },
+      });
+      expect(prismaMock.cart.updateManyAndReturn).toHaveBeenCalledWith({
+        where: {
+          id: cartId,
+          customerId,
+          status: CartStatus.ACTIVE,
+          pharmacyId: { not: null },
+          items: { some: {} },
+        },
+        data: {
+          fulfillmentMethod: FulfillmentMethod.DELIVERY,
+          deliveryAddressId: addressId,
+        },
+        select: expect.any(Object),
+      });
+      expect(prismaMock.$transaction.mock.calls[0][1]).toEqual({
+        isolationLevel: "Serializable",
+      });
+    });
+
+    it.each(["nonexistent", "another customer's"])(
+      "returns the same ADDRESS_NOT_FOUND for an %s address",
+      async () => {
+        prismaMock.cart.findMany.mockResolvedValue([fulfillmentCartContext]);
+        prismaMock.address.findFirst.mockResolvedValue(null);
+        const response = await request(app)
+          .patch("/api/v1/cart")
+          .set("Authorization", authenticateAs())
+          .send({
+            fulfillmentMethod: FulfillmentMethod.DELIVERY,
+            deliveryAddressId: addressId,
+          });
+        expectError(response, 404, "ADDRESS_NOT_FOUND");
+        expect(prismaMock.cart.updateManyAndReturn).not.toHaveBeenCalled();
+      },
+    );
+
+    it("allows an owned delivery address without coordinates", async () => {
+      mockFulfillmentSuccess(FulfillmentMethod.DELIVERY, addressId);
+      prismaMock.address.findFirst.mockResolvedValue({
+        id: addressId,
+        latitude: null,
+        longitude: null,
+      });
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({
+          fulfillmentMethod: FulfillmentMethod.DELIVERY,
+          deliveryAddressId: addressId,
+        });
+      expect(response.status).toBe(200);
+    });
+
+    it("sets SELF_PICKUP and clears a stored delivery address", async () => {
+      mockFulfillmentSuccess(FulfillmentMethod.SELF_PICKUP, null);
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
+      expect(response.status).toBe(200);
+      expect(response.body.cart).toEqual(
+        expect.objectContaining({
+          fulfillmentMethod: FulfillmentMethod.SELF_PICKUP,
+          deliveryAddressId: null,
+        }),
+      );
+      expect(prismaMock.address.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.cart.updateManyAndReturn.mock.calls[0][0].data).toEqual(
+        {
+          fulfillmentMethod: FulfillmentMethod.SELF_PICKUP,
+          deliveryAddressId: null,
+        },
+      );
+    });
+
+    it("retries P2034 with the whole Serializable transaction", async () => {
+      mockFulfillmentSuccess(FulfillmentMethod.SELF_PICKUP, null);
+      prismaMock.$transaction
+        .mockRejectedValueOnce(knownError("P2034"))
+        .mockImplementationOnce(async (callback) => callback(prisma));
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
+      expect(response.status).toBe(200);
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+      expect(prismaMock.$transaction.mock.calls[1][1]).toEqual({
+        isolationLevel: "Serializable",
+      });
+    });
+
+    it("returns CART_UPDATE_CONFLICT after bounded P2034 retries", async () => {
+      prismaMock.$transaction.mockRejectedValue(knownError("P2034"));
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
+      expectError(response, 409, "CART_UPDATE_CONFLICT");
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(
+        MAX_CART_TRANSACTION_ATTEMPTS,
+      );
+    });
+
+    it("does not retry unrelated Prisma failures", async () => {
+      prismaMock.$transaction.mockRejectedValue(knownError("P2025"));
+      const response = await request(app)
+        .patch("/api/v1/cart")
+        .set("Authorization", authenticateAs())
+        .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
+      expect(response.status).toBe(500);
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
     });
   });
 

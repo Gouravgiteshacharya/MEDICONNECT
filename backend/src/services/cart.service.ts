@@ -1,12 +1,16 @@
 import {
   CartStatus,
   Prisma,
+  FulfillmentMethod,
   type PrismaClient,
 } from "../../generated/prisma/client.js";
 
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
-import type { AddCartItemInput } from "../validators/cart.schemas.js";
+import type {
+  AddCartItemInput,
+  UpdateCartFulfillmentInput,
+} from "../validators/cart.schemas.js";
 import {
   getOrderableInventorySnapshot,
   type OrderableInventorySnapshot,
@@ -19,9 +23,15 @@ type InventorySnapshotReader = (
   medicineId: string,
 ) => Promise<OrderableInventorySnapshot | null>;
 
-type CartTransactionClient = Pick<Prisma.TransactionClient, "cart" | "cartItem">;
+type CartTransactionClient = Pick<
+  Prisma.TransactionClient,
+  "address" | "cart" | "cartItem"
+>;
 
-export type CartDataSource = Pick<PrismaClient, "cart" | "cartItem"> & {
+export type CartDataSource = Pick<
+  PrismaClient,
+  "address" | "cart" | "cartItem"
+> & {
   $transaction<T>(
     callback: (tx: CartTransactionClient) => Promise<T>,
     options: { isolationLevel: "Serializable" },
@@ -67,6 +77,14 @@ type CartItemRecord = Prisma.CartItemGetPayload<{
 
 function cartItemNotFoundError() {
   return new ApiError(404, "Cart item not found.", "CART_ITEM_NOT_FOUND");
+}
+
+function cartNotFoundError() {
+  return new ApiError(404, "Cart not found.", "CART_NOT_FOUND");
+}
+
+function addressNotFoundError() {
+  return new ApiError(404, "Address not found.", "ADDRESS_NOT_FOUND");
 }
 
 function cartItemNotOrderableError() {
@@ -172,6 +190,95 @@ export async function getActiveCustomerCart(
     select: cartSelect,
     orderBy: { createdAt: "asc" },
   });
+}
+
+async function updateCartFulfillmentAttempt(
+  customerId: string,
+  input: UpdateCartFulfillmentInput,
+  dataSource: CartDataSource,
+): Promise<CartRecord> {
+  return dataSource.$transaction(
+    async (tx) => {
+      const activeCarts = await tx.cart.findMany({
+        where: { customerId, status: CartStatus.ACTIVE },
+        select: {
+          id: true,
+          pharmacyId: true,
+          _count: { select: { items: true } },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: 2,
+      });
+
+      if (activeCarts.length === 0) throw cartNotFoundError();
+      if (activeCarts.length > 1) throw cartStateConflictError();
+
+      const cart = activeCarts[0];
+
+      if (!cart || cart.pharmacyId === null || cart._count.items === 0) {
+        throw cartStateConflictError();
+      }
+
+      let deliveryAddressId: string | null = null;
+
+      if (input.fulfillmentMethod === FulfillmentMethod.DELIVERY) {
+        const address = await tx.address.findFirst({
+          where: {
+            id: input.deliveryAddressId,
+            userId: customerId,
+          },
+          select: { id: true },
+        });
+
+        if (!address) throw addressNotFoundError();
+
+        deliveryAddressId = address.id;
+      }
+
+      const [updatedCart] = await tx.cart.updateManyAndReturn({
+        where: {
+          id: cart.id,
+          customerId,
+          status: CartStatus.ACTIVE,
+          pharmacyId: { not: null },
+          items: { some: {} },
+        },
+        data: {
+          fulfillmentMethod: input.fulfillmentMethod,
+          deliveryAddressId,
+        },
+        select: cartSelect,
+      });
+
+      if (!updatedCart) throw cartStateConflictError();
+
+      return updatedCart;
+    },
+    { isolationLevel: "Serializable" },
+  );
+}
+
+export async function updateActiveCartFulfillment(
+  customerId: string,
+  input: UpdateCartFulfillmentInput,
+  dataSource: CartDataSource = prisma,
+): Promise<CartRecord> {
+  for (
+    let attempt = 1;
+    attempt <= MAX_CART_TRANSACTION_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      return await updateCartFulfillmentAttempt(customerId, input, dataSource);
+    } catch (error) {
+      if (!isTransactionConflict(error)) throw error;
+      if (attempt === MAX_CART_TRANSACTION_ATTEMPTS) {
+        throw cartUpdateConflictError();
+      }
+    }
+  }
+
+  throw cartUpdateConflictError();
 }
 
 async function addCartItemAttempt(
