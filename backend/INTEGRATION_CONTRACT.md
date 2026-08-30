@@ -138,3 +138,24 @@ Intelligence and Experience modules consume deterministic APIs. They must not by
 - Rate limiting is deferred to deployment/infrastructure design.
 - `trust proxy` is not enabled without deployment topology.
 - CSRF requirements must be revisited if authentication later moves from Bearer JWTs to cookies.
+
+## 11. Pharmacy Network To Commerce Inventory Snapshot
+
+Commerce may call the internal Pharmacy Network service
+`getOrderableInventorySnapshot(pharmacyId, medicineId)`. It returns either
+`null` or the current orderable inventory snapshot: `pharmacyId`, `medicineId`,
+`quantity`, two-decimal string `sellingPrice`, stored `availability`,
+`lastUpdated`, shared `FRESH`/`STALE` freshness, and the catalogue
+`requiresPrescription` boolean.
+
+A snapshot is returned only for an active, verified, `ACTIVE` partner pharmacy,
+an active medicine, and matching positive-quantity inventory whose stored status
+is `AVAILABLE` or `LOW_STOCK`. All missing or non-orderable states return `null`.
+`requiresPrescription` is catalogue metadata only and does not validate or
+approve a prescription.
+
+This read is not a reservation, lock, stock guarantee, final-price guarantee,
+or transactional stock consumption. Commerce owns requested-quantity
+comparison, checkout, transactional revalidation, reservation/decrement,
+copying the accepted price into the `OrderItem` price snapshot, and the
+prescription workflow.

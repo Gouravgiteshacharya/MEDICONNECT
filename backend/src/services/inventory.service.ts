@@ -1,5 +1,6 @@
 import {
   InventoryStatus,
+  PharmacyPartnerStatus,
   PharmacyStaffRole,
 } from "../../generated/prisma/client.js";
 
@@ -24,6 +25,17 @@ export { classifyInventoryFreshness, INVENTORY_FRESHNESS_THRESHOLD_MS };
 
 type DecimalPrice = {
   toFixed(decimalPlaces: number): string;
+};
+
+export type OrderableInventorySnapshot = {
+  pharmacyId: string;
+  medicineId: string;
+  quantity: number;
+  sellingPrice: string;
+  availability: InventoryStatus;
+  lastUpdated: Date;
+  freshness: "FRESH" | "STALE";
+  requiresPrescription: boolean;
 };
 
 type InventoryRecord = {
@@ -114,6 +126,59 @@ function toInventoryItem(record: InventoryRecord, now = new Date()) {
     lastUpdated: record.lastUpdated,
     updatedAt: record.updatedAt,
     freshness: classifyInventoryFreshness(record.lastUpdated, now),
+  };
+}
+
+/**
+ * Returns the current orderable inventory read snapshot. It is not a
+ * reservation, lock, stock or price guarantee, or transactional consumption;
+ * Commerce must revalidate during transactional checkout or order placement.
+ */
+export async function getOrderableInventorySnapshot(
+  pharmacyId: string,
+  medicineId: string,
+): Promise<OrderableInventorySnapshot | null> {
+  const record = await prisma.pharmacyInventory.findFirst({
+    where: {
+      pharmacyId,
+      medicineId,
+      quantity: { gt: 0 },
+      availability: {
+        in: [InventoryStatus.AVAILABLE, InventoryStatus.LOW_STOCK],
+      },
+      pharmacy: {
+        isActive: true,
+        isVerified: true,
+        partnerStatus: PharmacyPartnerStatus.ACTIVE,
+      },
+      medicine: { isActive: true },
+    },
+    select: {
+      pharmacyId: true,
+      medicineId: true,
+      quantity: true,
+      sellingPrice: true,
+      availability: true,
+      lastUpdated: true,
+      medicine: {
+        select: { requiresPrescription: true },
+      },
+    },
+  });
+
+  if (!record) return null;
+
+  const now = new Date();
+
+  return {
+    pharmacyId: record.pharmacyId,
+    medicineId: record.medicineId,
+    quantity: record.quantity,
+    sellingPrice: record.sellingPrice.toFixed(2),
+    availability: record.availability,
+    lastUpdated: record.lastUpdated,
+    freshness: classifyInventoryFreshness(record.lastUpdated, now),
+    requiresPrescription: record.medicine.requiresPrescription,
   };
 }
 
