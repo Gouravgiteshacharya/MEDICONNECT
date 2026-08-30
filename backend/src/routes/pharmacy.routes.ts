@@ -12,6 +12,7 @@ import {
   listInventory,
   updateInventoryItem,
 } from "../controllers/inventory.controller.js";
+import { getDashboard } from "../controllers/pharmacyDashboard.controller.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { authorizeRoles } from "../middleware/authorizeRoles.js";
 import { validateRequest } from "../middleware/validateRequest.js";
@@ -25,6 +26,7 @@ import {
   pharmacyParamsSchema,
   updatePharmacyProfileSchema,
 } from "../validators/pharmacy.schemas.js";
+import { pharmacyDashboardQuerySchema } from "../validators/pharmacyDashboard.schemas.js";
 
 export const pharmacyRoutes = Router();
 
@@ -32,6 +34,17 @@ const inventoryAccess = [
   authenticate,
   authorizeRoles(UserRole.PHARMACY_STAFF),
 ] as const;
+
+pharmacyRoutes.get(
+  "/:pharmacyId/dashboard",
+  validateRequest({
+    params: pharmacyParamsSchema,
+    query: pharmacyDashboardQuerySchema,
+  }),
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  getDashboard,
+);
 
 pharmacyRoutes.get(
   "/:pharmacyId/inventory",
