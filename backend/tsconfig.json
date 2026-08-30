@@ -5,7 +5,9 @@
       "moduleResolution": "NodeNext",
       "target": "ES2022",
       "esModuleInterop": true,
-      "skipLibCheck": true
+      "skipLibCheck": true,
+      "strict": true,
+      "noEmit": true
     },
-    "include": ["prisma7.config.ts"]
+    "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
   }
