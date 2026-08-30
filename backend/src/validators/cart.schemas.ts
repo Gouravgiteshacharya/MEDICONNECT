@@ -14,6 +14,15 @@ export const updateCartItemQuantitySchema = z
   })
   .strict();
 
+export const addCartItemSchema = z
+  .object({
+    pharmacyId: uuidSchema,
+    medicineId: uuidSchema,
+    quantity: z.number().int().min(1),
+  })
+  .strict();
+
 export type UpdateCartItemQuantityInput = z.infer<
   typeof updateCartItemQuantitySchema
 >;
+export type AddCartItemInput = z.infer<typeof addCartItemSchema>;
