@@ -9,6 +9,10 @@ import {
   isRecordNotFoundError,
   isUniqueConstraintError,
 } from "../utils/prismaErrors.js";
+import {
+  classifyInventoryFreshness,
+  INVENTORY_FRESHNESS_THRESHOLD_MS,
+} from "../utils/inventoryFreshness.js";
 import type {
   CreateInventoryInput,
   InventoryListQuery,
@@ -16,7 +20,7 @@ import type {
 } from "../validators/inventory.schemas.js";
 import { getActivePharmacyMembership } from "./pharmacyMembership.service.js";
 
-export const INVENTORY_FRESHNESS_THRESHOLD_MS = 24 * 60 * 60 * 1_000;
+export { classifyInventoryFreshness, INVENTORY_FRESHNESS_THRESHOLD_MS };
 
 type DecimalPrice = {
   toFixed(decimalPlaces: number): string;
@@ -91,15 +95,6 @@ async function requireInventoryWriter(userId: string, pharmacyId: string) {
   }
 
   return membership;
-}
-
-export function classifyInventoryFreshness(
-  lastUpdated: Date,
-  now = new Date(),
-): "FRESH" | "STALE" {
-  return now.getTime() - lastUpdated.getTime() <= INVENTORY_FRESHNESS_THRESHOLD_MS
-    ? "FRESH"
-    : "STALE";
 }
 
 function toInventoryItem(record: InventoryRecord, now = new Date()) {
