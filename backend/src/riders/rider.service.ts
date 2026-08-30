@@ -12,7 +12,7 @@ export interface RiderStore {
     findUnique(args: any): Promise<RiderRecord | null>;
     update(args: any): Promise<RiderRecord>;
   };
-  $transaction<T>(callback: (transaction: RiderStore) => Promise<T>): Promise<T>;
+  $transaction<T>(callback: (transaction: RiderStore) => Promise<T>, options?: unknown): Promise<T>;
 }
 const riderSelection = { include: { user: { select: { id: true, name: true, email: true, phone: true, isActive: true } } } };
 export async function getRiderProfile(store: RiderStore, userId: string): Promise<RiderRecord> {
