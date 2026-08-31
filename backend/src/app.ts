@@ -17,6 +17,8 @@ import type { AssignmentStore } from "./delivery-assignments/assignment.service.
 import { createDispatchRouter } from "./dispatch/dispatch.routes.js";
 import { loadDispatchConfig, type DispatchConfig } from "./dispatch/dispatch.config.js";
 import type { DispatchStore } from "./dispatch/dispatch.service.js";
+import { createLifecycleRouter } from "./delivery-lifecycle/lifecycle.routes.js";
+import type { LifecycleStore } from "./delivery-lifecycle/lifecycle.service.js";
 export interface AppDependencies {
   store: RiderStore;
   authenticate?: Authenticator;
@@ -52,6 +54,7 @@ export function createApp({
   app.use("/api/v1/dispatch", createDispatchRouter(store as unknown as DispatchStore, authenticate, {
     ...dispatchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
   }));
+  app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { now }));
   app.use(notFound);
   app.use(errorHandler);
   return app;
