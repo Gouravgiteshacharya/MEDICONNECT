@@ -24,6 +24,7 @@ export async function getRiderProfile(store: RiderStore, userId: string): Promis
 export async function setRiderAvailability(store: RiderStore, userId: string, availability: ManualAvailability): Promise<RiderRecord> {
   return store.$transaction(async (transaction) => {
     const rider = await getRiderProfile(transaction, userId);
+    if (rider.availability === "BUSY") throw new ApiError(409, "Availability cannot be changed during an active delivery", "RIDER_BUSY");
     if (availability === "AVAILABLE" && (!rider.isActive || !rider.user.isActive)) {
       throw new ApiError(409, "Inactive riders cannot become available", "RIDER_INACTIVE");
     }

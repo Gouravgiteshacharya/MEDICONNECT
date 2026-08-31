@@ -11,7 +11,7 @@ const userId = "40000000-0000-0000-0000-000000000001";
 const now = new Date("2026-08-31T12:00:00Z");
 function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler { return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.auth = users[token]; next(); }; }
 const authenticate = authentication({ rider: { userId, role: "DELIVERY_PARTNER" }, other: { userId: "40000000-0000-0000-0000-000000000002", role: "DELIVERY_PARTNER" }, customer: { userId, role: "CUSTOMER" } });
-interface Options { assignmentStatus?: string; orderStatus?: string; owner?: boolean; inactive?: boolean; assignmentWriteCount?: number; orderWriteCount?: number; riderWriteCount?: number; batchId?: string; remainingBatchAssignments?: number; }
+interface Options { assignmentStatus?: string; orderStatus?: string; owner?: boolean; inactive?: boolean; assignmentWriteCount?: number; orderWriteCount?: number; riderWriteCount?: number; batchId?: string; remainingBatchAssignments?: number; nextStopAssignmentId?: string; }
 function createStore(options: Options = {}) {
   const rider = { id: riderId, userId, isActive: !options.inactive, availability: "BUSY", user: { isActive: !options.inactive } };
   const order = { id: orderId, status: options.orderStatus ?? "RIDER_ASSIGNED", fulfillmentMethod: "DELIVERY", completedAt: null as Date | null };
@@ -32,7 +32,13 @@ function createStore(options: Options = {}) {
       findFirst: async (args: any) => events.find((event) => event.assignmentId === args.where.assignmentId && event.eventType === args.where.eventType) ? { id: "event" } : null,
       create: async (args: any) => { events.push(args.data); return args.data; },
     },
-    deliveryStop: { updateMany: async (args: any) => { stopWrites.push(args); return { count: 1 }; } },
+    deliveryStop: {
+      findFirst: async () => {
+        const stopType = assignment.status === "ACCEPTED" ? "PHARMACY_PICKUP" : "CUSTOMER_DROPOFF";
+        return assignment.batchId ? { id: "stop", assignmentId: options.nextStopAssignmentId ?? assignmentId, stopType, status: stopType === "PHARMACY_PICKUP" ? "PENDING" : assignment.status === "OUT_FOR_DELIVERY" ? "EN_ROUTE" : "PENDING" } : null;
+      },
+      updateMany: async (args: any) => { stopWrites.push(args); return { count: 1 }; },
+    },
     deliveryBatch: { updateMany: async (args: any) => { batchWrites.push(args); return { count: 1 }; } },
     $transaction: async (callback) => {
       const snapshot = { assignment: { ...assignment }, order: { ...order }, rider: { ...rider }, eventLength: events.length };
@@ -61,6 +67,7 @@ describe("pickup and delivery lifecycle", () => {
   });
   it("advances batch stops and keeps the rider busy until the final batched delivery", async () => { const batchId = "50000000-0000-0000-0000-000000000001"; const state = createStore({ batchId, assignmentStatus: "OUT_FOR_DELIVERY", orderStatus: "OUT_FOR_DELIVERY", remainingBatchAssignments: 1 }); const response = await post(state.store, "deliver"); expect(response.status).toBe(200); expect(state.stopWrites[0]).toMatchObject({ where: { batchId, assignmentId, stopType: "CUSTOMER_DROPOFF" }, data: { status: "COMPLETED" } }); expect(state.rider.availability).toBe("BUSY"); expect(state.batchWrites).toEqual([]); });
   it("completes the batch and releases the rider after its final delivery", async () => { const batchId = "50000000-0000-0000-0000-000000000001"; const state = createStore({ batchId, assignmentStatus: "OUT_FOR_DELIVERY", orderStatus: "OUT_FOR_DELIVERY", remainingBatchAssignments: 0 }); const response = await post(state.store, "deliver"); expect(response.status).toBe(200); expect(state.batchWrites[0]).toMatchObject({ where: { id: batchId, status: "ACTIVE" }, data: { status: "COMPLETED", completedAt: now } }); expect(state.rider.availability).toBe("AVAILABLE"); });
+  it("enforces the optimized stop order before lifecycle writes", async () => { const state = createStore({ batchId: "50000000-0000-0000-0000-000000000001", assignmentStatus: "OUT_FOR_DELIVERY", orderStatus: "OUT_FOR_DELIVERY", nextStopAssignmentId: "10000000-0000-0000-0000-000000000099" }); const response = await post(state.store, "deliver"); expect(response.status).toBe(409); expect(response.body.code).toBe("BATCH_STOP_OUT_OF_ORDER"); expect(state.assignment.status).toBe("OUT_FOR_DELIVERY"); expect(state.events).toEqual([]); });
   it("rejects skipped and backwards transitions", async () => {
     const state = createStore(); const response = await post(state.store, "deliver"); expect(response.status).toBe(409); expect(response.body.code).toBe("LIFECYCLE_NOT_ACTIONABLE"); expect(state.events).toEqual([]);
   });

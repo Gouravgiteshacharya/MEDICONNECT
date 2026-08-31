@@ -28,13 +28,13 @@ export async function updateRiderLocation(
     let assignment: { id: string; batchId: string | null } | null = null;
     if (input.assignmentId) {
       assignment = await transaction.deliveryAssignment.findFirst({
-        where: { id: input.assignmentId, riderId: rider.id },
+        where: { id: input.assignmentId, riderId: rider.id, status: { in: ["OFFERED", "ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"] } },
         select: { id: true, batchId: true },
       });
       if (!assignment) throw new ApiError(403, "Assignment does not belong to the authenticated rider", "ASSIGNMENT_NOT_OWNED");
     }
     if (input.batchId) {
-      const batch = await transaction.deliveryBatch.findFirst({ where: { id: input.batchId, riderId: rider.id }, select: { id: true } });
+      const batch = await transaction.deliveryBatch.findFirst({ where: { id: input.batchId, riderId: rider.id, status: { in: ["PLANNED", "ACTIVE"] } }, select: { id: true } });
       if (!batch) throw new ApiError(403, "Batch does not belong to the authenticated rider", "BATCH_NOT_OWNED");
     }
     if (assignment && input.batchId && assignment.batchId !== input.batchId) {

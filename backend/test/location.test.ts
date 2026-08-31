@@ -91,8 +91,8 @@ describe("PATCH /api/v1/riders/me/location", () => {
     const response = await request(app(store)).patch("/api/v1/riders/me/location").set("Authorization", "Bearer rider")
       .send({ ...validBody, assignmentId, batchId });
     expect(response.status).toBe(409); expect(response.body.code).toBe("ASSIGNMENT_BATCH_MISMATCH");
-    expect(state.assignmentQueries[0].where).toEqual({ id: assignmentId, riderId });
-    expect(state.batchQueries[0].where).toEqual({ id: batchId, riderId });
+    expect(state.assignmentQueries[0].where).toEqual({ id: assignmentId, riderId, status: { in: ["OFFERED", "ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"] } });
+    expect(state.batchQueries[0].where).toEqual({ id: batchId, riderId, status: { in: ["PLANNED", "ACTIVE"] } });
     expect(state.currentLocationUpdates).toBe(0);
     expect(state.latestLocationQueries).toBe(0);
     expect(state.history).toHaveLength(0);

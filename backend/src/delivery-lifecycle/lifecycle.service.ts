@@ -8,7 +8,7 @@ export interface LifecycleStore {
   deliveryAssignment: { findFirst(args: unknown): Promise<Assignment | null>; updateMany(args: unknown): Promise<Result>; count(args: unknown): Promise<number>; };
   order: { updateMany(args: unknown): Promise<Result>; };
   deliveryEvent: { findFirst(args: unknown): Promise<{ id: string } | null>; create(args: unknown): Promise<unknown>; };
-  deliveryStop: { updateMany(args: unknown): Promise<Result>; };
+  deliveryStop: { findFirst(args: unknown): Promise<{ id: string; assignmentId: string | null; stopType: string; status: string } | null>; updateMany(args: unknown): Promise<Result>; };
   deliveryBatch: { updateMany(args: unknown): Promise<Result>; };
   $transaction<T>(callback: (tx: LifecycleStore) => Promise<T>, options?: unknown): Promise<T>;
 }
@@ -38,10 +38,12 @@ async function context(tx: LifecycleStore, userId: string, assignmentId: string)
 }
 function safe(assignment: Assignment, manualReview = false) { return { id: assignment.id, orderId: assignment.orderId, riderId: assignment.riderId, batchId: assignment.batchId, status: assignment.status, pickedUpAt: assignment.pickedUpAt, deliveredAt: assignment.deliveredAt, orderStatus: assignment.order.status, manualReview }; }
 async function updateBatchStop(tx: LifecycleStore, assignment: Assignment, action: LifecycleAction, now: Date) {
-  if (!assignment.batchId || action === "START_DELIVERY") return;
+  if (!assignment.batchId) return;
   const stopType = action === "ARRIVE_PHARMACY" || action === "PICKUP" ? "PHARMACY_PICKUP" : "CUSTOMER_DROPOFF";
-  const data = action === "ARRIVE_PHARMACY" ? { status: "ARRIVED", arrivedAt: now } : { status: "COMPLETED", completedAt: now };
-  const from = action === "ARRIVE_PHARMACY" ? ["PENDING", "EN_ROUTE"] : ["PENDING", "EN_ROUTE", "ARRIVED"];
+  const nextStop = await tx.deliveryStop.findFirst({ where: { batchId: assignment.batchId, status: { in: ["PENDING", "EN_ROUTE", "ARRIVED"] } }, orderBy: { sequence: "asc" }, select: { id: true, assignmentId: true, stopType: true, status: true } });
+  if (!nextStop || nextStop.assignmentId !== assignment.id || nextStop.stopType !== stopType) throw new ApiError(409, "A different batch stop must be completed first", "BATCH_STOP_OUT_OF_ORDER");
+  const data = action === "ARRIVE_PHARMACY" ? { status: "ARRIVED", arrivedAt: now } : action === "START_DELIVERY" ? { status: "EN_ROUTE" } : { status: "COMPLETED", completedAt: now };
+  const from = action === "ARRIVE_PHARMACY" ? ["PENDING", "EN_ROUTE"] : action === "START_DELIVERY" ? ["PENDING"] : ["PENDING", "EN_ROUTE", "ARRIVED"];
   const write = await tx.deliveryStop.updateMany({ where: { batchId: assignment.batchId, assignmentId: assignment.id, stopType, status: { in: from } }, data });
   if (write.count !== 1) throw new ApiError(409, "Batch route changed concurrently", "LIFECYCLE_CONFLICT");
 }

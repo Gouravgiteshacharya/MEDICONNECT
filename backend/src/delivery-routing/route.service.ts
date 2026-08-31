@@ -44,6 +44,8 @@ export async function optimizeBatchRoute(store: RouteStore, batchId: string, opt
   for (let value = 1; targetSequences.length < optimized.stops.length; value += 1) if (!reservedSequences.has(value)) targetSequences.push(value);
   for (let attempt = 1; attempt <= 3; attempt += 1) try {
     await store.$transaction(async (tx) => {
+      const currentBatch = await tx.deliveryBatch.findFirst({ where: { id: batchId, status: batch.status }, select: { id: true } });
+      if (!currentBatch) throw new ApiError(409, "Batch changed during route optimization", "ROUTE_CONFLICT");
       const current = await tx.deliveryStop.findMany({ where: { batchId, status: { in: actionableStatuses } }, select: { id: true, status: true, updatedAt: true } });
       const snapshot = new Map(active.map((stop: any) => [stop.id, `${stop.status}:${stop.updatedAt.toISOString()}`]));
       if (current.length !== active.length || current.some((stop: any) => snapshot.get(stop.id) !== `${stop.status}:${stop.updatedAt.toISOString()}`)) throw new ApiError(409, "Route stops changed during optimization", "ROUTE_CONFLICT");

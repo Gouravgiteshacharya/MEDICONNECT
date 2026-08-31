@@ -44,6 +44,10 @@ describe("rider profile and availability", () => {
     const response = await request(createApp({ store: store(), authenticate })).patch("/api/v1/riders/me/availability").set("Authorization", "Bearer rider").send({ availability: "AVAILABLE" });
     expect(response.status).toBe(200); expect(response.body.data.availability).toBe("AVAILABLE");
   });
+  it("prevents a busy rider from overriding lifecycle-managed availability", async () => {
+    const response = await request(createApp({ store: store(rider({ availability: "BUSY" })), authenticate })).patch("/api/v1/riders/me/availability").set("Authorization", "Bearer rider").send({ availability: "OFFLINE" });
+    expect(response.status).toBe(409); expect(response.body.code).toBe("RIDER_BUSY");
+  });
   it("rejects unauthenticated access", async () => {
     const response = await request(createApp({ store: store(), authenticate })).get("/api/v1/riders/me");
     expect(response.status).toBe(401); expect(response.body).toEqual({ error: "Authentication required", code: "UNAUTHENTICATED" });

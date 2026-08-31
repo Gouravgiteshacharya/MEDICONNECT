@@ -92,6 +92,7 @@ describe("POST /api/v1/delivery-quotes", () => {
       id: quoteId, pharmacyId, deliveryAddressId: addressId, distanceKm: 3.46,
       baseFee: "40.00", distanceFee: "27.65", demandAdjustment: "0.00",
       demandMultiplier: "1.00", finalDeliveryFee: "67.65",
+      estimatedDurationMinutes: 11,
       demand: { activeOrders: 0, availableRiders: 0, orderToRiderRatio: 0, tier: "DISABLED" },
       etaAssistance: { mode: "DETERMINISTIC_FALLBACK", modelVersion: null, deterministicMinutes: 11, predictedMinutes: null },
       createdAt: now.toISOString(), expiresAt: new Date(now.getTime() + config.expiryMs).toISOString(),
@@ -100,7 +101,7 @@ describe("POST /api/v1/delivery-quotes", () => {
       customerId, pharmacyId, deliveryAddressId: addressId, deliveryLatitude: 19.076,
       deliveryLongitude: 72.8777, distanceKm: 3.4567, baseFee: "40.00",
       distanceFee: "27.65", demandAdjustment: "0.00", demandMultiplier: "1.00",
-      finalDeliveryFee: "67.65", estimatedDurationMinutes: undefined,
+      finalDeliveryFee: "67.65", estimatedDurationMinutes: 11,
       createdAt: now, expiresAt: new Date(now.getTime() + config.expiryMs),
     });
     expect(state.userQueries[0].where).toEqual({ id: customerId, role: "CUSTOMER" });

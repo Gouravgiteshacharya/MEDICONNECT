@@ -103,7 +103,7 @@ export async function createDeliveryQuote(
 
     const pricing = calculateDeliveryPrice(estimate.distanceKm, options.config, demand.multiplierBps);
     const deterministicMinutes = estimate.durationMinutes ?? Math.ceil(estimate.distanceKm / options.fallbackSpeedKmh * 60);
-    let estimatedDurationMinutes = estimate.durationMinutes, etaMode: "ML_ASSISTED" | "DETERMINISTIC_FALLBACK" = "DETERMINISTIC_FALLBACK", etaModelVersion: string | null = null;
+    let estimatedDurationMinutes = deterministicMinutes, etaMode: "ML_ASSISTED" | "DETERMINISTIC_FALLBACK" = "DETERMINISTIC_FALLBACK", etaModelVersion: string | null = null;
     if (options.mlModel) try {
       const workload = demand.orderToRiderRatio === null ? 4 : Math.min(4, demand.orderToRiderRatio), prediction = options.mlModel.predictEta({ riderDistanceKm: 0, workload, customerDistanceKm: Math.max(0.5, estimate.distanceKm), peakHour: isPeakHour(createdAt, options.timezoneOffsetMinutes), batched: 0 });
       if (!Number.isFinite(prediction.predictedCompletionMinutes) || prediction.predictedCompletionMinutes <= 0 || prediction.predictedCompletionMinutes > options.maxPredictionMinutes) throw new Error("Invalid ML ETA prediction");
