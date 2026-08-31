@@ -19,6 +19,8 @@ import { loadDispatchConfig, type DispatchConfig } from "./dispatch/dispatch.con
 import type { DispatchStore } from "./dispatch/dispatch.service.js";
 import { createLifecycleRouter } from "./delivery-lifecycle/lifecycle.routes.js";
 import type { LifecycleStore } from "./delivery-lifecycle/lifecycle.service.js";
+import { createTrackingRouter } from "./customer-tracking/tracking.routes.js";
+import type { TrackingStore } from "./customer-tracking/tracking.service.js";
 export interface AppDependencies {
   store: RiderStore;
   authenticate?: Authenticator;
@@ -55,6 +57,7 @@ export function createApp({
     ...dispatchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
   }));
   app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { now }));
+  app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use(notFound);
   app.use(errorHandler);
   return app;
