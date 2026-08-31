@@ -7,6 +7,7 @@ import type { DistanceProvider } from "./distance-provider.js";
 import { calculateDeliveryPrice } from "./pricing.js";
 import { validateCoordinates } from "../location/coordinates.js";
 import { ACTIVE_DEMAND_ORDER_STATUSES, calculateDemandSignal } from "./demand-pricing.js";
+import { isPeakHour, type LogisticsModel } from "../ml/logistics-model.js";
 
 interface CustomerRecord { id: string; isActive: boolean; }
 interface AddressRecord { id: string; userId: string; latitude: number | null; longitude: number | null; }
@@ -29,6 +30,10 @@ export interface DeliveryQuoteServiceOptions {
   distanceProvider: DistanceProvider;
   now: () => Date;
   freshnessThresholdMs: number;
+  mlModel: LogisticsModel | null;
+  maxPredictionMinutes: number;
+  fallbackSpeedKmh: number;
+  timezoneOffsetMinutes: number;
 }
 
 export async function createDeliveryQuote(
@@ -97,6 +102,13 @@ export async function createDeliveryQuote(
     }
 
     const pricing = calculateDeliveryPrice(estimate.distanceKm, options.config, demand.multiplierBps);
+    const deterministicMinutes = estimate.durationMinutes ?? Math.ceil(estimate.distanceKm / options.fallbackSpeedKmh * 60);
+    let estimatedDurationMinutes = estimate.durationMinutes, etaMode: "ML_ASSISTED" | "DETERMINISTIC_FALLBACK" = "DETERMINISTIC_FALLBACK", etaModelVersion: string | null = null;
+    if (options.mlModel) try {
+      const workload = demand.orderToRiderRatio === null ? 4 : Math.min(4, demand.orderToRiderRatio), prediction = options.mlModel.predictEta({ riderDistanceKm: 0, workload, customerDistanceKm: Math.max(0.5, estimate.distanceKm), peakHour: isPeakHour(createdAt, options.timezoneOffsetMinutes), batched: 0 });
+      if (!Number.isFinite(prediction.predictedCompletionMinutes) || prediction.predictedCompletionMinutes <= 0 || prediction.predictedCompletionMinutes > options.maxPredictionMinutes) throw new Error("Invalid ML ETA prediction");
+      estimatedDurationMinutes = Math.ceil(prediction.predictedCompletionMinutes); etaMode = "ML_ASSISTED"; etaModelVersion = prediction.modelVersion;
+    } catch { /* provider duration remains the deterministic fallback */ }
     const expiresAt = new Date(createdAt.getTime() + options.config.expiryMs);
     const money = {
       baseFee: paiseToRupees(pricing.baseFeePaise),
@@ -113,7 +125,7 @@ export async function createDeliveryQuote(
       deliveryLongitude,
       distanceKm: estimate.distanceKm,
       ...money,
-      estimatedDurationMinutes: estimate.durationMinutes,
+      estimatedDurationMinutes,
       createdAt,
       expiresAt,
     }, select: { id: true, createdAt: true, expiresAt: true } });
@@ -125,7 +137,8 @@ export async function createDeliveryQuote(
       distanceKm: Math.round(estimate.distanceKm * 100) / 100,
       ...money,
       demand: { activeOrders: demand.activeOrders, availableRiders: demand.availableRiders, orderToRiderRatio: demand.orderToRiderRatio === null ? null : Math.round(demand.orderToRiderRatio * 100) / 100, tier: demand.tier },
-      estimatedDurationMinutes: estimate.durationMinutes,
+      estimatedDurationMinutes,
+      etaAssistance: { mode: etaMode, modelVersion: etaModelVersion, deterministicMinutes, predictedMinutes: etaMode === "ML_ASSISTED" ? estimatedDurationMinutes : null },
       createdAt: quote.createdAt,
       expiresAt: quote.expiresAt,
     };

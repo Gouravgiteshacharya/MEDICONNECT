@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import type { UserRole } from "../src/auth/authenticator.js";
 import { rankDispatchCandidates } from "../src/dispatch/dispatch.ranking.js";
 import type { DispatchStore } from "../src/dispatch/dispatch.service.js";
+import type { LogisticsModel } from "../src/ml/logistics-model.js";
 
 const orderId = "10000000-0000-0000-0000-000000000001";
 const assignmentId = "20000000-0000-0000-0000-000000000001";
@@ -38,8 +39,8 @@ function createStore(options: Options = {}) {
   };
   return { store, attempts, assignments, get transactionAttempts() { return transactionAttempts; } };
 }
-function app(store: DispatchStore, authMiddleware = authenticate) {
-  return createApp({ store: store as any, authenticate: authMiddleware, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 }, assignmentConfig: { offerTimeoutMs: 30_000 }, dispatchConfig: { maxCandidates: 10, maxRadiusKm: 15, workloadPenaltyKm: 2 }, now: () => now });
+function app(store: DispatchStore, authMiddleware = authenticate, mlModel: LogisticsModel | null = null) {
+  return createApp({ store: store as any, authenticate: authMiddleware, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 }, assignmentConfig: { offerTimeoutMs: 30_000 }, dispatchConfig: { maxCandidates: 10, maxRadiusKm: 15, workloadPenaltyKm: 2 }, mlModel, now: () => now });
 }
 describe("deterministic dispatch", () => {
   it("ranks deterministically using distance and workload", () => {
@@ -51,6 +52,8 @@ describe("deterministic dispatch", () => {
     expect(response.status).toBe(201); expect(response.body.data.alreadyDispatched).toBe(false); expect(state.attempts).toHaveLength(2); expect(state.assignments).toHaveLength(1);
     expect(state.attempts.filter((item) => item.status === "OFFERED")).toHaveLength(1); expect(state.assignments[0].riderId).toBe(state.attempts.find((item) => item.status === "OFFERED").riderId);
   });
+  it("uses valid ML completion predictions to assist eligible-rider ranking", async () => { const state = createStore(); const model: LogisticsModel = { predictDispatch: (features) => ({ predictedCompletionMinutes: features.workload === 2 ? 1 : 50, modelVersion: "test-v1" }), predictEta: () => ({ predictedCompletionMinutes: 1, modelVersion: "test-v1" }) }; const response = await request(app(state.store, authenticate, model)).post(`/api/v1/dispatch/orders/${orderId}`).set("Authorization", "Bearer admin").send({}); expect(response.status).toBe(201); expect(response.body.data.optimization).toMatchObject({ mode: "ML_ASSISTED", modelVersion: "test-v1", predictedCompletionMinutes: 1 }); expect(state.assignments[0].riderId).toBe(riderA); expect(state.attempts.find((item) => item.riderId === riderA)).toMatchObject({ suitabilityScore: 1 }); });
+  it("falls back deterministically when ML inference fails", async () => { const state = createStore(); const model: LogisticsModel = { predictDispatch: () => { throw new Error("model unavailable"); }, predictEta: () => { throw new Error("model unavailable"); } }; const response = await request(app(state.store, authenticate, model)).post(`/api/v1/dispatch/orders/${orderId}`).set("Authorization", "Bearer admin").send({}); expect(response.status).toBe(201); expect(response.body.data.optimization).toMatchObject({ mode: "DETERMINISTIC_FALLBACK", modelVersion: null, predictedCompletionMinutes: null }); expect(state.assignments[0].riderId).toBe(riderB); });
   it("is idempotent when a live assignment exists", async () => {
     const state = createStore({ existing: true }); const response = await request(app(state.store)).post(`/api/v1/dispatch/orders/${orderId}`).set("Authorization", "Bearer admin").send({});
     expect(response.status).toBe(201); expect(response.body.data.alreadyDispatched).toBe(true); expect(state.attempts).toEqual([]); expect(state.assignments).toEqual([]);

@@ -30,6 +30,8 @@ import { createRouteRouter } from "./delivery-routing/route.routes.js";
 import { loadRouteConfig, type RouteConfig } from "./delivery-routing/route.config.js";
 import { HaversineRouteProvider, type RouteProvider } from "./delivery-routing/route-provider.js";
 import type { RouteStore } from "./delivery-routing/route.service.js";
+import { loadMlConfig, type MlConfig } from "./ml/ml.config.js";
+import { SyntheticLinearLogisticsModel, type LogisticsModel } from "./ml/logistics-model.js";
 export interface AppDependencies {
   store: RiderStore;
   authenticate?: Authenticator;
@@ -41,6 +43,8 @@ export interface AppDependencies {
   batchConfig?: BatchConfig;
   routeConfig?: RouteConfig;
   routeProvider?: RouteProvider;
+  mlConfig?: MlConfig;
+  mlModel?: LogisticsModel | null;
   now?: () => Date;
 }
 export function createApp({
@@ -54,6 +58,8 @@ export function createApp({
   batchConfig = loadBatchConfig(),
   routeConfig = loadRouteConfig(),
   routeProvider = new HaversineRouteProvider(routeConfig.assumedSpeedKmh),
+  mlConfig = loadMlConfig(),
+  mlModel = mlConfig.enabled ? new SyntheticLinearLogisticsModel() : null,
   now = () => new Date(),
 }: AppDependencies): Express {
   const app = express();
@@ -64,13 +70,13 @@ export function createApp({
   app.use("/api/v1/riders", createDashboardRouter(store as unknown as DashboardStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, offerTimeoutMs: assignmentConfig.offerTimeoutMs, now }));
   app.use("/api/v1/riders", createRiderRouter(store as RiderStore & LocationStore, authenticate, { sampleIntervalMs: locationConfig.sampleIntervalMs, now }));
   app.use("/api/v1/delivery-quotes", createDeliveryQuoteRouter(store as RiderStore & DeliveryQuoteStore, authenticate, {
-    config: deliveryQuoteConfig, distanceProvider, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
+    config: deliveryQuoteConfig, distanceProvider, freshnessThresholdMs: locationConfig.freshnessThresholdMs, mlModel, maxPredictionMinutes: mlConfig.maxPredictionMinutes, fallbackSpeedKmh: mlConfig.fallbackSpeedKmh, timezoneOffsetMinutes: mlConfig.timezoneOffsetMinutes, now,
   }));
   app.use("/api/v1/delivery-assignments", createAssignmentRouter(store as unknown as AssignmentStore, authenticate, {
     ...assignmentConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
   }));
   app.use("/api/v1/dispatch", createDispatchRouter(store as unknown as DispatchStore, authenticate, {
-    ...dispatchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
+    ...dispatchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, mlModel, maxPredictionMinutes: mlConfig.maxPredictionMinutes, timezoneOffsetMinutes: mlConfig.timezoneOffsetMinutes, now,
   }));
   app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { now }));
   app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));

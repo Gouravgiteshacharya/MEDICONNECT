@@ -5,11 +5,12 @@ import type { DeliveryQuoteConfig } from "./delivery-quote.config.js";
 import { createDeliveryQuote, type DeliveryQuoteStore } from "./delivery-quote.service.js";
 import { parseDeliveryQuoteInput } from "./delivery-quote.validation.js";
 import type { DistanceProvider } from "./distance-provider.js";
+import type { LogisticsModel } from "../ml/logistics-model.js";
 
 export function createDeliveryQuoteRouter(
   store: DeliveryQuoteStore,
   authenticate: Authenticator,
-  options: { config: DeliveryQuoteConfig; distanceProvider: DistanceProvider; freshnessThresholdMs: number; now: () => Date },
+  options: { config: DeliveryQuoteConfig; distanceProvider: DistanceProvider; freshnessThresholdMs: number; mlModel: LogisticsModel | null; maxPredictionMinutes: number; fallbackSpeedKmh: number; timezoneOffsetMinutes: number; now: () => Date },
 ): Router {
   const router = Router();
   router.use(authenticate, requireAuthentication, requireRole("CUSTOMER"));

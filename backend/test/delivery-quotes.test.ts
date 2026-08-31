@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import type { UserRole } from "../src/auth/authenticator.js";
 import type { DeliveryQuoteStore } from "../src/delivery-quotes/delivery-quote.service.js";
 import type { DistanceProvider } from "../src/delivery-quotes/distance-provider.js";
+import type { LogisticsModel } from "../src/ml/logistics-model.js";
 
 const customerId = "00000000-0000-0000-0000-000000000001";
 const otherCustomerId = "00000000-0000-0000-0000-000000000002";
@@ -73,7 +74,7 @@ function createStore(options: StoreOptions = {}) {
 const config = { baseFeePaise: 4000, feePerKmPaise: 800, expiryMs: 15 * 60_000 };
 const provider: DistanceProvider = { calculate: async () => ({ distanceKm: 3.4567 }) };
 function app(store: DeliveryQuoteStore, auth: RequestHandler = authenticate, distanceProvider: DistanceProvider = provider) {
-  return createApp({ store, authenticate: auth, deliveryQuoteConfig: config, distanceProvider, now: () => now });
+  return createApp({ store, authenticate: auth, deliveryQuoteConfig: config, distanceProvider, mlModel: null, now: () => now });
 }
 const validBody = { pharmacyId, deliveryAddressId: addressId };
 
@@ -92,6 +93,7 @@ describe("POST /api/v1/delivery-quotes", () => {
       baseFee: "40.00", distanceFee: "27.65", demandAdjustment: "0.00",
       demandMultiplier: "1.00", finalDeliveryFee: "67.65",
       demand: { activeOrders: 0, availableRiders: 0, orderToRiderRatio: 0, tier: "DISABLED" },
+      etaAssistance: { mode: "DETERMINISTIC_FALLBACK", modelVersion: null, deterministicMinutes: 11, predictedMinutes: null },
       createdAt: now.toISOString(), expiresAt: new Date(now.getTime() + config.expiryMs).toISOString(),
     });
     expect(state.creates[0].data).toEqual({
@@ -110,7 +112,7 @@ describe("POST /api/v1/delivery-quotes", () => {
   it("applies and transparently returns a capped database demand tier", async () => {
     const dynamicConfig = { ...config, demand: { moderateRatio: 1, highRatio: 2, peakRatio: 3, moderateMultiplierBps: 11000, highMultiplierBps: 12000, peakMultiplierBps: 13000 } };
     const { store, state } = createStore({ activeOrders: 5, availableRiders: 2 });
-    const response = await request(createApp({ store, authenticate, deliveryQuoteConfig: dynamicConfig, distanceProvider: provider, now: () => now, locationConfig: { sampleIntervalMs: 15000, freshnessThresholdMs: 60000 } })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody);
+    const response = await request(createApp({ store, authenticate, deliveryQuoteConfig: dynamicConfig, distanceProvider: provider, mlModel: null, now: () => now, locationConfig: { sampleIntervalMs: 15000, freshnessThresholdMs: 60000 } })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody);
     expect(response.status).toBe(201);
     expect(response.body.data).toMatchObject({ demandAdjustment: "13.53", demandMultiplier: "1.20", finalDeliveryFee: "81.18", demand: { activeOrders: 5, availableRiders: 2, orderToRiderRatio: 2.5, tier: "HIGH" } });
     expect(state.creates[0].data).toMatchObject({ demandAdjustment: "13.53", demandMultiplier: "1.20", finalDeliveryFee: "81.18" });
@@ -118,6 +120,8 @@ describe("POST /api/v1/delivery-quotes", () => {
     expect(state.demandOrderQueries[0].where).toMatchObject({ fulfillmentMethod: "DELIVERY", status: { in: expect.arrayContaining(["READY_FOR_PICKUP", "OUT_FOR_DELIVERY"]) } });
     expect(state.demandRiderQueries[0].where).toMatchObject({ availability: "AVAILABLE", isActive: true, user: { isActive: true }, lastLocationAt: { gte: new Date(now.getTime() - 60000) } });
   });
+  it("uses ML ETA assistance when a valid prediction is available", async () => { const { store, state } = createStore(); const model: LogisticsModel = { predictDispatch: () => ({ predictedCompletionMinutes: 1, modelVersion: "test-v1" }), predictEta: () => ({ predictedCompletionMinutes: 37.2, modelVersion: "test-v1" }) }; const response = await request(createApp({ store, authenticate, deliveryQuoteConfig: config, distanceProvider: { calculate: async () => ({ distanceKm: 3.4567, durationMinutes: 20 }) }, mlModel: model, now: () => now })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody); expect(response.status).toBe(201); expect(response.body.data).toMatchObject({ estimatedDurationMinutes: 38, etaAssistance: { mode: "ML_ASSISTED", modelVersion: "test-v1", deterministicMinutes: 20, predictedMinutes: 38 } }); expect(state.creates[0].data.estimatedDurationMinutes).toBe(38); });
+  it("falls back to provider ETA when ML prediction fails", async () => { const { store } = createStore(); const model: LogisticsModel = { predictDispatch: () => { throw new Error("offline"); }, predictEta: () => { throw new Error("offline"); } }; const response = await request(createApp({ store, authenticate, deliveryQuoteConfig: config, distanceProvider: { calculate: async () => ({ distanceKm: 3.4567, durationMinutes: 25 }) }, mlModel: model, now: () => now })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody); expect(response.status).toBe(201); expect(response.body.data).toMatchObject({ estimatedDurationMinutes: 25, etaAssistance: { mode: "DETERMINISTIC_FALLBACK", modelVersion: null, deterministicMinutes: 25, predictedMinutes: null } }); });
 
   it("rejects unauthenticated access", async () => {
     const response = await request(app(createStore().store)).post("/api/v1/delivery-quotes").send(validBody);
