@@ -5,5 +5,6 @@ import type { RiderStore } from "./riders/rider.service.js";
 import type { LocationStore } from "./location/location.service.js";
 import type { DeliveryQuoteStore } from "./delivery-quotes/delivery-quote.service.js";
 import type { AssignmentStore } from "./delivery-assignments/assignment.service.js";
+import type { DispatchStore } from "./dispatch/dispatch.service.js";
 const port = Number(process.env.PORT ?? 3000);
-createApp({ store: prisma as unknown as RiderStore & LocationStore & DeliveryQuoteStore & AssignmentStore }).listen(port, () => console.log(`MediConnect backend listening on port ${port}`));
+createApp({ store: prisma as unknown as RiderStore & LocationStore & DeliveryQuoteStore & AssignmentStore & DispatchStore }).listen(port, () => console.log(`MediConnect backend listening on port ${port}`));

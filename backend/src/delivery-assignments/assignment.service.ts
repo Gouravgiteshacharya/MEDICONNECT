@@ -31,6 +31,7 @@ export interface AssignmentStore {
     updateMany(args: unknown): Promise<WriteResult>;
   };
   deliveryEvent: { createMany(args: unknown): Promise<WriteResult>; };
+  dispatchAttempt?: { updateMany(args: unknown): Promise<WriteResult>; };
   $transaction<T>(callback: (transaction: AssignmentStore) => Promise<T>, options?: unknown): Promise<T>;
 }
 
@@ -108,6 +109,7 @@ export async function listMyOffers(store: AssignmentStore, userId: string, optio
     for (const offer of offers) {
       if (isAssignmentOfferExpired(offer.assignedAt, now, options.offerTimeoutMs)) {
         await tx.deliveryAssignment.updateMany({ where: { id: offer.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
+        await tx.dispatchAttempt?.updateMany({ where: { assignmentId: offer.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
       } else actionable.push(offer);
     }
     return actionable.map((offer) => project(offer, options.offerTimeoutMs));
@@ -123,6 +125,7 @@ export async function acceptAssignmentOffer(store: AssignmentStore, userId: stri
     if (assignment.status !== "OFFERED") throw new ApiError(409, "Assignment offer is not actionable", "OFFER_NOT_ACTIONABLE");
     if (isAssignmentOfferExpired(assignment.assignedAt, now, options.offerTimeoutMs)) {
       await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
+      await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
       return { kind: "expired" as const };
     }
     if (!rider.isActive || !rider.user.isActive) throw new ApiError(409, "Rider is inactive", "RIDER_INACTIVE");
@@ -138,6 +141,7 @@ export async function acceptAssignmentOffer(store: AssignmentStore, userId: stri
       { orderId: assignment.orderId, assignmentId: assignment.id, riderId: rider.id, eventType: "RIDER_ASSIGNED", occurredAt: now },
       { orderId: assignment.orderId, assignmentId: assignment.id, riderId: rider.id, eventType: "RIDER_ACCEPTED", occurredAt: now },
     ] });
+    await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "ACCEPTED" } });
     return { kind: "accepted" as const, assignment: { ...assignment, status: "ACCEPTED", acceptedAt: now, order: { ...assignment.order, status: "RIDER_ASSIGNED" } } };
   });
   if (outcome.kind === "expired") throw new ApiError(409, "Assignment offer has expired", "OFFER_EXPIRED");
@@ -154,10 +158,12 @@ export async function declineAssignmentOffer(store: AssignmentStore, userId: str
     if (assignment.status !== "OFFERED") throw new ApiError(409, "Assignment offer is not actionable", "OFFER_NOT_ACTIONABLE");
     if (isAssignmentOfferExpired(assignment.assignedAt, now, options.offerTimeoutMs)) {
       await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
+      await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
       return { kind: "expired" as const };
     }
     const write = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "DECLINED", declinedAt: now } });
     if (write.count !== 1) throw new ApiError(409, "Assignment offer changed concurrently", "OFFER_NOT_ACTIONABLE");
+    await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "DECLINED" } });
     return { kind: "declined" as const, assignment: { ...assignment, status: "DECLINED", declinedAt: now } };
   });
   if (outcome.kind === "expired") throw new ApiError(409, "Assignment offer has expired", "OFFER_EXPIRED");

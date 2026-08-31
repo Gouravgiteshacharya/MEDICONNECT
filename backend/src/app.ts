@@ -14,6 +14,9 @@ import { HaversineDistanceProvider, type DistanceProvider } from "./delivery-quo
 import { createAssignmentRouter } from "./delivery-assignments/assignment.routes.js";
 import { loadAssignmentConfig, type AssignmentConfig } from "./delivery-assignments/assignment.config.js";
 import type { AssignmentStore } from "./delivery-assignments/assignment.service.js";
+import { createDispatchRouter } from "./dispatch/dispatch.routes.js";
+import { loadDispatchConfig, type DispatchConfig } from "./dispatch/dispatch.config.js";
+import type { DispatchStore } from "./dispatch/dispatch.service.js";
 export interface AppDependencies {
   store: RiderStore;
   authenticate?: Authenticator;
@@ -21,6 +24,7 @@ export interface AppDependencies {
   deliveryQuoteConfig?: DeliveryQuoteConfig;
   distanceProvider?: DistanceProvider;
   assignmentConfig?: AssignmentConfig;
+  dispatchConfig?: DispatchConfig;
   now?: () => Date;
 }
 export function createApp({
@@ -30,6 +34,7 @@ export function createApp({
   deliveryQuoteConfig = loadDeliveryQuoteConfig(),
   distanceProvider = new HaversineDistanceProvider(),
   assignmentConfig = loadAssignmentConfig(),
+  dispatchConfig = loadDispatchConfig(),
   now = () => new Date(),
 }: AppDependencies): Express {
   const app = express();
@@ -43,6 +48,9 @@ export function createApp({
   }));
   app.use("/api/v1/delivery-assignments", createAssignmentRouter(store as unknown as AssignmentStore, authenticate, {
     ...assignmentConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
+  }));
+  app.use("/api/v1/dispatch", createDispatchRouter(store as unknown as DispatchStore, authenticate, {
+    ...dispatchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
   }));
   app.use(notFound);
   app.use(errorHandler);
