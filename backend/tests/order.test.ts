@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import {
   CartStatus,
@@ -225,10 +225,16 @@ function mockDeliverySuccess(quoteOverrides: Record<string, unknown> = {}) {
 
 describe("order creation API", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
     vi.clearAllMocks();
     prismaMock.$transaction.mockImplementation(async (callback) =>
       callback(prisma),
     );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("rejects unauthenticated and non-customer requests", async () => {
