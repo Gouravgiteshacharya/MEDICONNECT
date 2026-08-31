@@ -6,6 +6,7 @@ import type { DeliveryQuoteInput } from "./delivery-quote.validation.js";
 import type { DistanceProvider } from "./distance-provider.js";
 import { calculateDeliveryPrice } from "./pricing.js";
 import { validateCoordinates } from "../location/coordinates.js";
+import { ACTIVE_DEMAND_ORDER_STATUSES, calculateDemandSignal } from "./demand-pricing.js";
 
 interface CustomerRecord { id: string; isActive: boolean; }
 interface AddressRecord { id: string; userId: string; latitude: number | null; longitude: number | null; }
@@ -16,6 +17,8 @@ interface PharmacyRecord {
 interface CreatedQuote { id: string; createdAt: Date; expiresAt: Date | null; }
 
 export interface DeliveryQuoteStore extends RiderStore {
+  deliveryPartner: RiderStore["deliveryPartner"] & { count(args: unknown): Promise<number>; };
+  order: { count(args: unknown): Promise<number>; };
   user: { findFirst(args: unknown): Promise<CustomerRecord | null>; };
   address: { findFirst(args: unknown): Promise<AddressRecord | null>; };
   pharmacy: { findUnique(args: unknown): Promise<PharmacyRecord | null>; };
@@ -25,6 +28,7 @@ export interface DeliveryQuoteServiceOptions {
   config: DeliveryQuoteConfig;
   distanceProvider: DistanceProvider;
   now: () => Date;
+  freshnessThresholdMs: number;
 }
 
 export async function createDeliveryQuote(
@@ -33,6 +37,8 @@ export async function createDeliveryQuote(
   input: DeliveryQuoteInput,
   options: DeliveryQuoteServiceOptions,
 ) {
+  const createdAt = options.now();
+  if (!Number.isFinite(createdAt.getTime())) throw new Error("Quote clock returned an invalid date");
   const eligibility = await store.$transaction(async (baseTransaction) => {
     const transaction = baseTransaction as DeliveryQuoteStore;
     const customer = await transaction.user.findFirst({ where: { id: customerId, role: "CUSTOMER" }, select: { id: true, isActive: true } });
@@ -62,9 +68,14 @@ export async function createDeliveryQuote(
     try { validateCoordinates({ latitude: pharmacy.latitude, longitude: pharmacy.longitude }); }
     catch { throw new ApiError(422, "Pharmacy coordinates are unavailable", "PHARMACY_COORDINATES_UNAVAILABLE"); }
 
-    return { address, pharmacy };
+    const demand = options.config.demand ? calculateDemandSignal(
+      await transaction.order.count({ where: { fulfillmentMethod: "DELIVERY", status: { in: ACTIVE_DEMAND_ORDER_STATUSES } } }),
+      await transaction.deliveryPartner.count({ where: { availability: "AVAILABLE", isActive: true, user: { isActive: true }, lastLocationAt: { gte: new Date(createdAt.getTime() - options.freshnessThresholdMs) } } }),
+      options.config.demand,
+    ) : calculateDemandSignal(0, 0);
+    return { address, pharmacy, demand };
   });
-  const { address, pharmacy } = eligibility;
+  const { address, pharmacy, demand } = eligibility;
   const deliveryLatitude = address.latitude as number;
   const deliveryLongitude = address.longitude as number;
   const pharmacyLatitude = pharmacy.latitude as number;
@@ -85,9 +96,7 @@ export async function createDeliveryQuote(
       throw new ApiError(502, "Unable to calculate delivery distance", "DISTANCE_PROVIDER_FAILED");
     }
 
-    const pricing = calculateDeliveryPrice(estimate.distanceKm, options.config);
-    const createdAt = options.now();
-    if (!Number.isFinite(createdAt.getTime())) throw new Error("Quote clock returned an invalid date");
+    const pricing = calculateDeliveryPrice(estimate.distanceKm, options.config, demand.multiplierBps);
     const expiresAt = new Date(createdAt.getTime() + options.config.expiryMs);
     const money = {
       baseFee: paiseToRupees(pricing.baseFeePaise),
@@ -115,6 +124,7 @@ export async function createDeliveryQuote(
       deliveryAddressId: address.id,
       distanceKm: Math.round(estimate.distanceKm * 100) / 100,
       ...money,
+      demand: { activeOrders: demand.activeOrders, availableRiders: demand.availableRiders, orderToRiderRatio: demand.orderToRiderRatio === null ? null : Math.round(demand.orderToRiderRatio * 100) / 100, tier: demand.tier },
       estimatedDurationMinutes: estimate.durationMinutes,
       createdAt: quote.createdAt,
       expiresAt: quote.expiresAt,

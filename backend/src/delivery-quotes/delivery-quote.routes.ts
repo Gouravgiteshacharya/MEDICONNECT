@@ -9,7 +9,7 @@ import type { DistanceProvider } from "./distance-provider.js";
 export function createDeliveryQuoteRouter(
   store: DeliveryQuoteStore,
   authenticate: Authenticator,
-  options: { config: DeliveryQuoteConfig; distanceProvider: DistanceProvider; now: () => Date },
+  options: { config: DeliveryQuoteConfig; distanceProvider: DistanceProvider; freshnessThresholdMs: number; now: () => Date },
 ): Router {
   const router = Router();
   router.use(authenticate, requireAuthentication, requireRole("CUSTOMER"));

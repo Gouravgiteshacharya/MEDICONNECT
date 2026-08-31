@@ -64,7 +64,7 @@ export function createApp({
   app.use("/api/v1/riders", createDashboardRouter(store as unknown as DashboardStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, offerTimeoutMs: assignmentConfig.offerTimeoutMs, now }));
   app.use("/api/v1/riders", createRiderRouter(store as RiderStore & LocationStore, authenticate, { sampleIntervalMs: locationConfig.sampleIntervalMs, now }));
   app.use("/api/v1/delivery-quotes", createDeliveryQuoteRouter(store as RiderStore & DeliveryQuoteStore, authenticate, {
-    config: deliveryQuoteConfig, distanceProvider, now,
+    config: deliveryQuoteConfig, distanceProvider, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
   }));
   app.use("/api/v1/delivery-assignments", createAssignmentRouter(store as unknown as AssignmentStore, authenticate, {
     ...assignmentConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,

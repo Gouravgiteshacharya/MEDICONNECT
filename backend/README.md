@@ -15,15 +15,21 @@ Both values must be finite, non-negative numbers. Location timestamps always com
 
 ## Delivery quote configuration
 
-Milestone 3 uses a deterministic development policy: `base fee + distance fee + zero demand adjustment`. These defaults are conservative prototype assumptions, not finalized production pricing:
+Delivery quotes use the transparent formula `base fee + distance fee + demand adjustment`. These defaults are conservative prototype assumptions, not finalized production pricing:
 
 - `DELIVERY_BASE_FEE_RUPEES` defaults to `40.00`.
 - `DELIVERY_FEE_PER_KM_RUPEES` defaults to `8.00` per straight-line kilometre.
 - `DELIVERY_QUOTE_EXPIRY_MINUTES` defaults to `15`.
 
-Rupee configuration accepts non-negative values with at most two decimal places; quote expiry must be positive. Invalid values prevent application creation/startup. Pricing is calculated in integer paise and persisted as fixed two-decimal strings compatible with Prisma Decimal columns. Demand adjustment is `0.00` and multiplier is `1.00` in this milestone.
+Rupee configuration accepts non-negative values with at most two decimal places; quote expiry must be positive. Invalid values prevent application creation/startup. Pricing is calculated in integer paise and persisted as fixed two-decimal strings compatible with Prisma Decimal columns.
 
 Distance currently uses the Haversine fallback between the eligible pharmacy and customer-owned address coordinates. This is a straight-line estimate, not road distance, and provides no ETA. The injected distance-provider interface allows a later routing provider without changing `POST /api/v1/delivery-quotes`. No `.env.example` exists, so configuration is documented here without modifying the real `.env`.
+
+## Dynamic delivery pricing
+
+Dynamic pricing uses the brief's explainable `active delivery orders / fresh available riders` signal. The default tiers are standard at a ratio up to `1`, moderate up to `2` (`1.10x`), high up to `3` (`1.20x`), and peak above `3` or when demand exists with no available rider (`1.30x`). The multiplier is capped at `2.00x`; the quote response exposes both counts, the ratio, tier, adjustment, and multiplier before order confirmation. The accepted quote persists its exact monetary components in the existing `DeliveryQuote` fields.
+
+`DELIVERY_DEMAND_PRICING_ENABLED` defaults to `true`. Ratio boundaries use `DELIVERY_DEMAND_MODERATE_RATIO`, `DELIVERY_DEMAND_HIGH_RATIO`, and `DELIVERY_DEMAND_PEAK_RATIO`. Multipliers use `DELIVERY_DEMAND_MODERATE_MULTIPLIER`, `DELIVERY_DEMAND_HIGH_MULTIPLIER`, and `DELIVERY_DEMAND_PEAK_MULTIPLIER`. Invalid, decreasing, or unbounded configuration prevents startup. Setting the enabled flag to `false` restores the `1.00x` behavior.
 
 ## Delivery assignment offers
 

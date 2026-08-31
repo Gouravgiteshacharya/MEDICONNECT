@@ -26,14 +26,16 @@ interface StoreOptions {
   customerActive?: boolean; addressOwned?: boolean; addressCoordinates?: boolean;
   pharmacyExists?: boolean; pharmacyActive?: boolean; pharmacyVerified?: boolean;
   partnerStatus?: string; pharmacyCoordinates?: boolean;
+  activeOrders?: number; availableRiders?: number;
 }
 function createStore(options: StoreOptions = {}) {
   const state = {
     userQueries: [] as any[], addressQueries: [] as any[], pharmacyQueries: [] as any[], creates: [] as any[],
-    activeTransactions: 0, events: [] as string[],
+    activeTransactions: 0, events: [] as string[], demandOrderQueries: [] as any[], demandRiderQueries: [] as any[],
   };
   const store = {
-    deliveryPartner: { findUnique: async () => null, update: async () => { throw new Error("unused"); } },
+    deliveryPartner: { findUnique: async () => null, update: async () => { throw new Error("unused"); }, count: async (args: any) => { state.demandRiderQueries.push(args); return options.availableRiders ?? 0 } },
+    order: { count: async (args: any) => { state.demandOrderQueries.push(args); return options.activeOrders ?? 0 } },
     user: { findFirst: async (args: any) => {
       state.userQueries.push(args);
       return args.where.id === customerId && args.where.role === "CUSTOMER" ? { id: customerId, isActive: options.customerActive ?? true } : null;
@@ -89,6 +91,7 @@ describe("POST /api/v1/delivery-quotes", () => {
       id: quoteId, pharmacyId, deliveryAddressId: addressId, distanceKm: 3.46,
       baseFee: "40.00", distanceFee: "27.65", demandAdjustment: "0.00",
       demandMultiplier: "1.00", finalDeliveryFee: "67.65",
+      demand: { activeOrders: 0, availableRiders: 0, orderToRiderRatio: 0, tier: "DISABLED" },
       createdAt: now.toISOString(), expiresAt: new Date(now.getTime() + config.expiryMs).toISOString(),
     });
     expect(state.creates[0].data).toEqual({
@@ -102,6 +105,18 @@ describe("POST /api/v1/delivery-quotes", () => {
     expect(state.addressQueries[0].where).toEqual({ id: addressId, userId: customerId });
     expect(state.pharmacyQueries[0].where).toEqual({ id: pharmacyId });
     expect(state.events).toEqual(["transaction:start", "transaction:end", "provider:success", "quote:create"]);
+  });
+
+  it("applies and transparently returns a capped database demand tier", async () => {
+    const dynamicConfig = { ...config, demand: { moderateRatio: 1, highRatio: 2, peakRatio: 3, moderateMultiplierBps: 11000, highMultiplierBps: 12000, peakMultiplierBps: 13000 } };
+    const { store, state } = createStore({ activeOrders: 5, availableRiders: 2 });
+    const response = await request(createApp({ store, authenticate, deliveryQuoteConfig: dynamicConfig, distanceProvider: provider, now: () => now, locationConfig: { sampleIntervalMs: 15000, freshnessThresholdMs: 60000 } })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody);
+    expect(response.status).toBe(201);
+    expect(response.body.data).toMatchObject({ demandAdjustment: "13.53", demandMultiplier: "1.20", finalDeliveryFee: "81.18", demand: { activeOrders: 5, availableRiders: 2, orderToRiderRatio: 2.5, tier: "HIGH" } });
+    expect(state.creates[0].data).toMatchObject({ demandAdjustment: "13.53", demandMultiplier: "1.20", finalDeliveryFee: "81.18" });
+    expect(state.creates[0].data).not.toHaveProperty("demand");
+    expect(state.demandOrderQueries[0].where).toMatchObject({ fulfillmentMethod: "DELIVERY", status: { in: expect.arrayContaining(["READY_FOR_PICKUP", "OUT_FOR_DELIVERY"]) } });
+    expect(state.demandRiderQueries[0].where).toMatchObject({ availability: "AVAILABLE", isActive: true, user: { isActive: true }, lastLocationAt: { gte: new Date(now.getTime() - 60000) } });
   });
 
   it("rejects unauthenticated access", async () => {
