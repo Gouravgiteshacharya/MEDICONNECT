@@ -2,17 +2,19 @@ import { ApiError } from "../middleware/errors.js";
 
 interface Result { count: number; }
 interface Rider { id: string; userId: string; isActive: boolean; user: { isActive: boolean }; }
-interface Assignment { id: string; orderId: string; riderId: string; status: string; pickedUpAt: Date | null; deliveredAt: Date | null; order: { id: string; status: string; fulfillmentMethod: string }; }
+interface Assignment { id: string; orderId: string; riderId: string; batchId: string | null; status: string; pickedUpAt: Date | null; deliveredAt: Date | null; order: { id: string; status: string; fulfillmentMethod: string }; }
 export interface LifecycleStore {
   deliveryPartner: { findUnique(args: unknown): Promise<Rider | null>; updateMany(args: unknown): Promise<Result>; };
-  deliveryAssignment: { findFirst(args: unknown): Promise<Assignment | null>; updateMany(args: unknown): Promise<Result>; };
+  deliveryAssignment: { findFirst(args: unknown): Promise<Assignment | null>; updateMany(args: unknown): Promise<Result>; count(args: unknown): Promise<number>; };
   order: { updateMany(args: unknown): Promise<Result>; };
   deliveryEvent: { findFirst(args: unknown): Promise<{ id: string } | null>; create(args: unknown): Promise<unknown>; };
+  deliveryStop: { updateMany(args: unknown): Promise<Result>; };
+  deliveryBatch: { updateMany(args: unknown): Promise<Result>; };
   $transaction<T>(callback: (tx: LifecycleStore) => Promise<T>, options?: unknown): Promise<T>;
 }
 export interface LifecycleOptions { now: () => Date; }
 export type LifecycleAction = "ARRIVE_PHARMACY" | "PICKUP" | "START_DELIVERY" | "DELIVER";
-const projection = { id: true, orderId: true, riderId: true, status: true, pickedUpAt: true, deliveredAt: true, order: { select: { id: true, status: true, fulfillmentMethod: true } } };
+const projection = { id: true, orderId: true, riderId: true, batchId: true, status: true, pickedUpAt: true, deliveredAt: true, order: { select: { id: true, status: true, fulfillmentMethod: true } } };
 const rules = {
   PICKUP: { fromAssignment: "ACCEPTED", fromOrder: "RIDER_ASSIGNED", toAssignment: "PICKED_UP", toOrder: "PICKED_UP", eventType: "PICKED_UP", timestamp: "pickedUpAt" },
   START_DELIVERY: { fromAssignment: "PICKED_UP", fromOrder: "PICKED_UP", toAssignment: "OUT_FOR_DELIVERY", toOrder: "OUT_FOR_DELIVERY", eventType: "OUT_FOR_DELIVERY" },
@@ -34,7 +36,25 @@ async function context(tx: LifecycleStore, userId: string, assignmentId: string)
   if (assignment.order.fulfillmentMethod !== "DELIVERY") throw new ApiError(409, "Order is not a delivery order", "LIFECYCLE_NOT_ACTIONABLE");
   return { rider, assignment };
 }
-function safe(assignment: Assignment, manualReview = false) { return { id: assignment.id, orderId: assignment.orderId, riderId: assignment.riderId, status: assignment.status, pickedUpAt: assignment.pickedUpAt, deliveredAt: assignment.deliveredAt, orderStatus: assignment.order.status, manualReview }; }
+function safe(assignment: Assignment, manualReview = false) { return { id: assignment.id, orderId: assignment.orderId, riderId: assignment.riderId, batchId: assignment.batchId, status: assignment.status, pickedUpAt: assignment.pickedUpAt, deliveredAt: assignment.deliveredAt, orderStatus: assignment.order.status, manualReview }; }
+async function updateBatchStop(tx: LifecycleStore, assignment: Assignment, action: LifecycleAction, now: Date) {
+  if (!assignment.batchId || action === "START_DELIVERY") return;
+  const stopType = action === "ARRIVE_PHARMACY" || action === "PICKUP" ? "PHARMACY_PICKUP" : "CUSTOMER_DROPOFF";
+  const data = action === "ARRIVE_PHARMACY" ? { status: "ARRIVED", arrivedAt: now } : { status: "COMPLETED", completedAt: now };
+  const from = action === "ARRIVE_PHARMACY" ? ["PENDING", "EN_ROUTE"] : ["PENDING", "EN_ROUTE", "ARRIVED"];
+  const write = await tx.deliveryStop.updateMany({ where: { batchId: assignment.batchId, assignmentId: assignment.id, stopType, status: { in: from } }, data });
+  if (write.count !== 1) throw new ApiError(409, "Batch route changed concurrently", "LIFECYCLE_CONFLICT");
+}
+async function releaseRiderIfFinished(tx: LifecycleStore, riderId: string, assignment: Assignment, now: Date) {
+  if (assignment.batchId) {
+    const remaining = await tx.deliveryAssignment.count({ where: { batchId: assignment.batchId, status: { in: ["OFFERED", "ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"] } } });
+    if (remaining > 0) return;
+    const batchWrite = await tx.deliveryBatch.updateMany({ where: { id: assignment.batchId, riderId, status: "ACTIVE" }, data: { status: "COMPLETED", completedAt: now } });
+    if (batchWrite.count !== 1) throw new ApiError(409, "Batch changed concurrently", "LIFECYCLE_CONFLICT");
+  }
+  const riderWrite = await tx.deliveryPartner.updateMany({ where: { id: riderId, availability: "BUSY", isActive: true }, data: { availability: "AVAILABLE" } });
+  if (riderWrite.count !== 1) throw new ApiError(409, "Rider state changed concurrently", "LIFECYCLE_CONFLICT");
+}
 
 export async function transitionLifecycle(store: LifecycleStore, userId: string, assignmentId: string, action: LifecycleAction, options: LifecycleOptions) {
   const now = getNow(options);
@@ -43,7 +63,7 @@ export async function transitionLifecycle(store: LifecycleStore, userId: string,
     if (action === "ARRIVE_PHARMACY") {
       if (assignment.status !== "ACCEPTED" || assignment.order.status !== "RIDER_ASSIGNED") throw new ApiError(409, "Arrival is not actionable", "LIFECYCLE_NOT_ACTIONABLE");
       const existing = await tx.deliveryEvent.findFirst({ where: { assignmentId, eventType: "ARRIVED_AT_PHARMACY" }, select: { id: true } });
-      if (!existing) await tx.deliveryEvent.create({ data: { orderId: assignment.orderId, assignmentId, riderId: rider.id, eventType: "ARRIVED_AT_PHARMACY", occurredAt: now } });
+      if (!existing) { await updateBatchStop(tx, assignment, action, now); await tx.deliveryEvent.create({ data: { orderId: assignment.orderId, assignmentId, riderId: rider.id, eventType: "ARRIVED_AT_PHARMACY", occurredAt: now } }); }
       return safe(assignment);
     }
     const rule = rules[action];
@@ -56,9 +76,9 @@ export async function transitionLifecycle(store: LifecycleStore, userId: string,
     const aw = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: rule.fromAssignment }, data: assignmentData });
     const ow = await tx.order.updateMany({ where: { id: assignment.orderId, status: rule.fromOrder, fulfillmentMethod: "DELIVERY" }, data: orderData });
     if (aw.count !== 1 || ow.count !== 1) throw new ApiError(409, "Lifecycle changed concurrently", "LIFECYCLE_CONFLICT");
+    await updateBatchStop(tx, assignment, action, now);
     if (action === "DELIVER") {
-      const rw = await tx.deliveryPartner.updateMany({ where: { id: rider.id, availability: "BUSY", isActive: true }, data: { availability: "AVAILABLE" } });
-      if (rw.count !== 1) throw new ApiError(409, "Rider state changed concurrently", "LIFECYCLE_CONFLICT");
+      await releaseRiderIfFinished(tx, rider.id, assignment, now);
     }
     await tx.deliveryEvent.create({ data: { orderId: assignment.orderId, assignmentId, riderId: rider.id, eventType: rule.eventType, occurredAt: now } });
     return safe({ ...assignment, status: rule.toAssignment, pickedUpAt: action === "PICKUP" ? now : assignment.pickedUpAt, deliveredAt: action === "DELIVER" ? now : assignment.deliveredAt, order: { ...assignment.order, status: rule.toOrder } });
@@ -75,8 +95,8 @@ export async function failDelivery(store: LifecycleStore, userId: string, assign
     }
     const write = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: assignment.status }, data: { status: "FAILED" } });
     if (write.count !== 1) throw new ApiError(409, "Lifecycle changed concurrently", "LIFECYCLE_CONFLICT");
-    const riderWrite = await tx.deliveryPartner.updateMany({ where: { id: rider.id, availability: "BUSY", isActive: true }, data: { availability: "AVAILABLE" } });
-    if (riderWrite.count !== 1) throw new ApiError(409, "Rider state changed concurrently", "LIFECYCLE_CONFLICT");
+    if (assignment.batchId) await tx.deliveryStop.updateMany({ where: { batchId: assignment.batchId, assignmentId: assignment.id, status: { in: ["PENDING", "EN_ROUTE", "ARRIVED"] } }, data: { status: "CANCELLED" } });
+    await releaseRiderIfFinished(tx, rider.id, assignment, now);
     await tx.deliveryEvent.create({ data: { orderId: assignment.orderId, assignmentId, riderId: rider.id, eventType: "FAILED_DELIVERY", occurredAt: now, note: reason, metadata: { requiresManualReview: true, orderStatusAtFailure: assignment.order.status } } });
     return safe({ ...assignment, status: "FAILED" }, true);
   });

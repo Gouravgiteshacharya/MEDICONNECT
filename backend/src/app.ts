@@ -26,6 +26,10 @@ import type { DashboardStore } from "./rider-dashboard/dashboard.service.js";
 import { createBatchRouter } from "./delivery-batches/batch.routes.js";
 import { loadBatchConfig, type BatchConfig } from "./delivery-batches/batch.config.js";
 import type { BatchStore } from "./delivery-batches/batch.service.js";
+import { createRouteRouter } from "./delivery-routing/route.routes.js";
+import { loadRouteConfig, type RouteConfig } from "./delivery-routing/route.config.js";
+import { HaversineRouteProvider, type RouteProvider } from "./delivery-routing/route-provider.js";
+import type { RouteStore } from "./delivery-routing/route.service.js";
 export interface AppDependencies {
   store: RiderStore;
   authenticate?: Authenticator;
@@ -35,6 +39,8 @@ export interface AppDependencies {
   assignmentConfig?: AssignmentConfig;
   dispatchConfig?: DispatchConfig;
   batchConfig?: BatchConfig;
+  routeConfig?: RouteConfig;
+  routeProvider?: RouteProvider;
   now?: () => Date;
 }
 export function createApp({
@@ -46,6 +52,8 @@ export function createApp({
   assignmentConfig = loadAssignmentConfig(),
   dispatchConfig = loadDispatchConfig(),
   batchConfig = loadBatchConfig(),
+  routeConfig = loadRouteConfig(),
+  routeProvider = new HaversineRouteProvider(routeConfig.assumedSpeedKmh),
   now = () => new Date(),
 }: AppDependencies): Express {
   const app = express();
@@ -67,6 +75,7 @@ export function createApp({
   app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { now }));
   app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use("/api/v1/delivery-batches", createBatchRouter(store as unknown as BatchStore, authenticate, { ...batchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
+  app.use("/api/v1/delivery-batches", createRouteRouter(store as unknown as RouteStore, authenticate, { ...routeConfig, provider: routeProvider, now }));
   app.use(notFound);
   app.use(errorHandler);
   return app;

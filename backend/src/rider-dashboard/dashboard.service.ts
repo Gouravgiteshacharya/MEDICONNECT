@@ -4,6 +4,7 @@ import { assignmentExpiresAt, isAssignmentOfferExpired } from "../delivery-assig
 export interface DashboardStore {
   deliveryPartner: { findUnique(args: unknown): Promise<any>; };
   deliveryAssignment: { findMany(args: unknown): Promise<any[]>; };
+  deliveryBatch?: { findFirst(args: unknown): Promise<any>; };
 }
 export interface DashboardOptions { freshnessThresholdMs: number; offerTimeoutMs: number; now: () => Date; }
 const activeStatuses = ["ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"];
@@ -19,10 +20,12 @@ export async function getRiderDashboard(store: DashboardStore, userId: string, o
   const offers = assignments.filter((item) => item.status === "OFFERED" && !isAssignmentOfferExpired(item.assignedAt, now, options.offerTimeoutMs)).map((item) => operational(item, assignmentExpiresAt(item.assignedAt, options.offerTimeoutMs)));
   const active = assignments.filter((item) => activeStatuses.includes(item.status)).map((item) => ({ ...operational(item), nextAction: nextAction(item.status) }));
   const history = assignments.filter((item) => historyStatuses.includes(item.status)).slice(0, 10).map((item) => operational(item));
+  const activeBatchIds = [...new Set(active.map((item) => item.batchId).filter(Boolean))];
+  const activeRoute = activeBatchIds.length && store.deliveryBatch ? await store.deliveryBatch.findFirst({ where: { id: { in: activeBatchIds }, riderId: rider.id, status: "ACTIVE" }, select: { id: true, status: true, stops: { where: { status: { in: ["PENDING", "EN_ROUTE", "ARRIVED"] } }, orderBy: { sequence: "asc" }, select: { id: true, assignmentId: true, orderId: true, stopType: true, sequence: true, latitude: true, longitude: true, addressLabel: true, status: true, estimatedArrivalAt: true, assignment: { select: { order: { select: { orderNumber: true } } } } } } } }) : null;
   return {
     rider: { id: rider.id, name: rider.user.name, phone: rider.user.phone, availability: rider.availability, vehicleType: rider.vehicleType, vehicleNumber: rider.vehicleNumber, rating: rider.rating, isActive: rider.isActive && rider.user.isActive },
     location: { freshness: classifyLocationFreshness(rider.lastLocationAt, { now, freshForMs: options.freshnessThresholdMs }), lastUpdatedAt: rider.lastLocationAt, sharing: rider.lastLocationAt !== null },
     workload: { actionableOffers: offers.length, activeAssignments: active.length, recentDeliveries: history.filter((item) => item.status === "DELIVERED").length },
-    offers, activeAssignments: active, recentHistory: history,
+    offers, activeAssignments: active, activeRoute: activeRoute ? { batchId: activeRoute.id, status: activeRoute.status, stops: activeRoute.stops.map((stop: any) => ({ id: stop.id, assignmentId: stop.assignmentId, orderId: stop.orderId, orderNumber: stop.assignment?.order?.orderNumber ?? null, stopType: stop.stopType, sequence: stop.sequence, latitude: stop.latitude, longitude: stop.longitude, addressLabel: stop.addressLabel, status: stop.status, estimatedArrivalAt: stop.estimatedArrivalAt })) } : null, recentHistory: history,
   };
 }

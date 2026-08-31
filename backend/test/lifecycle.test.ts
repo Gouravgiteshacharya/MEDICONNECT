@@ -11,12 +11,12 @@ const userId = "40000000-0000-0000-0000-000000000001";
 const now = new Date("2026-08-31T12:00:00Z");
 function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler { return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.auth = users[token]; next(); }; }
 const authenticate = authentication({ rider: { userId, role: "DELIVERY_PARTNER" }, other: { userId: "40000000-0000-0000-0000-000000000002", role: "DELIVERY_PARTNER" }, customer: { userId, role: "CUSTOMER" } });
-interface Options { assignmentStatus?: string; orderStatus?: string; owner?: boolean; inactive?: boolean; assignmentWriteCount?: number; orderWriteCount?: number; riderWriteCount?: number; }
+interface Options { assignmentStatus?: string; orderStatus?: string; owner?: boolean; inactive?: boolean; assignmentWriteCount?: number; orderWriteCount?: number; riderWriteCount?: number; batchId?: string; remainingBatchAssignments?: number; }
 function createStore(options: Options = {}) {
   const rider = { id: riderId, userId, isActive: !options.inactive, availability: "BUSY", user: { isActive: !options.inactive } };
   const order = { id: orderId, status: options.orderStatus ?? "RIDER_ASSIGNED", fulfillmentMethod: "DELIVERY", completedAt: null as Date | null };
-  const assignment: any = { id: assignmentId, orderId, riderId, status: options.assignmentStatus ?? "ACCEPTED", pickedUpAt: null, deliveredAt: null, order };
-  const events: any[] = [];
+  const assignment: any = { id: assignmentId, orderId, riderId, batchId: options.batchId ?? null, status: options.assignmentStatus ?? "ACCEPTED", pickedUpAt: null, deliveredAt: null, order };
+  const events: any[] = [], stopWrites: any[] = [], batchWrites: any[] = [];
   const store: LifecycleStore = {
     deliveryPartner: {
       findUnique: async (args: any) => args.where.userId === userId ? rider : null,
@@ -25,18 +25,21 @@ function createStore(options: Options = {}) {
     deliveryAssignment: {
       findFirst: async (args: any) => args.where.id === assignmentId && args.where.riderId === riderId && options.owner !== false ? assignment : null,
       updateMany: async (args: any) => { const count = options.assignmentWriteCount ?? 1; if (count) Object.assign(assignment, args.data); return { count }; },
+      count: async () => options.remainingBatchAssignments ?? 0,
     },
     order: { updateMany: async (args: any) => { const count = options.orderWriteCount ?? 1; if (count) Object.assign(order, args.data); return { count }; } },
     deliveryEvent: {
       findFirst: async (args: any) => events.find((event) => event.assignmentId === args.where.assignmentId && event.eventType === args.where.eventType) ? { id: "event" } : null,
       create: async (args: any) => { events.push(args.data); return args.data; },
     },
+    deliveryStop: { updateMany: async (args: any) => { stopWrites.push(args); return { count: 1 }; } },
+    deliveryBatch: { updateMany: async (args: any) => { batchWrites.push(args); return { count: 1 }; } },
     $transaction: async (callback) => {
       const snapshot = { assignment: { ...assignment }, order: { ...order }, rider: { ...rider }, eventLength: events.length };
       try { return await callback(store); } catch (error) { Object.assign(assignment, snapshot.assignment); Object.assign(order, snapshot.order); Object.assign(rider, snapshot.rider); events.length = snapshot.eventLength; throw error; }
     },
   };
-  return { store, rider, order, assignment, events };
+  return { store, rider, order, assignment, events, stopWrites, batchWrites };
 }
 function app(store: LifecycleStore, auth = authenticate) { return createApp({ store: store as any, authenticate: auth, now: () => now, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 }, assignmentConfig: { offerTimeoutMs: 30_000 }, dispatchConfig: { maxCandidates: 10, maxRadiusKm: 15, workloadPenaltyKm: 2 } }); }
 const post = (store: LifecycleStore, action: string, body: object = {}) => request(app(store)).post(`/api/v1/delivery-lifecycle/${assignmentId}/${action}`).set("Authorization", "Bearer rider").send(body);
@@ -56,6 +59,8 @@ describe("pickup and delivery lifecycle", () => {
     const state = createStore({ assignmentStatus: "PICKED_UP", orderStatus: "PICKED_UP" }); const response = await post(state.store, "pickup");
     expect(response.status).toBe(200); expect(state.events).toEqual([]);
   });
+  it("advances batch stops and keeps the rider busy until the final batched delivery", async () => { const batchId = "50000000-0000-0000-0000-000000000001"; const state = createStore({ batchId, assignmentStatus: "OUT_FOR_DELIVERY", orderStatus: "OUT_FOR_DELIVERY", remainingBatchAssignments: 1 }); const response = await post(state.store, "deliver"); expect(response.status).toBe(200); expect(state.stopWrites[0]).toMatchObject({ where: { batchId, assignmentId, stopType: "CUSTOMER_DROPOFF" }, data: { status: "COMPLETED" } }); expect(state.rider.availability).toBe("BUSY"); expect(state.batchWrites).toEqual([]); });
+  it("completes the batch and releases the rider after its final delivery", async () => { const batchId = "50000000-0000-0000-0000-000000000001"; const state = createStore({ batchId, assignmentStatus: "OUT_FOR_DELIVERY", orderStatus: "OUT_FOR_DELIVERY", remainingBatchAssignments: 0 }); const response = await post(state.store, "deliver"); expect(response.status).toBe(200); expect(state.batchWrites[0]).toMatchObject({ where: { id: batchId, status: "ACTIVE" }, data: { status: "COMPLETED", completedAt: now } }); expect(state.rider.availability).toBe("AVAILABLE"); });
   it("rejects skipped and backwards transitions", async () => {
     const state = createStore(); const response = await post(state.store, "deliver"); expect(response.status).toBe(409); expect(response.body.code).toBe("LIFECYCLE_NOT_ACTIONABLE"); expect(state.events).toEqual([]);
   });
