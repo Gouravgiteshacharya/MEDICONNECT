@@ -21,6 +21,8 @@ import { createLifecycleRouter } from "./delivery-lifecycle/lifecycle.routes.js"
 import type { LifecycleStore } from "./delivery-lifecycle/lifecycle.service.js";
 import { createTrackingRouter } from "./customer-tracking/tracking.routes.js";
 import type { TrackingStore } from "./customer-tracking/tracking.service.js";
+import { createDashboardRouter } from "./rider-dashboard/dashboard.routes.js";
+import type { DashboardStore } from "./rider-dashboard/dashboard.service.js";
 export interface AppDependencies {
   store: RiderStore;
   authenticate?: Authenticator;
@@ -46,6 +48,7 @@ export function createApp({
   app.use(cors());
   app.use(express.json());
   app.get("/api/v1/health", (_req, res) => res.json({ status: "ok" }));
+  app.use("/api/v1/riders", createDashboardRouter(store as unknown as DashboardStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, offerTimeoutMs: assignmentConfig.offerTimeoutMs, now }));
   app.use("/api/v1/riders", createRiderRouter(store as RiderStore & LocationStore, authenticate, { sampleIntervalMs: locationConfig.sampleIntervalMs, now }));
   app.use("/api/v1/delivery-quotes", createDeliveryQuoteRouter(store as RiderStore & DeliveryQuoteStore, authenticate, {
     config: deliveryQuoteConfig, distanceProvider, now,
