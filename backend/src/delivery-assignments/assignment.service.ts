@@ -10,7 +10,7 @@ export const LIVE_ASSIGNMENT_STATUSES = ["OFFERED", "ACCEPTED", "PICKED_UP", "OU
 interface Rider { id: string; userId: string; availability: string; isActive: boolean; currentLatitude: number | null; currentLongitude: number | null; lastLocationAt: Date | null; user: { isActive: boolean }; }
 interface Order { id: string; orderNumber: string; fulfillmentMethod: string; status: string; pharmacyId: string; pharmacy?: unknown; }
 interface Assignment {
-  id: string; orderId: string; riderId: string; status: string; assignedAt: Date;
+  id: string; orderId: string; riderId: string; batchId: string | null; status: string; assignedAt: Date;
   acceptedAt?: Date | null; declinedAt?: Date | null; timedOutAt?: Date | null; order: Order;
 }
 interface WriteResult { count: number; }
@@ -32,13 +32,14 @@ export interface AssignmentStore {
   };
   deliveryEvent: { createMany(args: unknown): Promise<WriteResult>; };
   dispatchAttempt?: { updateMany(args: unknown): Promise<WriteResult>; };
+  deliveryBatch?: { updateMany(args: unknown): Promise<WriteResult>; };
   $transaction<T>(callback: (transaction: AssignmentStore) => Promise<T>, options?: unknown): Promise<T>;
 }
 
 export interface AssignmentOptions extends AssignmentConfig { freshnessThresholdMs: number; now: () => Date; }
 const SERIALIZABLE_RETRY_LIMIT = 3;
 const offerProjection = {
-  id: true, orderId: true, riderId: true, status: true, assignedAt: true, acceptedAt: true, declinedAt: true, timedOutAt: true,
+  id: true, orderId: true, riderId: true, batchId: true, status: true, assignedAt: true, acceptedAt: true, declinedAt: true, timedOutAt: true,
   order: { select: { id: true, orderNumber: true, fulfillmentMethod: true, status: true, pharmacyId: true,
     deliveryAddressLabelSnapshot: true, deliveryLatitudeSnapshot: true, deliveryLongitudeSnapshot: true,
     deliveryDistanceKm: true, quotedEtaMinutes: true,
@@ -99,6 +100,11 @@ async function riderForUser(tx: AssignmentStore, userId: string): Promise<Rider>
   if (!rider) throw new ApiError(404, "Rider profile not found", "RIDER_NOT_FOUND");
   return rider;
 }
+async function cancelPlannedBatch(tx: AssignmentStore, batchId: string | null): Promise<void> {
+  if (!batchId) return;
+  await tx.deliveryBatch?.updateMany({ where: { id: batchId, status: "PLANNED" }, data: { status: "CANCELLED" } });
+  await tx.deliveryAssignment.updateMany({ where: { batchId }, data: { batchId: null } });
+}
 
 export async function listMyOffers(store: AssignmentStore, userId: string, options: AssignmentOptions) {
   const now = nowFrom(options);
@@ -110,6 +116,7 @@ export async function listMyOffers(store: AssignmentStore, userId: string, optio
       if (isAssignmentOfferExpired(offer.assignedAt, now, options.offerTimeoutMs)) {
         await tx.deliveryAssignment.updateMany({ where: { id: offer.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
         await tx.dispatchAttempt?.updateMany({ where: { assignmentId: offer.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
+        await cancelPlannedBatch(tx, offer.batchId);
       } else actionable.push(offer);
     }
     return actionable.map((offer) => project(offer, options.offerTimeoutMs));
@@ -126,22 +133,28 @@ export async function acceptAssignmentOffer(store: AssignmentStore, userId: stri
     if (isAssignmentOfferExpired(assignment.assignedAt, now, options.offerTimeoutMs)) {
       await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
       await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
+      await cancelPlannedBatch(tx, assignment.batchId);
       return { kind: "expired" as const };
     }
     if (!rider.isActive || !rider.user.isActive) throw new ApiError(409, "Rider is inactive", "RIDER_INACTIVE");
-    if (rider.availability !== "AVAILABLE") throw new ApiError(409, "Rider is unavailable", "RIDER_UNAVAILABLE");
+    const batchedBusyAcceptance = Boolean(assignment.batchId) && rider.availability === "BUSY";
+    if (rider.availability !== "AVAILABLE" && !batchedBusyAcceptance) throw new ApiError(409, "Rider is unavailable", "RIDER_UNAVAILABLE");
     if (assignment.order.fulfillmentMethod !== "DELIVERY" || assignment.order.status !== "READY_FOR_PICKUP") throw new ApiError(409, "Order is not eligible for assignment", "ORDER_NOT_ELIGIBLE");
     const competing = await tx.deliveryAssignment.findFirst({ where: { orderId: assignment.orderId, id: { not: assignment.id }, status: { in: ["ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"] } }, select: { id: true } });
     if (competing) return { kind: "conflict" as const };
     const assignmentWrite = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "ACCEPTED", acceptedAt: now } });
     const orderWrite = await tx.order.updateMany({ where: { id: assignment.orderId, status: "READY_FOR_PICKUP", fulfillmentMethod: "DELIVERY" }, data: { status: "RIDER_ASSIGNED" } });
-    const riderWrite = await tx.deliveryPartner.updateMany({ where: { id: rider.id, availability: "AVAILABLE", isActive: true, user: { isActive: true } }, data: { availability: "BUSY" } });
+    const riderWrite = batchedBusyAcceptance ? { count: 1 } : await tx.deliveryPartner.updateMany({ where: { id: rider.id, availability: "AVAILABLE", isActive: true, user: { isActive: true } }, data: { availability: "BUSY" } });
     if (assignmentWrite.count !== 1 || orderWrite.count !== 1 || riderWrite.count !== 1) throw new ApiError(409, "Assignment acceptance conflicted with another update", "ASSIGNMENT_ACCEPTANCE_CONFLICT");
     await tx.deliveryEvent.createMany({ data: [
       { orderId: assignment.orderId, assignmentId: assignment.id, riderId: rider.id, eventType: "RIDER_ASSIGNED", occurredAt: now },
       { orderId: assignment.orderId, assignmentId: assignment.id, riderId: rider.id, eventType: "RIDER_ACCEPTED", occurredAt: now },
     ] });
     await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "ACCEPTED" } });
+    if (assignment.batchId) {
+      const batchWrite = await tx.deliveryBatch?.updateMany({ where: { id: assignment.batchId, riderId: rider.id, status: "PLANNED" }, data: { status: "ACTIVE", startedAt: now } });
+      if (batchWrite && batchWrite.count !== 1) throw new ApiError(409, "Batch changed concurrently", "ASSIGNMENT_ACCEPTANCE_CONFLICT");
+    }
     return { kind: "accepted" as const, assignment: { ...assignment, status: "ACCEPTED", acceptedAt: now, order: { ...assignment.order, status: "RIDER_ASSIGNED" } } };
   });
   if (outcome.kind === "expired") throw new ApiError(409, "Assignment offer has expired", "OFFER_EXPIRED");
@@ -159,11 +172,13 @@ export async function declineAssignmentOffer(store: AssignmentStore, userId: str
     if (isAssignmentOfferExpired(assignment.assignedAt, now, options.offerTimeoutMs)) {
       await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
       await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
+      await cancelPlannedBatch(tx, assignment.batchId);
       return { kind: "expired" as const };
     }
     const write = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "DECLINED", declinedAt: now } });
     if (write.count !== 1) throw new ApiError(409, "Assignment offer changed concurrently", "OFFER_NOT_ACTIONABLE");
     await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "DECLINED" } });
+    await cancelPlannedBatch(tx, assignment.batchId);
     return { kind: "declined" as const, assignment: { ...assignment, status: "DECLINED", declinedAt: now } };
   });
   if (outcome.kind === "expired") throw new ApiError(409, "Assignment offer has expired", "OFFER_EXPIRED");

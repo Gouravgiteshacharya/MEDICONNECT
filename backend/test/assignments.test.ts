@@ -28,14 +28,15 @@ interface Options {
   riderCoordinates?: boolean;
   existingLive?: boolean; competing?: boolean; assignmentWriteCount?: number; orderWriteCount?: number; riderWriteCount?: number;
   serializationFailures?: number;
+  batchId?: string;
 }
 function createStore(options: Options = {}) {
   const order = { id: orderId, orderNumber: "MED-1", fulfillmentMethod: options.fulfillmentMethod ?? "DELIVERY", status: options.orderStatus ?? "READY_FOR_PICKUP", pharmacyId: "50000000-0000-0000-0000-000000000001" };
   const rider = { id: riderId, userId: riderUserId, availability: options.availability ?? "AVAILABLE", isActive: options.riderActive ?? true,
     currentLatitude: options.riderCoordinates === false ? null : 28.6139, currentLongitude: options.riderCoordinates === false ? null : 77.209,
     lastLocationAt: options.lastLocationAt === undefined ? new Date(now.getTime() - 5_000) : options.lastLocationAt, user: { isActive: options.userActive ?? true } };
-  const assignment: any = { id: assignmentId, orderId, riderId: options.assignmentRiderId ?? riderId, status: options.assignmentStatus ?? "OFFERED", assignedAt, acceptedAt: null, declinedAt: null, timedOutAt: null, order };
-  const state = { assignment, order, rider, events: [] as any[], creates: [] as any[], assignmentWrites: [] as any[], orderWrites: [] as any[], riderWrites: [] as any[], transactionAttempts: 0 };
+  const assignment: any = { id: assignmentId, orderId, riderId: options.assignmentRiderId ?? riderId, batchId: options.batchId ?? null, status: options.assignmentStatus ?? "OFFERED", assignedAt, acceptedAt: null, declinedAt: null, timedOutAt: null, order };
+  const state = { assignment, order, rider, batchStatus: options.batchId ? "PLANNED" : null as string | null, events: [] as any[], creates: [] as any[], assignmentWrites: [] as any[], orderWrites: [] as any[], riderWrites: [] as any[], transactionAttempts: 0 };
   const store: AssignmentStore = {
     deliveryPartner: {
       findUnique: async (args: any) => args.where.id === riderId || args.where.userId === riderUserId ? rider : null,
@@ -57,6 +58,7 @@ function createStore(options: Options = {}) {
       updateMany: async (args: any) => { state.assignmentWrites.push(args); const count = options.assignmentWriteCount ?? 1; if (count === 1) Object.assign(assignment, args.data); return { count }; },
     },
     deliveryEvent: { createMany: async (args: any) => { state.events.push(...args.data); return { count: args.data.length }; } },
+    deliveryBatch: { updateMany: async (args: any) => { if (state.batchStatus === args.where.status) { state.batchStatus = args.data.status; return { count: 1 }; } return { count: 0 }; } },
     $transaction: async (callback) => {
       state.transactionAttempts += 1;
       if (state.transactionAttempts <= (options.serializationFailures ?? 0)) throw Object.assign(new Error("serialization conflict"), { code: "P2034" });
@@ -128,6 +130,16 @@ describe("delivery assignment offers", () => {
     const { store, state } = createStore();
     const response = await request(app(store)).post(`/api/v1/delivery-assignments/${assignmentId}/decline`).set("Authorization", "Bearer rider").send({});
     expect(response.status).toBe(200); expect(state.assignment.status).toBe("DECLINED"); expect(state.order.status).toBe("READY_FOR_PICKUP"); expect(state.rider.availability).toBe("AVAILABLE");
+  });
+  it("allows a busy rider to accept a batched offer and activates the batch", async () => {
+    const batchId = "70000000-0000-0000-0000-000000000001"; const { store, state } = createStore({ availability: "BUSY", batchId });
+    const response = await request(app(store)).post(`/api/v1/delivery-assignments/${assignmentId}/accept`).set("Authorization", "Bearer rider").send({});
+    expect(response.status).toBe(200); expect(state.assignment.status).toBe("ACCEPTED"); expect(state.rider.availability).toBe("BUSY"); expect(state.batchStatus).toBe("ACTIVE"); expect(state.riderWrites).toHaveLength(0);
+  });
+  it("cancels and detaches a planned batch when its second offer is declined", async () => {
+    const batchId = "70000000-0000-0000-0000-000000000001"; const { store, state } = createStore({ availability: "BUSY", batchId });
+    const response = await request(app(store)).post(`/api/v1/delivery-assignments/${assignmentId}/decline`).set("Authorization", "Bearer rider").send({});
+    expect(response.status).toBe(200); expect(state.batchStatus).toBe("CANCELLED"); expect(state.assignment.batchId).toBeNull();
   });
   it("hides another rider's offer", async () => {
     const response = await request(app(createStore({ assignmentRiderId: "20000000-0000-0000-0000-000000000002" }).store)).post(`/api/v1/delivery-assignments/${assignmentId}/accept`).set("Authorization", "Bearer rider").send({});

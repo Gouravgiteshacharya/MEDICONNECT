@@ -23,6 +23,9 @@ import { createTrackingRouter } from "./customer-tracking/tracking.routes.js";
 import type { TrackingStore } from "./customer-tracking/tracking.service.js";
 import { createDashboardRouter } from "./rider-dashboard/dashboard.routes.js";
 import type { DashboardStore } from "./rider-dashboard/dashboard.service.js";
+import { createBatchRouter } from "./delivery-batches/batch.routes.js";
+import { loadBatchConfig, type BatchConfig } from "./delivery-batches/batch.config.js";
+import type { BatchStore } from "./delivery-batches/batch.service.js";
 export interface AppDependencies {
   store: RiderStore;
   authenticate?: Authenticator;
@@ -31,6 +34,7 @@ export interface AppDependencies {
   distanceProvider?: DistanceProvider;
   assignmentConfig?: AssignmentConfig;
   dispatchConfig?: DispatchConfig;
+  batchConfig?: BatchConfig;
   now?: () => Date;
 }
 export function createApp({
@@ -41,6 +45,7 @@ export function createApp({
   distanceProvider = new HaversineDistanceProvider(),
   assignmentConfig = loadAssignmentConfig(),
   dispatchConfig = loadDispatchConfig(),
+  batchConfig = loadBatchConfig(),
   now = () => new Date(),
 }: AppDependencies): Express {
   const app = express();
@@ -61,6 +66,7 @@ export function createApp({
   }));
   app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { now }));
   app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
+  app.use("/api/v1/delivery-batches", createBatchRouter(store as unknown as BatchStore, authenticate, { ...batchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use(notFound);
   app.use(errorHandler);
   return app;

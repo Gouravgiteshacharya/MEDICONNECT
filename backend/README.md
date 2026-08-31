@@ -44,3 +44,7 @@ Rider-owned lifecycle actions are exposed under `/api/v1/delivery-lifecycle/:ass
 ## Rider dashboard
 
 `GET /api/v1/riders/me/dashboard` aggregates the authenticated rider's profile, availability, location freshness, actionable offers, active work, next permitted lifecycle action, workload counts, and recent history. Its projections contain only operational pharmacy and destination snapshots needed by the assigned rider.
+
+## Conservative two-order batching
+
+`POST /api/v1/delivery-batches/evaluate` is the admin/internal batching trigger. It combines one ready candidate order with one active assignment for a busy rider only when rider location is fresh, neither order conflicts with another live assignment, both pharmacy and drop-off separation stay within configured limits, and estimated detour remains acceptable. Defaults are two assignments maximum, 3 km separation for each pair, a 15-minute detour cap, and a documented 20 km/h fallback speed. It persists a valid pickup-before-drop-off stop sequence; route optimization is intentionally deferred to Milestone 10.

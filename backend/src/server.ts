@@ -9,5 +9,6 @@ import type { DispatchStore } from "./dispatch/dispatch.service.js";
 import type { LifecycleStore } from "./delivery-lifecycle/lifecycle.service.js";
 import type { TrackingStore } from "./customer-tracking/tracking.service.js";
 import type { DashboardStore } from "./rider-dashboard/dashboard.service.js";
+import type { BatchStore } from "./delivery-batches/batch.service.js";
 const port = Number(process.env.PORT ?? 3000);
-createApp({ store: prisma as unknown as RiderStore & LocationStore & DeliveryQuoteStore & AssignmentStore & DispatchStore & LifecycleStore & TrackingStore & DashboardStore }).listen(port, () => console.log(`MediConnect backend listening on port ${port}`));
+createApp({ store: prisma as unknown as RiderStore & LocationStore & DeliveryQuoteStore & AssignmentStore & DispatchStore & LifecycleStore & TrackingStore & DashboardStore & BatchStore }).listen(port, () => console.log(`MediConnect backend listening on port ${port}`));
