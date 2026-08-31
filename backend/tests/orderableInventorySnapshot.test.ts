@@ -91,6 +91,8 @@ describe("getOrderableInventorySnapshot", () => {
     );
 
     it("returns exactly the frozen fields and values", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
       const snapshot = await getOrderableInventorySnapshot(pharmacyId, medicineId);
       expect(snapshot).toEqual({
         pharmacyId,
