@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const invalid = (message: string): never => { throw new ApiError(400, message, "INVALID_LIFECYCLE_REQUEST"); };
 export function parseLifecycleAssignmentId(value: unknown): string {

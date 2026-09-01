@@ -17,7 +17,7 @@ const now = new Date("2026-08-30T12:00:00.000Z");
 function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler {
   return (req, _res, next) => {
     const token = req.header("authorization")?.replace(/^Bearer /, "");
-    if (token && users[token]) req.auth = users[token];
+    if (token && users[token]) req.user = { id: users[token].userId, role: users[token].role };
     next();
   };
 }
@@ -126,7 +126,7 @@ describe("POST /api/v1/delivery-quotes", () => {
 
   it("rejects unauthenticated access", async () => {
     const response = await request(app(createStore().store)).post("/api/v1/delivery-quotes").send(validBody);
-    expect(response.status).toBe(401); expect(response.body.code).toBe("UNAUTHENTICATED");
+    expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
   });
   it("enforces the CUSTOMER role", async () => {
     const response = await request(app(createStore().store)).post("/api/v1/delivery-quotes").set("Authorization", "Bearer rider").send(validBody);
@@ -179,9 +179,9 @@ describe("POST /api/v1/delivery-quotes", () => {
     expect(response.status).toBe(502); expect(response.body.code).toBe("DISTANCE_PROVIDER_FAILED"); expect(state.creates).toHaveLength(0);
     expect(state.events).toEqual(["transaction:start", "transaction:end", "provider:failure"]);
   });
-  it("returns the default unconfigured authentication error", async () => {
+  it("uses the Platform Core authentication boundary by default", async () => {
     const response = await request(createApp({ store: createStore().store, deliveryQuoteConfig: config, distanceProvider: provider }))
       .post("/api/v1/delivery-quotes").send(validBody);
-    expect(response.status).toBe(503); expect(response.body.code).toBe("AUTH_NOT_CONFIGURED");
+    expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
   });
 });

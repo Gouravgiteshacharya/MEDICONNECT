@@ -8,7 +8,7 @@ const userId = "00000000-0000-0000-0000-000000000001";
 function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler {
   return (req, _res, next) => {
     const token = req.header("authorization")?.replace(/^Bearer /, "");
-    if (token && users[token]) req.auth = users[token];
+    if (token && users[token]) req.user = { id: users[token].userId, role: users[token].role };
     next();
   };
 }
@@ -50,7 +50,7 @@ describe("rider profile and availability", () => {
   });
   it("rejects unauthenticated access", async () => {
     const response = await request(createApp({ store: store(), authenticate })).get("/api/v1/riders/me");
-    expect(response.status).toBe(401); expect(response.body).toEqual({ error: "Authentication required", code: "UNAUTHENTICATED" });
+    expect(response.status).toBe(401); expect(response.body).toEqual({ error: "Authentication required.", code: "AUTH_REQUIRED" });
   });
   it("rejects users with the wrong role", async () => {
     const response = await request(createApp({ store: store(), authenticate })).get("/api/v1/riders/me").set("Authorization", "Bearer customer");

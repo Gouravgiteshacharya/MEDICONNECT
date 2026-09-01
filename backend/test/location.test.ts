@@ -14,7 +14,7 @@ const now = new Date("2026-08-30T12:00:00.000Z");
 function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler {
   return (req, _res, next) => {
     const token = req.header("authorization")?.replace(/^Bearer /, "");
-    if (token && users[token]) req.auth = users[token];
+    if (token && users[token]) req.user = { id: users[token].userId, role: users[token].role };
     next();
   };
 }
@@ -124,12 +124,12 @@ describe("PATCH /api/v1/riders/me/location", () => {
   it("rejects malformed JSON consistently", async () => {
     const response = await request(app(createStore().store)).patch("/api/v1/riders/me/location")
       .set("Authorization", "Bearer rider").set("Content-Type", "application/json").send('{"latitude":');
-    expect(response.status).toBe(400); expect(response.body).toEqual({ error: "Malformed JSON request body", code: "INVALID_JSON" });
+    expect(response.status).toBe(400); expect(response.body).toEqual({ error: "Malformed JSON body.", code: "MALFORMED_JSON" });
   });
 
   it("rejects unauthenticated access", async () => {
     const response = await request(app(createStore().store)).patch("/api/v1/riders/me/location").send(validBody);
-    expect(response.status).toBe(401); expect(response.body.code).toBe("UNAUTHENTICATED");
+    expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
   });
   it("rejects wrong-role access", async () => {
     const response = await request(app(createStore().store)).patch("/api/v1/riders/me/location").set("Authorization", "Bearer customer").send(validBody);
@@ -147,9 +147,9 @@ describe("PATCH /api/v1/riders/me/location", () => {
     const response = await request(app(createStore({ ownsBatch: false }).store)).patch("/api/v1/riders/me/location").set("Authorization", "Bearer rider").send({ ...validBody, batchId });
     expect(response.status).toBe(403); expect(response.body.code).toBe("BATCH_NOT_OWNED");
   });
-  it("uses the unconfigured production authentication boundary by default", async () => {
+  it("uses the Platform Core authentication boundary by default", async () => {
     const response = await request(createApp({ store: createStore().store, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 } }))
       .patch("/api/v1/riders/me/location").send(validBody);
-    expect(response.status).toBe(503); expect(response.body.code).toBe("AUTH_NOT_CONFIGURED");
+    expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
   });
 });

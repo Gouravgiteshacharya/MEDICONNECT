@@ -7,7 +7,7 @@ import { parseTrackingOrderId } from "./tracking.validation.js";
 export function createTrackingRouter(store: TrackingStore, authenticate: Authenticator, options: TrackingOptions): Router {
   const router = Router();
   router.get("/:orderId/tracking", authenticate, requireAuthentication, requireRole("CUSTOMER"), async (req, res) => {
-    res.json({ data: await getCustomerTracking(store, req.auth!.userId, parseTrackingOrderId(req.params.orderId), options) });
+    res.json({ data: await getCustomerTracking(store, req.user!.id, parseTrackingOrderId(req.params.orderId), options) });
   });
   return router;
 }

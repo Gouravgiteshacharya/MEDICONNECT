@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 import { haversineDistanceKm, validateCoordinates } from "../location/coordinates.js";
 import { classifyLocationFreshness } from "../location/freshness.js";
 

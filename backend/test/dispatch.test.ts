@@ -12,7 +12,7 @@ const assignmentId = "20000000-0000-0000-0000-000000000001";
 const now = new Date("2026-08-31T10:00:00Z");
 const riderA = "30000000-0000-0000-0000-000000000001";
 const riderB = "30000000-0000-0000-0000-000000000002";
-function auth(users: Record<string, { userId: string; role: UserRole }>): RequestHandler { return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.auth = users[token]; next(); }; }
+function auth(users: Record<string, { userId: string; role: UserRole }>): RequestHandler { return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.user = { id: users[token].userId, role: users[token].role }; next(); }; }
 const authenticate = auth({ admin: { userId: "00000000-0000-0000-0000-000000000001", role: "ADMIN" }, rider: { userId: riderA, role: "DELIVERY_PARTNER" } });
 
 interface Options { existing?: boolean; eligible?: boolean; stale?: boolean; priorRiderIds?: string[]; serializationFailures?: number; }
@@ -77,6 +77,6 @@ describe("deterministic dispatch", () => {
   });
   it("uses the default authentication boundary", async () => {
     const response = await request(createApp({ store: createStore().store as any, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 }, assignmentConfig: { offerTimeoutMs: 30_000 }, dispatchConfig: { maxCandidates: 10, maxRadiusKm: 15, workloadPenaltyKm: 2 } })).post(`/api/v1/dispatch/orders/${orderId}`).send({});
-    expect(response.status).toBe(503); expect(response.body.code).toBe("AUTH_NOT_CONFIGURED");
+    expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
   });
 });

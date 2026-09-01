@@ -1,6 +1,6 @@
 import type { RiderStore } from "../riders/rider.service.js";
 import { getRiderProfile } from "../riders/rider.service.js";
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 import type { LocationInput } from "./location.validation.js";
 
 interface LatestLocation { recordedAt: Date; }

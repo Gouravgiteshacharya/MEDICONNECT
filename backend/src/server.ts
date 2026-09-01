@@ -1,15 +1,67 @@
-import "dotenv/config";
-import { createApp } from "./app.js";
-import { prisma } from "./db/prisma.js";
-import type { RiderStore } from "./riders/rider.service.js";
-import type { LocationStore } from "./location/location.service.js";
-import type { DeliveryQuoteStore } from "./delivery-quotes/delivery-quote.service.js";
-import type { AssignmentStore } from "./delivery-assignments/assignment.service.js";
-import type { DispatchStore } from "./dispatch/dispatch.service.js";
-import type { LifecycleStore } from "./delivery-lifecycle/lifecycle.service.js";
-import type { TrackingStore } from "./customer-tracking/tracking.service.js";
-import type { DashboardStore } from "./rider-dashboard/dashboard.service.js";
-import type { BatchStore } from "./delivery-batches/batch.service.js";
-import type { RouteStore } from "./delivery-routing/route.service.js";
-const port = Number(process.env.PORT ?? 3000);
-createApp({ store: prisma as unknown as RiderStore & LocationStore & DeliveryQuoteStore & AssignmentStore & DispatchStore & LifecycleStore & TrackingStore & DashboardStore & BatchStore & RouteStore }).listen(port, () => console.log(`MediConnect backend listening on port ${port}`));
+import type { Server } from "node:http";
+
+import { app } from "./app.js";
+import { env } from "./config/env.js";
+import { prisma } from "./lib/prisma.js";
+
+let server: Server | undefined;
+let isShuttingDown = false;
+
+function closeHttpServer() {
+  return new Promise<void>((resolve, reject) => {
+    if (!server?.listening) {
+      resolve();
+      return;
+    }
+
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+async function shutdown(signal: NodeJS.Signals) {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`Received ${signal}. Shutting down MediConnect API.`);
+
+  try {
+    await closeHttpServer();
+    await prisma.$disconnect();
+    console.log("MediConnect API shutdown complete.");
+    process.exit(0);
+  } catch (error) {
+    console.error("MediConnect API shutdown failed.", error);
+    process.exit(1);
+  }
+}
+
+try {
+  server = app.listen(env.port, () => {
+    console.log(`MediConnect API listening on port ${env.port}`);
+  });
+
+  server.on("error", (error) => {
+    console.error("Failed to start MediConnect API server.", error);
+    process.exit(1);
+  });
+} catch (error) {
+  console.error("Unexpected startup failure.", error);
+  process.exit(1);
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});

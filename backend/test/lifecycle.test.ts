@@ -9,7 +9,7 @@ const orderId = "20000000-0000-0000-0000-000000000001";
 const riderId = "30000000-0000-0000-0000-000000000001";
 const userId = "40000000-0000-0000-0000-000000000001";
 const now = new Date("2026-08-31T12:00:00Z");
-function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler { return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.auth = users[token]; next(); }; }
+function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler { return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.user = { id: users[token].userId, role: users[token].role }; next(); }; }
 const authenticate = authentication({ rider: { userId, role: "DELIVERY_PARTNER" }, other: { userId: "40000000-0000-0000-0000-000000000002", role: "DELIVERY_PARTNER" }, customer: { userId, role: "CUSTOMER" } });
 interface Options { assignmentStatus?: string; orderStatus?: string; owner?: boolean; inactive?: boolean; assignmentWriteCount?: number; orderWriteCount?: number; riderWriteCount?: number; batchId?: string; remainingBatchAssignments?: number; nextStopAssignmentId?: string; }
 function createStore(options: Options = {}) {
@@ -99,6 +99,6 @@ describe("pickup and delivery lifecycle", () => {
   });
   it("uses the default authentication boundary", async () => {
     const response = await request(createApp({ store: createStore().store as any, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 }, assignmentConfig: { offerTimeoutMs: 30_000 }, dispatchConfig: { maxCandidates: 10, maxRadiusKm: 15, workloadPenaltyKm: 2 } })).post(`/api/v1/delivery-lifecycle/${assignmentId}/pickup`).send({});
-    expect(response.status).toBe(503); expect(response.body.code).toBe("AUTH_NOT_CONFIGURED");
+    expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
   });
 });

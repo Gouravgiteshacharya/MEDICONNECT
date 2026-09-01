@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 
 export interface DeliveryQuoteInput { pharmacyId: string; deliveryAddressId: string; }
 const allowedKeys = new Set(["pharmacyId", "deliveryAddressId"]);

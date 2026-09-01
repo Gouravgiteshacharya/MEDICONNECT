@@ -13,7 +13,7 @@ const now = new Date("2026-08-30T12:00:00.000Z");
 const assignedAt = new Date(now.getTime() - 10_000);
 
 function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler {
-  return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.auth = users[token]; next(); };
+  return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.user = { id: users[token].userId, role: users[token].role }; next(); };
 }
 const authenticate = authentication({
   admin: { userId: "00000000-0000-0000-0000-000000000001", role: "ADMIN" },
@@ -176,8 +176,8 @@ describe("delivery assignment offers", () => {
     const response = await request(app(store)).post(`/api/v1/delivery-assignments/${assignmentId}/accept`).set("Authorization", "Bearer rider").send({});
     expect(response.status).toBe(409); expect(response.body.code).toBe("ASSIGNMENT_ACCEPTANCE_CONFLICT"); expect(state.transactionAttempts).toBe(3);
   });
-  it("uses the unconfigured authentication boundary by default", async () => {
+  it("uses the Platform Core authentication boundary by default", async () => {
     const response = await request(createApp({ store: createStore().store as any, assignmentConfig: { offerTimeoutMs: 30_000 }, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 } })).get("/api/v1/delivery-assignments/offers/me");
-    expect(response.status).toBe(503); expect(response.body.code).toBe("AUTH_NOT_CONFIGURED");
+    expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
   });
 });

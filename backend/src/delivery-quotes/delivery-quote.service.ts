@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 import type { RiderStore } from "../riders/rider.service.js";
 import type { DeliveryQuoteConfig } from "./delivery-quote.config.js";
 import { paiseToRupees } from "./delivery-quote.config.js";

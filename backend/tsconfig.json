@@ -1,13 +1,22 @@
 {
-    "compilerOptions": {
-      "types": ["node"],
-      "module": "NodeNext",
-      "moduleResolution": "NodeNext",
-      "target": "ES2022",
-      "esModuleInterop": true,
-      "skipLibCheck": true,
-      "strict": true,
-      "noEmit": true
-    },
-    "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
-  }
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": [
+    "prisma7.config.ts",
+    "vitest.config.ts",
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "tests/**/*.ts",
+    "generated/**/*.ts"
+  ]
+}

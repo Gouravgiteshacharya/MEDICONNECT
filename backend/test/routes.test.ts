@@ -7,7 +7,7 @@ import type { RouteStore } from "../src/delivery-routing/route.service.js";
 import type { RouteProvider } from "../src/delivery-routing/route-provider.js";
 
 const batchId="60000000-0000-0000-0000-000000000001", riderId="10000000-0000-0000-0000-000000000001", userId="20000000-0000-0000-0000-000000000001", now=new Date("2026-08-31T12:00:00Z");
-const authenticate:RequestHandler=(req,_res,next)=>{const role=req.header("authorization")?.replace("Bearer ","") as UserRole|undefined;if(role)req.auth={userId,role};next()};
+const authenticate:RequestHandler=(req,_res,next)=>{const role=req.header("authorization")?.replace("Bearer ","") as UserRole|undefined;if(role)req.user={id:userId,role};next()};
 function createStore(options:{missing?:boolean;conflicts?:number}={}) {
   let transactions=0, providerDuringTransaction=false, attempts=0;
   const acceptedAt=new Date(now.getTime()-5*60_000);

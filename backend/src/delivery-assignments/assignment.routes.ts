@@ -11,13 +11,13 @@ export function createAssignmentRouter(store: AssignmentStore, authenticate: Aut
     res.status(201).json({ data: await createAssignmentOffer(store, parseCreateOfferInput(req.body), options) });
   });
   router.get("/offers/me", authenticate, requireAuthentication, requireRole("DELIVERY_PARTNER"), async (req, res) => {
-    res.json({ data: await listMyOffers(store, req.auth!.userId, options) });
+    res.json({ data: await listMyOffers(store, req.user!.id, options) });
   });
   router.post("/:assignmentId/accept", authenticate, requireAuthentication, requireRole("DELIVERY_PARTNER"), async (req, res) => {
-    requireEmptyBody(req.body); res.json({ data: await acceptAssignmentOffer(store, req.auth!.userId, parseAssignmentId(req.params.assignmentId), options) });
+    requireEmptyBody(req.body); res.json({ data: await acceptAssignmentOffer(store, req.user!.id, parseAssignmentId(req.params.assignmentId), options) });
   });
   router.post("/:assignmentId/decline", authenticate, requireAuthentication, requireRole("DELIVERY_PARTNER"), async (req, res) => {
-    requireEmptyBody(req.body); res.json({ data: await declineAssignmentOffer(store, req.auth!.userId, parseAssignmentId(req.params.assignmentId), options) });
+    requireEmptyBody(req.body); res.json({ data: await declineAssignmentOffer(store, req.user!.id, parseAssignmentId(req.params.assignmentId), options) });
   });
   return router;
 }

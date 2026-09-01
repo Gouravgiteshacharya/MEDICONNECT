@@ -1,11 +1,8 @@
-import type { RequestHandler } from "express";
-import type { UserRole } from "../auth/authenticator.js";
-import { ApiError } from "./errors.js";
-export const requireAuthentication: RequestHandler = (req, _res, next) => {
-  if (!req.auth) return next(new ApiError(401, "Authentication required", "UNAUTHENTICATED"));
-  next();
-};
-export const requireRole = (role: UserRole): RequestHandler => (req, _res, next) => {
-  if (req.auth?.role !== role) return next(new ApiError(403, "Insufficient permissions", "FORBIDDEN"));
-  next();
-};
+import { UserRole } from "../../generated/prisma/client.js";
+import { authorizeRoles } from "./authorizeRoles.js";
+
+const authenticatedRoles = Object.values(UserRole);
+
+/** Compatibility names for Delivery routers; authorization is delegated to Platform Core. */
+export const requireAuthentication = authorizeRoles(...authenticatedRoles);
+export const requireRole = (role: UserRole) => authorizeRoles(role);

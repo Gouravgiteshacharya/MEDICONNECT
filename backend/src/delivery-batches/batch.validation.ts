@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function parseBatchInput(body: unknown): { riderId: string; candidateOrderId: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new ApiError(400, "request body must be a JSON object", "INVALID_BATCH_REQUEST");

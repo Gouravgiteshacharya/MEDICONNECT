@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 import { validateCoordinates } from "../location/coordinates.js";
 import type { RouteConfig } from "./route.config.js";
 import { optimizeStops, type OptimizerStop } from "./route-optimizer.js";

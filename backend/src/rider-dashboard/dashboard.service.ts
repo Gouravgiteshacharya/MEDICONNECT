@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 import { classifyLocationFreshness } from "../location/freshness.js";
 import { assignmentExpiresAt, isAssignmentOfferExpired } from "../delivery-assignments/assignment.expiry.js";
 export interface DashboardStore {

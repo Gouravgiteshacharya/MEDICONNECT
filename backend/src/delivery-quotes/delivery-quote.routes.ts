@@ -15,7 +15,7 @@ export function createDeliveryQuoteRouter(
   const router = Router();
   router.use(authenticate, requireAuthentication, requireRole("CUSTOMER"));
   router.post("/", async (request, response) => {
-    const quote = await createDeliveryQuote(store, request.auth!.userId, parseDeliveryQuoteInput(request.body), options);
+    const quote = await createDeliveryQuote(store, request.user!.id, parseDeliveryQuoteInput(request.body), options);
     response.status(201).json({ data: quote });
   });
   return router;

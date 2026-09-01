@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 
 interface Result { count: number; }
 interface Rider { id: string; userId: string; isActive: boolean; user: { isActive: boolean }; }

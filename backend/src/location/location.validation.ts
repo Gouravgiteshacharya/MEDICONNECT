@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 import { validateCoordinates } from "./coordinates.js";
 
 export interface LocationInput {

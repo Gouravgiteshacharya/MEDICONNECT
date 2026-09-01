@@ -1,5 +1,5 @@
 import type { DeliveryPartnerAvailability } from "../../generated/prisma/client.js";
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 export const MANUAL_AVAILABILITIES = ["AVAILABLE", "OFFLINE", "PAUSED"] as const;
 export type ManualAvailability = (typeof MANUAL_AVAILABILITIES)[number];
 interface RiderRecord {

@@ -7,7 +7,7 @@ import type { TrackingStore } from "../src/customer-tracking/tracking.service.js
 const orderId = "10000000-0000-0000-0000-000000000001";
 const customerId = "20000000-0000-0000-0000-000000000001";
 const now = new Date("2026-08-31T12:00:00Z");
-function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler { return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.auth = users[token]; next(); }; }
+function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler { return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.user = { id: users[token].userId, role: users[token].role }; next(); }; }
 const authenticate = authentication({ customer: { userId: customerId, role: "CUSTOMER" }, rider: { userId: customerId, role: "DELIVERY_PARTNER" } });
 interface Options { owned?: boolean; fulfillment?: string; orderStatus?: string; assignment?: boolean; assignmentStatus?: string; stale?: boolean; invalidCoordinates?: boolean; invalidDestination?: boolean; }
 function createStore(options: Options = {}) {
@@ -63,6 +63,6 @@ describe("customer delivery tracking", () => {
     expect(response.body.data.locationFreshness).toBe("FRESH"); expect(response.body.data.location).toEqual({ latitude: 28.62, longitude: 77.21 }); expect(response.body.data.remainingDistanceKm).toBeNull();
   });
   it("uses the default authentication boundary", async () => {
-    const response = await request(createApp({ store: createStore().store as any, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 }, assignmentConfig: { offerTimeoutMs: 30_000 }, dispatchConfig: { maxCandidates: 10, maxRadiusKm: 15, workloadPenaltyKm: 2 } })).get(`/api/v1/orders/${orderId}/tracking`); expect(response.status).toBe(503); expect(response.body.code).toBe("AUTH_NOT_CONFIGURED");
+    const response = await request(createApp({ store: createStore().store as any, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 }, assignmentConfig: { offerTimeoutMs: 30_000 }, dispatchConfig: { maxCandidates: 10, maxRadiusKm: 15, workloadPenaltyKm: 2 } })).get(`/api/v1/orders/${orderId}/tracking`); expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
   });
 });

@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 import { classifyLocationFreshness } from "../location/freshness.js";
 import { validateCoordinates } from "../location/coordinates.js";
 import type { AssignmentConfig } from "./assignment.config.js";

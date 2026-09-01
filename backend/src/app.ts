@@ -1,8 +1,11 @@
 import cors from "cors";
-import express, { type Express } from "express";
-import type { Authenticator } from "./auth/authenticator.js";
-import { unconfiguredAuthenticator } from "./auth/authenticator.js";
-import { errorHandler, notFound } from "./middleware/errors.js";
+import express, { type Express, type RequestHandler } from "express";
+import helmet from "helmet";
+import { prisma } from "./lib/prisma.js";
+import { authenticate as platformAuthenticate } from "./middleware/authenticate.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { notFound } from "./middleware/notFound.js";
+import { apiRoutes } from "./routes/index.js";
 import { createRiderRouter } from "./riders/rider.routes.js";
 import type { RiderStore } from "./riders/rider.service.js";
 import type { LocationStore } from "./location/location.service.js";
@@ -33,8 +36,8 @@ import type { RouteStore } from "./delivery-routing/route.service.js";
 import { loadMlConfig, type MlConfig } from "./ml/ml.config.js";
 import type { LogisticsModel } from "./ml/logistics-model.js";
 export interface AppDependencies {
-  store: RiderStore;
-  authenticate?: Authenticator;
+  store?: RiderStore;
+  authenticate?: RequestHandler;
   locationConfig?: LocationConfig;
   deliveryQuoteConfig?: DeliveryQuoteConfig;
   distanceProvider?: DistanceProvider;
@@ -48,8 +51,8 @@ export interface AppDependencies {
   now?: () => Date;
 }
 export function createApp({
-  store,
-  authenticate = unconfiguredAuthenticator,
+  store = prisma as unknown as RiderStore,
+  authenticate = platformAuthenticate,
   locationConfig = loadLocationConfig(),
   deliveryQuoteConfig = loadDeliveryQuoteConfig(),
   distanceProvider = new HaversineDistanceProvider(),
@@ -65,9 +68,10 @@ export function createApp({
   const app = express();
   const logisticsModel = mlConfig.enabled ? mlModel : null;
   app.disable("x-powered-by");
+  app.use(helmet());
   app.use(cors());
-  app.use(express.json());
-  app.get("/api/v1/health", (_req, res) => res.json({ status: "ok" }));
+  app.use(express.json({ limit: "100kb" }));
+  app.use("/api/v1", apiRoutes);
   app.use("/api/v1/riders", createDashboardRouter(store as unknown as DashboardStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, offerTimeoutMs: assignmentConfig.offerTimeoutMs, now }));
   app.use("/api/v1/riders", createRiderRouter(store as RiderStore & LocationStore, authenticate, { sampleIntervalMs: locationConfig.sampleIntervalMs, now }));
   app.use("/api/v1/delivery-quotes", createDeliveryQuoteRouter(store as RiderStore & DeliveryQuoteStore, authenticate, {
@@ -87,3 +91,5 @@ export function createApp({
   app.use(errorHandler);
   return app;
 }
+
+export const app = createApp({});

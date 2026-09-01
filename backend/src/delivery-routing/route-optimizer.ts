@@ -1,4 +1,4 @@
-import { ApiError } from "../middleware/errors.js";
+import { ApiError } from "../utils/ApiError.js";
 import type { Coordinates } from "../location/coordinates.js";
 import type { RouteProvider } from "./route-provider.js";
 
