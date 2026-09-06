@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { z } from "zod";
 
 import {
   PharmacyStaffRole,
@@ -12,6 +13,7 @@ import { app } from "../src/app.js";
 import { authenticate } from "../src/middleware/authenticate.js";
 import { authorizeRoles } from "../src/middleware/authorizeRoles.js";
 import { errorHandler } from "../src/middleware/errorHandler.js";
+import { validateRequest } from "../src/middleware/validateRequest.js";
 import { getActivePharmacyMembership } from "../src/services/pharmacyMembership.service.js";
 import { signAuthToken } from "../src/utils/jwt.js";
 
@@ -142,6 +144,57 @@ function buildRoleApp(...allowedRoles: UserRole[]) {
   roleApp.use(errorHandler);
 
   return roleApp;
+}
+
+function buildValidationApp() {
+  const validationApp = express();
+
+  validationApp.use(express.json());
+  validationApp.get(
+    "/query",
+    validateRequest({
+      query: z
+        .object({
+          page: z.coerce.number().int().positive(),
+        })
+        .strict(),
+    }),
+    (req, res) => {
+      res.status(200).json({
+        page: req.query.page,
+        valueType: typeof req.query.page,
+      });
+    },
+  );
+  validationApp.post(
+    "/body",
+    validateRequest(
+      z
+        .object({
+          name: z.string().trim().min(1),
+        })
+        .strict(),
+    ),
+    (req, res) => {
+      res.status(200).json(req.body);
+    },
+  );
+  validationApp.get(
+    "/params/:itemId",
+    validateRequest({
+      params: z
+        .object({
+          itemId: z.string().uuid(),
+        })
+        .strict(),
+    }),
+    (req, res) => {
+      res.status(200).json({ itemId: req.params.itemId });
+    },
+  );
+  validationApp.use(errorHandler);
+
+  return validationApp;
 }
 
 describe("Platform Core integration contract", () => {
@@ -639,6 +692,42 @@ describe("Platform Core integration contract", () => {
   });
 
   describe("validation and error contracts", () => {
+    it("coerces query-string values and exposes parsed values through req.query", async () => {
+      const response = await request(buildValidationApp()).get("/query?page=7");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ page: 7, valueType: "number" });
+    });
+
+    it("returns VALIDATION_ERROR when query validation fails", async () => {
+      const response = await request(buildValidationApp()).get("/query?page=0");
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        error: "Invalid request body.",
+        code: "VALIDATION_ERROR",
+      });
+    });
+
+    it("preserves parsed body values for downstream handlers", async () => {
+      const response = await request(buildValidationApp())
+        .post("/body")
+        .send({ name: " Validated Body " });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ name: "Validated Body" });
+    });
+
+    it("preserves validated params for downstream handlers", async () => {
+      const itemId = "55555555-5555-4555-8555-555555555555";
+      const response = await request(buildValidationApp()).get(
+        `/params/${itemId}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ itemId });
+    });
+
     it("preserves shared validation, parser, payload, route, and security-header behavior", async () => {
       const health = await request(app).get("/api/v1/health");
 
