@@ -71,6 +71,7 @@ export function createApp({
   app.use(helmet());
   app.use(cors());
   app.use(express.json({ limit: "100kb" }));
+   app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use("/api/v1", apiRoutes);
   app.use("/api/v1/riders", createDashboardRouter(store as unknown as DashboardStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, offerTimeoutMs: assignmentConfig.offerTimeoutMs, now }));
   app.use("/api/v1/riders", createRiderRouter(store as RiderStore & LocationStore, authenticate, { sampleIntervalMs: locationConfig.sampleIntervalMs, now }));
@@ -84,7 +85,7 @@ export function createApp({
     ...dispatchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, mlModel: logisticsModel, maxPredictionMinutes: mlConfig.maxPredictionMinutes, timezoneOffsetMinutes: mlConfig.timezoneOffsetMinutes, now,
   }));
   app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { now }));
-  app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
+ 
   app.use("/api/v1/delivery-batches", createBatchRouter(store as unknown as BatchStore, authenticate, { ...batchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use("/api/v1/delivery-batches", createRouteRouter(store as unknown as RouteStore, authenticate, { ...routeConfig, provider: routeProvider, now }));
   app.use(notFound);
