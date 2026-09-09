@@ -13,6 +13,10 @@ import {
   updateInventoryItem,
 } from "../controllers/inventory.controller.js";
 import { getDashboard } from "../controllers/pharmacyDashboard.controller.js";
+import {
+  decideOrder,
+  reviewPrescription,
+} from "../controllers/pharmacyWorkflow.controller.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { authorizeRoles } from "../middleware/authorizeRoles.js";
 import { validateRequest } from "../middleware/validateRequest.js";
@@ -27,6 +31,12 @@ import {
   updatePharmacyProfileSchema,
 } from "../validators/pharmacy.schemas.js";
 import { pharmacyDashboardQuerySchema } from "../validators/pharmacyDashboard.schemas.js";
+import {
+  decideOrderSchema,
+  orderDecisionParamsSchema,
+  prescriptionReviewParamsSchema,
+  reviewPrescriptionSchema,
+} from "../validators/pharmacyWorkflow.schemas.js";
 
 export const pharmacyRoutes = Router();
 
@@ -34,6 +44,24 @@ const inventoryAccess = [
   authenticate,
   authorizeRoles(UserRole.PHARMACY_STAFF),
 ] as const;
+
+pharmacyRoutes.patch(
+  "/:pharmacyId/prescriptions/:prescriptionId/review",
+  validateRequest({ params: prescriptionReviewParamsSchema }),
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest(reviewPrescriptionSchema),
+  reviewPrescription,
+);
+
+pharmacyRoutes.patch(
+  "/:pharmacyId/orders/:orderId/decision",
+  validateRequest({ params: orderDecisionParamsSchema }),
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest(decideOrderSchema),
+  decideOrder,
+);
 
 pharmacyRoutes.get(
   "/:pharmacyId/dashboard",
