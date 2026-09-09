@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import { useAuth } from './context/AuthContext'
 
 const medicines = [
   { name: 'Dolo 650', composition: 'Paracetamol 650 mg', form: 'Tablet', rx: false },
@@ -120,6 +121,17 @@ function CheckIcon() {
 }
 
 function App() {
+  const { user, authenticated, login, register, logout } = useAuth()
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState('login')
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState('')
+  const [authForm, setAuthForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+  })
   const heroSearchRef = useRef(null)
 
   const [view, setView] = useState('home')
@@ -239,6 +251,63 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  function openAuth(mode) {
+    setAuthMode(mode)
+    setAuthError('')
+    setAuthOpen(true)
+  }
+
+  function closeAuth() {
+    if (authLoading) return
+    setAuthOpen(false)
+    setAuthError('')
+  }
+
+  function updateAuthField(event) {
+    const { name, value } = event.target
+
+    setAuthForm((current) => ({
+      ...current,
+      [name]: value,
+    }))
+  }
+
+  async function handleAuthSubmit(event) {
+    event.preventDefault()
+    setAuthLoading(true)
+    setAuthError('')
+
+    try {
+      if (authMode === 'register') {
+        await register({
+          name: authForm.name.trim(),
+          email: authForm.email.trim(),
+          ...(authForm.phone.trim()
+            ? { phone: authForm.phone.trim() }
+            : {}),
+          password: authForm.password,
+        })
+      } else {
+        await login({
+          email: authForm.email.trim(),
+          password: authForm.password,
+        })
+      }
+
+      setAuthOpen(false)
+      setAuthForm({
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+      })
+    } catch (error) {
+      setAuthError(error.message)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   return (
     <div className="app">
       {view === 'home' ? (
@@ -294,10 +363,28 @@ function App() {
                 </button>
 
                 <div className="auth-actions">
-                  <span>New to MediConnect?</span>
-                  <button type="button">Sign up</button>
-                  <span>•</span>
-                  <button type="button">Log in</button>
+                  {authenticated ? (
+                    <>
+                      <span>
+                        Hi, <strong>{user?.name?.split(' ')[0]}</strong>
+                      </span>
+                      <span>•</span>
+                      <button type="button" onClick={logout}>
+                        Log out
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span>New to MediConnect?</span>
+                      <button type="button" onClick={() => openAuth('register')}>
+                        Sign up
+                      </button>
+                      <span>•</span>
+                      <button type="button" onClick={() => openAuth('login')}>
+                        Log in
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <div className="hero-trust">
@@ -605,6 +692,174 @@ function App() {
         </div>
       )}
 
+
+      {authOpen && (
+        <div className="auth-modal-backdrop" onMouseDown={closeAuth}>
+          <section
+            className="auth-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="auth-modal-close"
+              type="button"
+              aria-label="Close"
+              onClick={closeAuth}
+            >
+              ×
+            </button>
+
+            <div className="auth-modal-brand">M</div>
+
+            <span className="auth-eyebrow">MediConnect account</span>
+
+            <h2 id="auth-title">
+              {authMode === 'register'
+                ? 'Create your account'
+                : 'Welcome back'}
+            </h2>
+
+            <p className="auth-modal-copy">
+              {authMode === 'register'
+                ? 'Save your details and continue using your local pharmacy network.'
+                : 'Sign in to access your MediConnect account.'}
+            </p>
+
+            <div className="auth-mode-switch">
+              <button
+                type="button"
+                className={authMode === 'login' ? 'active' : ''}
+                onClick={() => {
+                  setAuthMode('login')
+                  setAuthError('')
+                }}
+              >
+                Log in
+              </button>
+
+              <button
+                type="button"
+                className={authMode === 'register' ? 'active' : ''}
+                onClick={() => {
+                  setAuthMode('register')
+                  setAuthError('')
+                }}
+              >
+                Sign up
+              </button>
+            </div>
+
+            <form className="auth-form" onSubmit={handleAuthSubmit}>
+              {authMode === 'register' && (
+                <label>
+                  <span>Name</span>
+                  <input
+                    name="name"
+                    value={authForm.name}
+                    onChange={updateAuthField}
+                    autoComplete="name"
+                    required
+                    maxLength={120}
+                    placeholder="Your name"
+                  />
+                </label>
+              )}
+
+              <label>
+                <span>Email</span>
+                <input
+                  name="email"
+                  type="email"
+                  value={authForm.email}
+                  onChange={updateAuthField}
+                  autoComplete="email"
+                  required
+                  placeholder="you@example.com"
+                />
+              </label>
+
+              {authMode === 'register' && (
+                <label>
+                  <span>
+                    Phone <small>optional</small>
+                  </span>
+                  <input
+                    name="phone"
+                    type="tel"
+                    value={authForm.phone}
+                    onChange={updateAuthField}
+                    autoComplete="tel"
+                    minLength={7}
+                    maxLength={20}
+                    placeholder="+91..."
+                  />
+                </label>
+              )}
+
+              <label>
+                <span>Password</span>
+                <input
+                  name="password"
+                  type="password"
+                  value={authForm.password}
+                  onChange={updateAuthField}
+                  autoComplete={
+                    authMode === 'register'
+                      ? 'new-password'
+                      : 'current-password'
+                  }
+                  required
+                  minLength={authMode === 'register' ? 8 : 1}
+                  maxLength={128}
+                  placeholder={
+                    authMode === 'register'
+                      ? 'At least 8 characters'
+                      : 'Your password'
+                  }
+                />
+              </label>
+
+              {authError && (
+                <div className="auth-error" role="alert">
+                  {authError}
+                </div>
+              )}
+
+              <button
+                className="auth-submit"
+                type="submit"
+                disabled={authLoading}
+              >
+                {authLoading
+                  ? 'Please wait…'
+                  : authMode === 'register'
+                    ? 'Create account'
+                    : 'Log in'}
+              </button>
+            </form>
+
+            <p className="auth-account-note">
+              {authMode === 'register'
+                ? 'Already have an account?'
+                : 'New to MediConnect?'}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode(
+                    authMode === 'register' ? 'login' : 'register',
+                  )
+                  setAuthError('')
+                }}
+              >
+                {authMode === 'register' ? 'Log in' : 'Create one'}
+              </button>
+            </p>
+          </section>
+        </div>
+      )}
 
       {storefront && (
         <div className="storefront-overlay">
