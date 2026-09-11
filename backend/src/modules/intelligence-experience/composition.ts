@@ -13,6 +13,8 @@ import type {
 } from "./contracts.js";
 import { DeterministicAssistant } from "./assistant.js";
 import { createPharmacyDiscoveryAdapter } from "./adapters/pharmacy-discovery.adapter.js";
+import { createOrderContextAdapter } from "./adapters/order-context.adapter.js";
+import { createPrescriptionContextAdapter } from "./adapters/prescription-context.adapter.js";
 import { ToolRegistry } from "./tool-registry.js";
 
 export interface IntelligenceDependencies {
@@ -43,6 +45,8 @@ export function createIntelligenceDependencies(): IntelligenceDependencies {
   return {
     ...createUnavailableIntelligenceDependencies(),
     medicineDiscovery: createPharmacyDiscoveryAdapter(),
+    orderContext: createOrderContextAdapter(),
+    prescriptionContext: createPrescriptionContextAdapter(),
   };
 }
 

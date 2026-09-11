@@ -27,6 +27,8 @@ const SUPPORT_CATEGORIES = [
   ["PRESCRIPTION", /\bprescription\b.*\b(?:support|issue|problem|workflow)\b|\b(?:support|issue|problem)\b.*\bprescription\b/i],
 ] as const;
 
+const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+
 export function routeAssistantRequest(request: AssistantRequest): RoutedAssistantAction {
   const message = request.message.trim();
 
@@ -97,7 +99,8 @@ function isMedicineSafetyJudgment(message: string): boolean {
 function isPrescriptionClinicalJudgment(message: string): boolean {
   return /\b(?:is|check|tell\s+me\s+if)\b.*\bprescription\b.*\b(?:medically\s+)?(?:safe|correct|appropriate)\b/i.test(message)
     || /\bshould\b.*\bprescription\b.*\b(?:approved|rejected)\b/i.test(message)
-    || /\b(?:can|could|will|would)\s+you\s+(?:approve|reject)\b.*\bprescription\b/i.test(message);
+    || /\b(?:can|could|will|would)\s+you\s+(?:approve|reject)\b.*\bprescription\b/i.test(message)
+    || /\bshould\s+i\s+take\b.*\bprescription\b/i.test(message);
 }
 
 function isPrescriptionWorkflowRequest(message: string): boolean {
@@ -105,11 +108,13 @@ function isPrescriptionWorkflowRequest(message: string): boolean {
 }
 
 function isPrescriptionStatusRequest(message: string): boolean {
-  return /\b(?:prescription\b.*\b(?:status|review|pending|approved|rejected)|(?:status|review|pending|approved|rejected)\b.*\bprescription)\b/i.test(message);
+  return /\b(?:prescription\b.*\b(?:status|review|pending|approved|rejected)|(?:status|review|pending|approved|rejected)\b.*\bprescription)\b/i.test(message)
+    || new RegExp(`\\bcheck\\s+prescription(?:\\s+id)?\\s+${UUID_PATTERN}\\b`, "i").test(message);
 }
 
 function isOrderStatusRequest(message: string): boolean {
-  return /\b(?:order\b.*\b(?:status|state|progress)|(?:status|state|progress)\b.*\border)\b/i.test(message);
+  return /\b(?:order\b.*\b(?:status|state|progress)|(?:status|state|progress)\b.*\border)\b/i.test(message)
+    || new RegExp(`\\bcheck\\s+order(?:\\s+id)?\\s+${UUID_PATTERN}\\b`, "i").test(message);
 }
 
 function isDeliveryTrackingRequest(message: string): boolean {
@@ -133,8 +138,9 @@ function isMedicineDiscoveryRequest(message: string, medicineName: string | unde
 }
 
 export function extractExplicitId(message: string, subject: "order" | "prescription"): string | undefined {
-  const match = new RegExp(`\\b${subject}\\s+(?:id|number|#)\\s*[:#-]?\\s*([a-z0-9-]+)\\b`, "i").exec(message);
-  return match?.[1];
+  const marked = new RegExp(`\\b${subject}\\s+(?:id|number|#)\\s*[:#-]?\\s*([a-z0-9-]+)\\b`, "i").exec(message)?.[1];
+  if (marked) return marked;
+  return new RegExp(`\\b${subject}\\s+(${UUID_PATTERN})\\b`, "i").exec(message)?.[1];
 }
 
 export function extractMedicineName(message: string): string | undefined {

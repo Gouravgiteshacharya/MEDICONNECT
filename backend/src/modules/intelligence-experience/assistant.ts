@@ -1,6 +1,8 @@
 import type {
   AssistantIntent,
   MedicineDiscoveryData,
+  OrderStatusData,
+  PrescriptionStatusData,
   AssistantRequest,
   AssistantResponse,
   TrustedAssistantContext,
@@ -104,6 +106,21 @@ function successMessage(intent: AssistantIntent, data: unknown): string {
       : "";
     return `${availability}${stale}${prescription}`;
   }
+  if (intent === "order_status" && isOrderStatusData(data)) {
+    const { orderNumber, status } = data.order;
+    if (status === "DELIVERED") return `Order ${orderNumber} was delivered.`;
+    if (status === "PRESCRIPTION_PENDING") return `Order ${orderNumber} is awaiting prescription review.`;
+    if (status === "CONFIRMED") return `Order ${orderNumber} has been confirmed.`;
+    return `Order ${orderNumber} is currently ${status}.`;
+  }
+  if (intent === "prescription_status" && isPrescriptionStatusData(data)) {
+    const { status, rejectionReason } = data.prescription;
+    if (status === "PENDING_REVIEW") return "Your prescription is pending pharmacy review.";
+    if (status === "APPROVED") return "Your prescription was approved through the pharmacy review process.";
+    if (status === "ADDITIONAL_INFO_REQUIRED") return "The pharmacy requested additional prescription information.";
+    const reason = rejectionReason?.trim();
+    return `Your prescription was rejected through the pharmacy review process.${reason ? ` Recorded reason: ${reason}` : ""}`;
+  }
   const messages: Partial<Record<AssistantIntent, string>> = {
     medicine_discovery: "Medicine availability information was retrieved.",
     pharmacy_discovery: "Pharmacy availability information was retrieved.",
@@ -113,6 +130,20 @@ function successMessage(intent: AssistantIntent, data: unknown): string {
     support_request: "Your support request was submitted.",
   };
   return messages[intent] ?? "The MediConnect request was completed.";
+}
+
+function isOrderStatusData(data: unknown): data is OrderStatusData {
+  if (!isRecord(data)) return false;
+  if (!isRecord(data.order) || !Array.isArray(data.items) || !Array.isArray(data.prescriptions)) return false;
+  return typeof data.order.orderNumber === "string" && typeof data.order.status === "string";
+}
+
+function isPrescriptionStatusData(data: unknown): data is PrescriptionStatusData {
+  return isRecord(data) && isRecord(data.prescription) && typeof data.prescription.status === "string";
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null;
 }
 
 function isMedicineDiscoveryData(data: unknown): data is MedicineDiscoveryData {

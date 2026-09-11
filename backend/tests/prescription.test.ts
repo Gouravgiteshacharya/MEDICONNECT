@@ -10,6 +10,7 @@ import {
 import { app } from "../src/app.js";
 import {
   createCustomerPrescription,
+  getCustomerPrescription,
   MAX_PRESCRIPTION_UPLOAD_ATTEMPTS,
 } from "../src/services/prescription.service.js";
 import { signAuthToken } from "../src/utils/jwt.js";
@@ -18,7 +19,7 @@ vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
     order: { findFirst: vi.fn() },
-    prescription: { create: vi.fn(), findMany: vi.fn() },
+    prescription: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -28,7 +29,7 @@ const { prisma } = await import("../src/lib/prisma.js");
 const prismaMock = prisma as unknown as {
   user: { findUnique: Mock };
   order: { findFirst: Mock };
-  prescription: { create: Mock; findMany: Mock };
+  prescription: { create: Mock; findMany: Mock; findFirst: Mock };
   $transaction: Mock;
 };
 
@@ -386,5 +387,31 @@ describe("customer prescription API", () => {
       expect(response.status).toBe(200);
       expect(response.body.prescriptions).toHaveLength(1);
     });
+  });
+});
+
+describe("customer-owned prescription read service", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns an owned customer-safe prescription using ownership in the query", async () => {
+    prismaMock.prescription.findFirst.mockResolvedValue(prescription());
+    const result = await getCustomerPrescription(customerId, prescriptionId);
+    expect(result).toEqual(prescription());
+    expect(prismaMock.prescription.findFirst).toHaveBeenCalledWith({
+      where: { id: prescriptionId, order: { customerId } },
+      select: expect.not.objectContaining({ storagePath: true, reviewerStaffId: true }),
+    });
+    expect(result).not.toHaveProperty("storagePath");
+    expect(result).not.toHaveProperty("reviewerStaffId");
+  });
+
+  it("uses the same PRESCRIPTION_NOT_FOUND response for missing and cross-customer records", async () => {
+    prismaMock.prescription.findFirst.mockResolvedValue(null);
+    for (const requestedCustomer of [customerId, "99999999-9999-4999-8999-999999999999"]) {
+      await expect(getCustomerPrescription(requestedCustomer, prescriptionId)).rejects.toMatchObject({
+        statusCode: 404,
+        code: "PRESCRIPTION_NOT_FOUND",
+      });
+    }
   });
 });

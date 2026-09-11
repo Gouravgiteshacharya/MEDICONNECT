@@ -41,6 +41,10 @@ function orderNotFoundError() {
   return new ApiError(404, "Order not found.", "ORDER_NOT_FOUND");
 }
 
+function prescriptionNotFoundError() {
+  return new ApiError(404, "Prescription not found.", "PRESCRIPTION_NOT_FOUND");
+}
+
 function prescriptionNotRequiredError() {
   return new ApiError(
     409,
@@ -171,4 +175,18 @@ export async function listCustomerPrescriptions(
     select: customerPrescriptionSelect,
     orderBy: [{ uploadedAt: "asc" }, { id: "asc" }],
   });
+}
+
+export async function getCustomerPrescription(
+  customerId: string,
+  prescriptionId: string,
+  dataSource: Pick<PrismaClient, "prescription"> = prisma,
+) {
+  const prescription = await dataSource.prescription.findFirst({
+    where: { id: prescriptionId, order: { customerId } },
+    select: customerPrescriptionSelect,
+  });
+
+  if (!prescription) throw prescriptionNotFoundError();
+  return prescription;
 }

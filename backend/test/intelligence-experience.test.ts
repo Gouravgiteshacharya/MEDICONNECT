@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   composeIntelligenceModule,
+  createOrderContextAdapter,
   createTrustedAssistantContext,
   createUnavailableIntelligenceDependencies,
   extractMedicineName,
@@ -13,6 +14,32 @@ const context = createTrustedAssistantContext(
   { userId: "server-authenticated-user", roles: ["CUSTOMER"] },
   "request-1",
 );
+
+const orderStatusData = {
+  order: {
+    orderNumber: "MC-TEST",
+    status: "CONFIRMED" as const,
+    fulfillmentMethod: "DELIVERY" as const,
+    totalAmount: "20.00",
+    placedAt: "2026-09-01T10:00:00.000Z",
+    confirmedAt: "2026-09-01T10:05:00.000Z",
+    completedAt: null,
+    cancelledAt: null,
+    updatedAt: "2026-09-01T10:05:00.000Z",
+  },
+  items: [],
+  prescriptions: [],
+};
+
+const prescriptionStatusData = {
+  prescription: {
+    status: "PENDING_REVIEW" as const,
+    uploadedAt: "2026-09-01T10:00:00.000Z",
+    reviewedAt: null,
+    reviewNotes: null,
+    rejectionReason: null,
+  },
+};
 
 test("routes an allowed operational medicine discovery intent", () => {
   assert.equal(routeAssistantRequest({ message: "Find Crocin near me", channel: "text" }).intent, "medicine_discovery");
@@ -200,7 +227,7 @@ test("missing order ID returns invalid_request without calling the order adapter
     orderContext: {
       getOrder: async () => {
         calls += 1;
-        return { status: "success", data: {} };
+        return { status: "success", data: orderStatusData };
       },
     },
   });
@@ -219,7 +246,7 @@ test("missing prescription ID returns invalid_request without calling the prescr
     prescriptionContext: {
       getPrescriptionStatus: async () => {
         calls += 1;
-        return { status: "success", data: {} };
+        return { status: "success", data: prescriptionStatusData };
       },
     },
   });
@@ -355,8 +382,8 @@ test("successful tools receive intent-specific deterministic messages", async ()
       pharmacies: [],
       radiusKm: 5,
     } }) },
-    orderContext: { getOrder: async () => ({ status: "success", data: {} }) },
-    prescriptionContext: { getPrescriptionStatus: async () => ({ status: "success", data: {} }) },
+    orderContext: { getOrder: async () => ({ status: "success", data: orderStatusData }) },
+    prescriptionContext: { getPrescriptionStatus: async () => ({ status: "success", data: prescriptionStatusData }) },
     deliveryTracking: { getTracking: async () => ({ status: "success", data: {} }) },
     support: { createSupportRequest: async () => ({ status: "success", data: {} }) },
   });
@@ -364,8 +391,8 @@ test("successful tools receive intent-specific deterministic messages", async ()
   const cases = [
     ["Find Crocin near me", "Crocin was found, but no eligible pharmacy within 5 km currently reports it as available."],
     ["Find pharmacies near me", "Pharmacy availability information was retrieved."],
-    [`Order status for order ID ${id}`, "Your order information was retrieved."],
-    [`Prescription status for prescription ID ${id}`, "Your prescription review information was retrieved."],
+    [`Order status for order ID ${id}`, "Order MC-TEST has been confirmed."],
+    [`Prescription status for prescription ID ${id}`, "Your prescription is pending pharmacy review."],
     [`Track order #${id}`, "Delivery tracking information was retrieved."],
     ["my order is late", "Your support request was submitted."],
   ] as const;
@@ -375,4 +402,83 @@ test("successful tools receive intent-specific deterministic messages", async ()
     assert.equal(response.status, "fulfilled", message);
     assert.equal(response.message, expected, message);
   }
+});
+
+test("routes strict bare UUID operational lookup forms", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const order = routeAssistantRequest({ message: `Check order ${id}`, channel: "text" });
+  const prescription = routeAssistantRequest({ message: `Check prescription ${id}`, channel: "text" });
+  assert.equal(order.intent, "order_status");
+  assert.equal(prescription.intent, "prescription_status");
+  if ("toolInput" in order) assert.equal(order.toolInput.orderId, id);
+  if ("toolInput" in prescription) assert.equal(prescription.toolInput.prescriptionId, id);
+});
+
+test("summarizes authoritative order states and preserves structured results", async () => {
+  const dependencies = createUnavailableIntelligenceDependencies();
+  const id = "33333333-3333-4333-8333-333333333333";
+  for (const [status, expected] of [
+    ["DELIVERED", "Order MC-TEST was delivered."],
+    ["CONFIRMED", "Order MC-TEST has been confirmed."],
+    ["PRESCRIPTION_PENDING", "Order MC-TEST is awaiting prescription review."],
+  ] as const) {
+    const data = { ...orderStatusData, order: { ...orderStatusData.order, status } };
+    const assistant = composeIntelligenceModule({
+      ...dependencies,
+      orderContext: { getOrder: async () => ({ status: "success", data }) },
+    });
+    const response = await assistant.respond({ message: `Order status for order ID ${id}`, channel: "text" }, context);
+    assert.equal(response.message, expected);
+    assert.deepEqual(response.toolResult, { status: "success", data });
+  }
+});
+
+test("summarizes recorded prescription states and rejection reason", async () => {
+  const dependencies = createUnavailableIntelligenceDependencies();
+  const id = "33333333-3333-4333-8333-333333333333";
+  for (const [status, reason, expected] of [
+    ["PENDING_REVIEW", null, "Your prescription is pending pharmacy review."],
+    ["APPROVED", null, "Your prescription was approved through the pharmacy review process."],
+    ["REJECTED", "Image unclear", "Your prescription was rejected through the pharmacy review process. Recorded reason: Image unclear"],
+    ["ADDITIONAL_INFO_REQUIRED", null, "The pharmacy requested additional prescription information."],
+  ] as const) {
+    const data = { prescription: { ...prescriptionStatusData.prescription, status, rejectionReason: reason } };
+    const assistant = composeIntelligenceModule({
+      ...dependencies,
+      prescriptionContext: { getPrescriptionStatus: async () => ({ status: "success", data }) },
+    });
+    const response = await assistant.respond({ message: `Prescription status for prescription ID ${id}`, channel: "text" }, context);
+    assert.equal(response.message, expected);
+    assert.deepEqual(response.toolResult, { status: "success", data });
+  }
+});
+
+test("rejects malformed and customer order-number lookups before Commerce", async () => {
+  let calls = 0;
+  const dependencies = createUnavailableIntelligenceDependencies();
+  const assistant = composeIntelligenceModule({
+    ...dependencies,
+    orderContext: createOrderContextAdapter({ getCustomerOrder: async () => { calls += 1; throw new Error("must not run"); } }),
+  });
+  for (const message of ["Order status for order ID bad-id", "Order status for order number MC-1024", "Order status for order # MC-1024"]) {
+    const response = await assistant.respond({ message, channel: "text" }, context);
+    assert.equal(response.status, "error");
+    assert.equal(response.toolResult?.status, "error");
+    if (response.toolResult?.status === "error") assert.equal(response.toolResult.code, "invalid_request");
+  }
+  assert.equal(calls, 0);
+});
+
+test("clinical prescription judgments are refused without prescription execution", async () => {
+  let calls = 0;
+  const dependencies = createUnavailableIntelligenceDependencies();
+  const assistant = composeIntelligenceModule({
+    ...dependencies,
+    prescriptionContext: { getPrescriptionStatus: async () => { calls += 1; return { status: "success", data: prescriptionStatusData }; } },
+  });
+  for (const message of ["Should this prescription be approved?", "Can you approve this prescription?", "Is this prescription safe for me?", "Should I take the medicine on this prescription?"]) {
+    const response = await assistant.respond({ message, channel: "text" }, context);
+    assert.equal(response.status, "refused", message);
+  }
+  assert.equal(calls, 0);
 });

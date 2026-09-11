@@ -146,15 +146,56 @@ export interface MedicineDiscoveryAdapter {
   ): Promise<ToolExecutionResult<MedicineDiscoveryData>>;
 }
 
+export interface OrderStatusData {
+  readonly order: {
+    readonly orderNumber: string;
+    readonly status: "CREATED" | "PRESCRIPTION_PENDING" | "PRESCRIPTION_APPROVED" | "PRESCRIPTION_REJECTED" | "CONFIRMED" | "PREPARING" | "READY_FOR_PICKUP" | "RIDER_ASSIGNED" | "PICKED_UP" | "PICKED_UP_BY_CUSTOMER" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED" | "REJECTED_BY_PHARMACY";
+    readonly fulfillmentMethod: "DELIVERY" | "SELF_PICKUP";
+    readonly totalAmount: string;
+    readonly placedAt: string;
+    readonly confirmedAt: string | null;
+    readonly completedAt: string | null;
+    readonly cancelledAt: string | null;
+    readonly updatedAt: string;
+  };
+  readonly items: readonly {
+    readonly medicineName: string;
+    readonly brandName: string | null;
+    readonly requiresPrescription: boolean;
+    readonly quantity: number;
+    readonly unitPrice: string;
+    readonly lineTotal: string;
+  }[];
+  readonly prescriptions: readonly {
+    readonly status: PrescriptionReviewStatus;
+    readonly uploadedAt: string;
+    readonly reviewedAt: string | null;
+    readonly reviewNotes: string | null;
+    readonly rejectionReason: string | null;
+  }[];
+}
+
+export type PrescriptionReviewStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "ADDITIONAL_INFO_REQUIRED";
+
+export interface PrescriptionStatusData {
+  readonly prescription: {
+    readonly status: PrescriptionReviewStatus;
+    readonly uploadedAt: string;
+    readonly reviewedAt: string | null;
+    readonly reviewNotes: string | null;
+    readonly rejectionReason: string | null;
+  };
+}
+
 export interface OrderContextAdapter {
-  getOrder(orderId: string, context: TrustedAssistantContext): Promise<ToolExecutionResult<unknown>>;
+  getOrder(orderId: string, context: TrustedAssistantContext): Promise<ToolExecutionResult<OrderStatusData>>;
 }
 
 export interface PrescriptionContextAdapter {
   getPrescriptionStatus(
     prescriptionId: string,
     context: TrustedAssistantContext,
-  ): Promise<ToolExecutionResult<unknown>>;
+  ): Promise<ToolExecutionResult<PrescriptionStatusData>>;
 }
 
 export interface DeliveryTrackingAdapter {

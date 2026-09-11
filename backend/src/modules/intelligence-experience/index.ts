@@ -1,5 +1,7 @@
 export * from "./assistant.js";
 export * from "./adapters/pharmacy-discovery.adapter.js";
+export * from "./adapters/order-context.adapter.js";
+export * from "./adapters/prescription-context.adapter.js";
 export * from "./composition.js";
 export * from "./contracts.js";
 export * from "./predictors.js";
