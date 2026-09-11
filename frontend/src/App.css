@@ -1,1 +1,7 @@
-/* App-level styles intentionally stay minimal; feature styles live with Support. */
+.app-shell { min-height: 100vh; }
+.experience-switch { position: relative; z-index: 10; display: flex; justify-content: center; padding: 14px 20px 0; }
+.experience-switch__group { display: inline-flex; gap: 4px; padding: 4px; background: rgba(255, 255, 255, .94); border: 1px solid #d9e3e6; border-radius: 14px; box-shadow: 0 8px 24px rgba(20, 47, 65, .08); }
+.experience-switch button { min-height: 42px; padding: 8px 18px; color: #4d6876; background: transparent; border: 0; border-radius: 10px; cursor: pointer; font-weight: 800; }
+.experience-switch button[aria-selected='true'] { color: #fff; background: #0d455e; }
+.experience-switch button:focus-visible { outline: 3px solid #65ad9c; outline-offset: 3px; }
+@media (max-width: 560px) { .experience-switch { padding: 10px 12px; } .experience-switch__group { width: 100%; } .experience-switch button { flex: 1; } }
