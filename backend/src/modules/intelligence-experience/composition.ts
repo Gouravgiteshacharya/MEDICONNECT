@@ -1,5 +1,4 @@
 import type {
-  AIProvider,
   DeliveryTrackingToolInput,
   DeliveryTrackingAdapter,
   MedicineDiscoveryAdapter,
@@ -21,7 +20,6 @@ export interface IntelligenceDependencies {
   readonly prescriptionContext: PrescriptionContextAdapter;
   readonly deliveryTracking: DeliveryTrackingAdapter;
   readonly support: SupportAdapter;
-  readonly aiProvider?: AIProvider;
 }
 
 function unavailable(name: string): ToolExecutionResult<never> {
@@ -54,7 +52,7 @@ export function composeIntelligenceModule(dependencies: IntelligenceDependencies
     description: "Read an authenticated customer's order context from Commerce.",
     execute: async (input, context) => {
       if (!isOrderContextInput(input) || !hasIdentifier(input.orderId)) {
-        return invalidRequest("An order ID is required to retrieve order information.");
+        return invalidRequest("Please provide the order ID to check its status.");
       }
       return dependencies.orderContext.getOrder(input.orderId, context);
     },
@@ -64,7 +62,7 @@ export function composeIntelligenceModule(dependencies: IntelligenceDependencies
     description: "Read human prescription review status from Commerce.",
     execute: async (input, context) => {
       if (!isPrescriptionContextInput(input) || !hasIdentifier(input.prescriptionId)) {
-        return invalidRequest("A prescription ID is required to retrieve prescription information.");
+        return invalidRequest("Please provide the prescription ID to check its review status.");
       }
       return dependencies.prescriptionContext.getPrescriptionStatus(input.prescriptionId, context);
     },
@@ -74,7 +72,7 @@ export function composeIntelligenceModule(dependencies: IntelligenceDependencies
     description: "Read structured delivery data from Delivery & Logistics.",
     execute: async (input, context) => {
       if (!isDeliveryTrackingInput(input) || !hasIdentifier(input.orderId)) {
-        return invalidRequest("An order ID is required to retrieve delivery tracking.");
+        return invalidRequest("Please provide the order ID to track the delivery.");
       }
       return dependencies.deliveryTracking.getTracking(input.orderId, context);
     },
@@ -98,7 +96,7 @@ export function composeIntelligenceModule(dependencies: IntelligenceDependencies
     },
   });
 
-  return new DeterministicAssistant(registry, dependencies.aiProvider);
+  return new DeterministicAssistant(registry);
 }
 
 function invalidRequest(message: string): ToolExecutionResult<never> {

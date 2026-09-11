@@ -24,9 +24,6 @@ export class ToolRegistry {
   ): Promise<ToolExecutionResult<unknown>> {
     const tool = this.#tools.get(name);
     if (!tool) {
-      if (name === "medicine_discovery") {
-        return { status: "error", code: "unavailable", message: "Medicine discovery is currently unavailable." };
-      }
       return { status: "error", code: "not_found", message: `Assistant tool is not registered: ${name}` };
     }
     

@@ -1,5 +1,5 @@
 import type {
-  AIProvider,
+  AssistantIntent,
   AssistantRequest,
   AssistantResponse,
   TrustedAssistantContext,
@@ -10,11 +10,9 @@ import { ToolRegistry } from "./tool-registry.js";
 
 export class DeterministicAssistant {
   readonly #tools: ToolRegistry;
-  readonly #aiProvider?: AIProvider;
 
-  constructor(tools: ToolRegistry, aiProvider?: AIProvider) {
+  constructor(tools: ToolRegistry) {
     this.#tools = tools;
-    this.#aiProvider = aiProvider;
   }
 
   async respond(
@@ -51,11 +49,20 @@ export class DeterministicAssistant {
       };
     }
 
+    if (route.intent === "support_request" && "clarificationRequired" in route) {
+      const result = {
+        status: "error" as const,
+        code: "invalid_request" as const,
+        message: "Please specify whether the issue is about a delayed delivery, wrong order, missing item, payment, rider, pharmacy, or prescription.",
+      };
+      return { status: "error", intent: route.intent, message: result.message, suggestedActions: [], toolResult: result };
+    }
+
     if (!("toolName" in route)) {
       return {
         status: "unsupported",
         intent: route.intent,
-        message: "I can help with medicine and pharmacy discovery, orders, prescriptions, delivery tracking, and customer support.",
+        message: "I can help you find a named medicine or pharmacy, explain prescription upload, check an order or prescription using its ID, track a delivery, or start a support request. I can't provide medical diagnosis, prescribing, or dosage advice.",
         suggestedActions: [],
       };
     }
@@ -74,9 +81,21 @@ export class DeterministicAssistant {
     return {
       status: "fulfilled",
       intent: route.intent,
-      message: "The requested MediConnect information was retrieved successfully.",
+      message: successMessage(route.intent),
       suggestedActions: [],
       toolResult: result,
     };
   }
+}
+
+function successMessage(intent: AssistantIntent): string {
+  const messages: Partial<Record<AssistantIntent, string>> = {
+    medicine_discovery: "Medicine availability information was retrieved.",
+    pharmacy_discovery: "Pharmacy availability information was retrieved.",
+    order_status: "Your order information was retrieved.",
+    prescription_status: "Your prescription review information was retrieved.",
+    delivery_tracking: "Delivery tracking information was retrieved.",
+    support_request: "Your support request was submitted.",
+  };
+  return messages[intent] ?? "The MediConnect request was completed.";
 }

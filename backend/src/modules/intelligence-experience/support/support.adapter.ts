@@ -2,8 +2,11 @@ import type { SupportAdapter, ToolExecutionResult, TrustedAssistantContext } fro
 import type { SupportServiceContract, SupportTicketCategory } from "./support.types.js";
 
 const CATEGORY_MAP: Readonly<Record<string, SupportTicketCategory>> = {
+  delayed_delivery: "DELAYED_DELIVERY",
   "delayed delivery": "DELAYED_DELIVERY",
+  wrong_order: "WRONG_ORDER",
   "wrong order": "WRONG_ORDER",
+  missing_item: "MISSING_ITEM",
   "missing item": "MISSING_ITEM",
   payment: "PAYMENT",
   rider: "RIDER",

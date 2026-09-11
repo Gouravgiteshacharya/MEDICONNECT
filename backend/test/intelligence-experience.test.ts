@@ -4,6 +4,7 @@ import {
   composeIntelligenceModule,
   createTrustedAssistantContext,
   createUnavailableIntelligenceDependencies,
+  extractMedicineName,
   routeAssistantRequest,
   ToolRegistry,
 } from "../src/modules/intelligence-experience/index.js";
@@ -15,6 +16,17 @@ const context = createTrustedAssistantContext(
 
 test("routes an allowed operational medicine discovery intent", () => {
   assert.equal(routeAssistantRequest({ message: "Find Crocin near me", channel: "text" }).intent, "medicine_discovery");
+});
+
+test("help-me wording falls through to named medicine discovery", () => {
+  assert.equal(routeAssistantRequest({ message: "Help me find Crocin near me", channel: "text" }).intent, "medicine_discovery");
+});
+
+test("extracts clearly named medicines from supported discovery phrases", () => {
+  assert.equal(extractMedicineName("Find Crocin near me"), "Crocin");
+  assert.equal(extractMedicineName("Search for Dolo 650"), "Dolo 650");
+  assert.equal(extractMedicineName("Is Crocin available?"), "Crocin");
+  assert.equal(extractMedicineName("Check stock for Crocin"), "Crocin");
 });
 
 test("classifies a prohibited clinical decision by requested action", () => {
@@ -41,6 +53,75 @@ test("routes prohibited prescription judgments to clinical decision", () => {
     "Can you approve/reject my prescription?",
   ]) {
     assert.equal(routeAssistantRequest({ message, channel: "text" }).intent, "clinical_decision");
+  }
+});
+
+test("refuses diagnosis, prescribing, dosage, and medicine-safety requests", async () => {
+  let supportCalls = 0;
+  const dependencies = createUnavailableIntelligenceDependencies();
+  const assistant = composeIntelligenceModule({
+    ...dependencies,
+    support: { createSupportRequest: async () => { supportCalls += 1; return { status: "success", data: {} }; } },
+  });
+
+  for (const message of [
+    "Find me cold medicine.",
+    "Do I have the flu?",
+    "Diagnose my headache.",
+    "Prescribe antibiotics for me.",
+    "What dose should I take?",
+    "How many tablets should I take?",
+    "Is this medicine safe for me?",
+  ]) {
+    const response = await assistant.respond({ message, channel: "text" }, context);
+    assert.equal(response.intent, "clinical_decision", message);
+    assert.equal(response.status, "refused", message);
+  }
+  assert.equal(supportCalls, 0);
+});
+
+test("routes prescription, order, and delivery requests with explicit IDs", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const prescription = routeAssistantRequest({ message: `Is prescription #${id} still pending?`, channel: "text" });
+  const order = routeAssistantRequest({ message: `What is the status of order #${id}?`, channel: "text" });
+  const delivery = routeAssistantRequest({ message: `Track order #${id}`, channel: "text" });
+
+  assert.equal(prescription.intent, "prescription_status");
+  assert.equal(order.intent, "order_status");
+  assert.equal(delivery.intent, "delivery_tracking");
+  if ("toolInput" in prescription) assert.equal(prescription.toolInput.prescriptionId, id);
+  if ("toolInput" in order) assert.equal(order.toolInput.orderId, id);
+  if ("toolInput" in delivery) assert.equal(delivery.toolInput.orderId, id);
+});
+
+test("routes explicit pharmacy discovery through the discovery tool", () => {
+  for (const message of ["Find pharmacies near me", "Show nearby pharmacies"]) {
+    const route = routeAssistantRequest({ message, channel: "text" });
+    assert.equal(route.intent, "pharmacy_discovery");
+    if ("toolName" in route) assert.equal(route.toolName, "medicine.discovery");
+  }
+});
+
+test("help-me wording falls through to pharmacy discovery", () => {
+  assert.equal(routeAssistantRequest({ message: "Help me find a pharmacy nearby", channel: "text" }).intent, "pharmacy_discovery");
+});
+
+test("classifies clear support issues into fixed categories", () => {
+  const cases = [
+    ["my order is late", "DELAYED_DELIVERY"],
+    ["my order has the wrong items", "WRONG_ORDER"],
+    ["an item is missing from my order", "MISSING_ITEM"],
+    ["I have a payment issue", "PAYMENT"],
+    ["I have an issue with the rider", "RIDER"],
+    ["I have a pharmacy issue", "PHARMACY"],
+    ["I have a prescription support issue", "PRESCRIPTION"],
+  ] as const;
+
+  for (const [message, category] of cases) {
+    const route = routeAssistantRequest({ message, channel: "text" });
+    assert.equal(route.intent, "support_request", message);
+    assert.equal("toolName" in route, true, message);
+    if ("toolInput" in route) assert.equal(route.toolInput.category, category, message);
   }
 });
 
@@ -187,7 +268,7 @@ test("valid support request reaches the support adapter using trusted context", 
   const response = await assistant.respond({ message, channel: "text" }, context);
 
   assert.equal(response.status, "fulfilled");
-  assert.deepEqual(receivedInput, { orderId: undefined, category: "delayed delivery", details: message });
+  assert.deepEqual(receivedInput, { orderId: undefined, category: "DELAYED_DELIVERY", details: message });
   assert.equal(receivedUserId, "server-authenticated-user");
 });
 
@@ -209,4 +290,85 @@ test("malformed support input returns invalid_request without calling the suppor
   assert.equal(response.toolResult?.status, "error");
   if (response.toolResult?.status === "error") assert.equal(response.toolResult.code, "invalid_request");
   assert.equal(calls, 0);
+});
+
+test("ambiguous support request asks for a category without creating a ticket", async () => {
+  let calls = 0;
+  const dependencies = createUnavailableIntelligenceDependencies();
+  const assistant = composeIntelligenceModule({
+    ...dependencies,
+    support: { createSupportRequest: async () => { calls += 1; return { status: "success", data: {} }; } },
+  });
+
+  for (const message of ["I need support", "I have a complaint"]) {
+    const response = await assistant.respond({ message, channel: "text" }, context);
+    assert.equal(response.intent, "support_request");
+    assert.equal(response.status, "error");
+    assert.equal(response.toolResult?.status, "error");
+    if (response.toolResult?.status === "error") assert.equal(response.toolResult.code, "invalid_request");
+  }
+  assert.equal(calls, 0);
+});
+
+test("unknown request returns deterministic help without a tool call", async () => {
+  const assistant = composeIntelligenceModule(createUnavailableIntelligenceDependencies());
+  const response = await assistant.respond({ message: "Tell me a joke", channel: "text" }, context);
+  assert.equal(response.status, "unsupported");
+  assert.equal(response.intent, "unknown");
+  assert.match(response.message, /find a named medicine or pharmacy/i);
+  assert.match(response.message, /can't provide medical diagnosis/i);
+  assert.equal(response.toolResult, undefined);
+});
+
+test("registered tool errors remain authoritative", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "failure.explicit",
+    description: "Returns an explicit domain failure.",
+    execute: async () => ({ status: "error", code: "forbidden", message: "Access denied by the domain." }),
+  });
+  assert.deepEqual(await registry.execute("failure.explicit", {}, context), {
+    status: "error",
+    code: "forbidden",
+    message: "Access denied by the domain.",
+  });
+});
+
+test("thrown tool failures become execution_failed", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "failure.thrown",
+    description: "Throws unexpectedly.",
+    execute: async () => { throw new Error("private failure"); },
+  });
+  const result = await registry.execute("failure.thrown", {}, context);
+  assert.equal(result.status, "error");
+  if (result.status === "error") assert.equal(result.code, "execution_failed");
+});
+
+test("successful tools receive intent-specific deterministic messages", async () => {
+  const dependencies = createUnavailableIntelligenceDependencies();
+  const assistant = composeIntelligenceModule({
+    ...dependencies,
+    medicineDiscovery: { discover: async () => ({ status: "success", data: { medicines: [], pharmacies: [] } }) },
+    orderContext: { getOrder: async () => ({ status: "success", data: {} }) },
+    prescriptionContext: { getPrescriptionStatus: async () => ({ status: "success", data: {} }) },
+    deliveryTracking: { getTracking: async () => ({ status: "success", data: {} }) },
+    support: { createSupportRequest: async () => ({ status: "success", data: {} }) },
+  });
+  const id = "33333333-3333-4333-8333-333333333333";
+  const cases = [
+    ["Find Crocin near me", "Medicine availability information was retrieved."],
+    ["Find pharmacies near me", "Pharmacy availability information was retrieved."],
+    [`Order status for order ID ${id}`, "Your order information was retrieved."],
+    [`Prescription status for prescription ID ${id}`, "Your prescription review information was retrieved."],
+    [`Track order #${id}`, "Delivery tracking information was retrieved."],
+    ["my order is late", "Your support request was submitted."],
+  ] as const;
+
+  for (const [message, expected] of cases) {
+    const response = await assistant.respond({ message, channel: "text" }, context);
+    assert.equal(response.status, "fulfilled", message);
+    assert.equal(response.message, expected, message);
+  }
 });
