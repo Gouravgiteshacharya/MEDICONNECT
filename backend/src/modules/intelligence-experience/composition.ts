@@ -1,3 +1,5 @@
+import { parseTrackingOrderId } from "../../customer-tracking/tracking.validation.js";
+import { createDeliveryTrackingAdapter } from "./adapters/delivery-tracking.adapter.js";
 import type {
   DeliveryTrackingToolInput,
   DeliveryTrackingAdapter,
@@ -47,6 +49,7 @@ export function createIntelligenceDependencies(): IntelligenceDependencies {
     medicineDiscovery: createPharmacyDiscoveryAdapter(),
     orderContext: createOrderContextAdapter(),
     prescriptionContext: createPrescriptionContextAdapter(),
+    deliveryTracking: createDeliveryTrackingAdapter(),
   };
 }
 
@@ -89,7 +92,9 @@ export function composeIntelligenceModule(
       if (!isDeliveryTrackingInput(input) || !hasIdentifier(input.orderId)) {
         return invalidRequest("Please provide the order ID to track the delivery.");
       }
-      return dependencies.deliveryTracking.getTracking(input.orderId, context);
+      try { parseTrackingOrderId(input.orderId.trim()); }
+      catch { return invalidRequest("Please provide a valid order ID to track the delivery."); }
+      return dependencies.deliveryTracking.getTracking(input.orderId.trim(), context);
     },
   });
   registry.register({

@@ -1,3 +1,4 @@
+export * from "./adapters/delivery-tracking.adapter.js";
 export * from "./assistant.js";
 export * from "./adapters/pharmacy-discovery.adapter.js";
 export * from "./adapters/order-context.adapter.js";

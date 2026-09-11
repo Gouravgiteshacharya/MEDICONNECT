@@ -31,6 +31,12 @@ const orderStatusData = {
   prescriptions: [],
 };
 
+const deliveryTrackingData = {
+  order: { orderNumber: "MC-TEST", status: "PREPARING" as const },
+  delivery: { assignmentStatus: null, quotedEtaMinutes: null },
+  events: [],
+};
+
 const prescriptionStatusData = {
   prescription: {
     status: "PENDING_REVIEW" as const,
@@ -265,7 +271,7 @@ test("missing delivery order ID returns invalid_request without calling the deli
     deliveryTracking: {
       getTracking: async () => {
         calls += 1;
-        return { status: "success", data: {} };
+        return { status: "success", data: deliveryTrackingData };
       },
     },
   });
@@ -384,7 +390,7 @@ test("successful tools receive intent-specific deterministic messages", async ()
     } }) },
     orderContext: { getOrder: async () => ({ status: "success", data: orderStatusData }) },
     prescriptionContext: { getPrescriptionStatus: async () => ({ status: "success", data: prescriptionStatusData }) },
-    deliveryTracking: { getTracking: async () => ({ status: "success", data: {} }) },
+    deliveryTracking: { getTracking: async () => ({ status: "success", data: deliveryTrackingData }) },
     support: { createSupportRequest: async () => ({ status: "success", data: {} }) },
   });
   const id = "33333333-3333-4333-8333-333333333333";
@@ -393,7 +399,7 @@ test("successful tools receive intent-specific deterministic messages", async ()
     ["Find pharmacies near me", "Pharmacy availability information was retrieved."],
     [`Order status for order ID ${id}`, "Order MC-TEST has been confirmed."],
     [`Prescription status for prescription ID ${id}`, "Your prescription is pending pharmacy review."],
-    [`Track order #${id}`, "Delivery tracking information was retrieved."],
+    [`Track order #${id}`, "Order MC-TEST is being prepared."],
     ["my order is late", "Your support request was submitted."],
   ] as const;
 
@@ -481,4 +487,86 @@ test("clinical prescription judgments are refused without prescription execution
     assert.equal(response.status, "refused", message);
   }
   assert.equal(calls, 0);
+});
+
+
+test("Delivery forms use domain-compatible UUIDs while ordinary order forms stay Commerce", () => {
+  const id = "10000000-0000-0000-0000-000000000001";
+  for (const message of [
+    `Track order ID ${id}`, `Track order ${id}`, `Where is order ID ${id}?`,
+    `Where is my order ID ${id}?`, `Delivery tracking for order ID ${id}`,
+    `What is the delivery status of order ID ${id}?`,
+  ]) {
+    const route = routeAssistantRequest({ message, channel: "text" });
+    assert.equal(route.intent, "delivery_tracking", message);
+    if ("toolInput" in route) assert.equal(route.toolInput.orderId, id);
+  }
+  for (const message of [`What is the status of order ID ${id}?`, `Check order ID 33333333-3333-4333-8333-333333333333`, `Order status for order ID ${id}`]) {
+    assert.equal(routeAssistantRequest({ message, channel: "text" }).intent, "order_status", message);
+  }
+});
+
+test("Delivery summaries respect terminal/failure precedence and preserve structured results", async () => {
+  const cases = [
+    ["DELIVERED", "FAILED", "Order MC-TEST has been delivered."],
+    ["CANCELLED", "OUT_FOR_DELIVERY", "Order MC-TEST has been cancelled."],
+    ["REJECTED_BY_PHARMACY", "ACCEPTED", "Order MC-TEST was rejected by the pharmacy."],
+    ["OUT_FOR_DELIVERY", "FAILED", "A delivery attempt for order MC-TEST failed."],
+    ["OUT_FOR_DELIVERY", "OUT_FOR_DELIVERY", "Order MC-TEST is out for delivery. The quoted delivery ETA was 35 minutes."],
+    ["PICKED_UP", "PICKED_UP", "Order MC-TEST has been picked up from the pharmacy. The quoted delivery ETA was 35 minutes."],
+    ["RIDER_ASSIGNED", "ACCEPTED", "A rider has been assigned to order MC-TEST. The quoted delivery ETA was 35 minutes."],
+    ["PREPARING", null, "Order MC-TEST is being prepared. The quoted delivery ETA was 35 minutes."],
+    ["READY_FOR_PICKUP", null, "Order MC-TEST is ready for pickup by a rider. The quoted delivery ETA was 35 minutes."],
+    ["PRESCRIPTION_PENDING", null, "Order MC-TEST is currently PRESCRIPTION_PENDING."],
+    ["CONFIRMED", null, "Order MC-TEST is currently CONFIRMED."],
+  ] as const;
+  for (const [status, assignmentStatus, expected] of cases) {
+    const data = { order: { orderNumber: "MC-TEST", status }, delivery: { assignmentStatus, quotedEtaMinutes: 35 }, events: [] };
+    const result = { status: "success" as const, data };
+    const assistant = composeIntelligenceModule({ ...createUnavailableIntelligenceDependencies(), deliveryTracking: { getTracking: async () => result } });
+    const response = await assistant.respond({ message: "Track order ID 10000000-0000-0000-0000-000000000001", channel: "text" }, context);
+    assert.equal(response.message, expected);
+    assert.equal(response.toolResult, result);
+  }
+});
+
+test("null delivery ETA produces no ETA sentence", async () => {
+  const assistant = composeIntelligenceModule({ ...createUnavailableIntelligenceDependencies(), deliveryTracking: { getTracking: async () => ({ status: "success", data: deliveryTrackingData }) } });
+  const response = await assistant.respond({ message: "Track order ID 10000000-0000-0000-0000-000000000001", channel: "text" }, context);
+  assert.equal(response.message, "Order MC-TEST is being prepared.");
+});
+
+test("malformed delivery identifiers do not invoke even an injected adapter", async () => {
+  let calls = 0;
+  const assistant = composeIntelligenceModule({ ...createUnavailableIntelligenceDependencies(), deliveryTracking: { getTracking: async () => { calls++; return { status: "success", data: deliveryTrackingData }; } } });
+  for (const message of ["Track my delivery", "Track order ID bad-id", "Track order number MC-1024", "Track order MC-1024", "Track order random-token", "Track order 10000000-0000-0000-0000-000000000001-extra"]) {
+    const response = await assistant.respond({ message, channel: "text" }, context);
+    assert.equal(response.toolResult?.status, "error", message);
+    if (response.toolResult?.status === "error") assert.equal(response.toolResult.code, "invalid_request", message);
+  }
+  assert.equal(calls, 0);
+});
+
+test("clinical delivery requests are refused before Delivery execution", async () => {
+  let calls = 0;
+  const assistant = composeIntelligenceModule({ ...createUnavailableIntelligenceDependencies(), deliveryTracking: { getTracking: async () => { calls++; return { status: "success", data: deliveryTrackingData }; } } });
+  for (const message of [
+    "My delivery is late. What medicine should I take for my fever?",
+    "Track my delivery and recommend a medicine for pain",
+    "How many tablets should I take of the delivered medicine?",
+    "Is this medicine safe for me? Track my order",
+    "Should this prescription be approved? Where is my order?",
+    "What treatment should I use while my delivery is late?",
+  ]) {
+    const response = await assistant.respond({ message, channel: "text" }, context);
+    assert.equal(response.intent, "clinical_decision", message);
+    assert.equal(response.status, "refused", message);
+  }
+  assert.equal(calls, 0);
+});
+
+test("Support remains explicitly unavailable", async () => {
+  const response = await composeIntelligenceModule().respond({ message: "My order is late", channel: "text" }, context);
+  assert.equal(response.intent, "support_request");
+  assert.deepEqual(response.toolResult, { status: "error", code: "unavailable", message: "Customer support is currently unavailable." });
 });

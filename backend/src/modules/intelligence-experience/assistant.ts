@@ -1,5 +1,7 @@
+import { isDeliveryTrackingData } from "./adapters/delivery-tracking.adapter.js";
 import type {
   AssistantIntent,
+  DeliveryTrackingData,
   MedicineDiscoveryData,
   OrderStatusData,
   PrescriptionStatusData,
@@ -92,6 +94,7 @@ export class DeterministicAssistant {
 }
 
 function successMessage(intent: AssistantIntent, data: unknown): string {
+  if (intent === "delivery_tracking" && isDeliveryTrackingData(data)) return deliverySummary(data);
   if (intent === "medicine_discovery" && isMedicineDiscoveryData(data)) {
     const count = data.pharmacies.length;
     const pharmacyLabel = count === 1 ? "pharmacy" : "pharmacies";
@@ -153,4 +156,22 @@ function isMedicineDiscoveryData(data: unknown): data is MedicineDiscoveryData {
   if (typeof candidate.medicine !== "object" || candidate.medicine === null) return false;
   const medicine = candidate.medicine as Record<string, unknown>;
   return typeof medicine.name === "string" && typeof medicine.requiresPrescription === "boolean";
+}
+
+function deliverySummary(data: DeliveryTrackingData): string {
+  const { orderNumber, status } = data.order;
+  const { assignmentStatus, quotedEtaMinutes } = data.delivery;
+  if (status === "DELIVERED") return `Order ${orderNumber} has been delivered.`;
+  if (status === "CANCELLED") return `Order ${orderNumber} has been cancelled.`;
+  if (status === "REJECTED_BY_PHARMACY") return `Order ${orderNumber} was rejected by the pharmacy.`;
+  if (assignmentStatus === "FAILED") return `A delivery attempt for order ${orderNumber} failed.`;
+  if (assignmentStatus === "DELIVERED") return `Order ${orderNumber} has been delivered.`;
+  let summary: string;
+  if (assignmentStatus === "OUT_FOR_DELIVERY" || status === "OUT_FOR_DELIVERY") summary = `Order ${orderNumber} is out for delivery.`;
+  else if (assignmentStatus === "PICKED_UP" || status === "PICKED_UP") summary = `Order ${orderNumber} has been picked up from the pharmacy.`;
+  else if (assignmentStatus === "ACCEPTED" || status === "RIDER_ASSIGNED") summary = `A rider has been assigned to order ${orderNumber}.`;
+  else if (status === "PREPARING") summary = `Order ${orderNumber} is being prepared.`;
+  else if (status === "READY_FOR_PICKUP") summary = `Order ${orderNumber} is ready for pickup by a rider.`;
+  else return `Order ${orderNumber} is currently ${status}.`;
+  return summary + (quotedEtaMinutes === null ? "" : ` The quoted delivery ETA was ${quotedEtaMinutes} minutes.`);
 }

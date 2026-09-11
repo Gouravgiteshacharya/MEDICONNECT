@@ -38,11 +38,11 @@ export function routeAssistantRequest(request: AssistantRequest): RoutedAssistan
   if (isPrescriptionStatusRequest(message)) {
     return { intent: "prescription_status", toolName: "prescription.context", toolInput: { prescriptionId: extractExplicitId(message, "prescription") } };
   }
+  if (isDeliveryTrackingRequest(message)) {
+    return { intent: "delivery_tracking", toolName: "delivery.tracking", toolInput: { orderId: extractDeliveryOrderId(message) } };
+  }
   if (isOrderStatusRequest(message)) {
     return { intent: "order_status", toolName: "order.context", toolInput: { orderId: extractExplicitId(message, "order") } };
-  }
-  if (isDeliveryTrackingRequest(message)) {
-    return { intent: "delivery_tracking", toolName: "delivery.tracking", toolInput: { orderId: extractExplicitId(message, "order") } };
   }
   if (isSupportRequest(message)) {
     const category = extractSupportCategory(message);
@@ -118,7 +118,7 @@ function isOrderStatusRequest(message: string): boolean {
 }
 
 function isDeliveryTrackingRequest(message: string): boolean {
-  return /\b(?:where|track)\b.*\b(?:order|delivery|rider)\b/i.test(message) || /\bdelivery\s+tracking\b/i.test(message);
+  return /\b(?:where|track)\b.*\b(?:order|delivery|rider)\b/i.test(message) || /\bdelivery\s+(?:tracking|status)\b/i.test(message);
 }
 
 function isSupportRequest(message: string): boolean {
@@ -154,4 +154,11 @@ export function extractMedicineName(message: string): string | undefined {
     if (value) return value;
   }
   return undefined;
+}
+
+/** Delivery UUIDs do not inherit Commerce version/variant restrictions. */
+function extractDeliveryOrderId(message: string): string | undefined {
+  const marked = /\border\s+(?:id|number|#)\s*[:#-]?\s*([a-z0-9-]+)\b/i.exec(message)?.[1];
+  if (marked) return marked;
+  return /\border\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?![a-z0-9-])/i.exec(message)?.[1];
 }

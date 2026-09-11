@@ -198,8 +198,28 @@ export interface PrescriptionContextAdapter {
   ): Promise<ToolExecutionResult<PrescriptionStatusData>>;
 }
 
+export type DeliveryTrackingEventType =
+  | "RIDER_ASSIGNED" | "RIDER_ACCEPTED" | "ARRIVED_AT_PHARMACY"
+  | "PICKED_UP" | "OUT_FOR_DELIVERY" | "DELIVERED"
+  | "FAILED_DELIVERY" | "REASSIGNED" | "CANCELLED";
+
+export interface DeliveryTrackingData {
+  readonly order: {
+    readonly orderNumber: string;
+    readonly status: OrderStatusData["order"]["status"];
+  };
+  readonly delivery: {
+    readonly assignmentStatus: "ACCEPTED" | "PICKED_UP" | "OUT_FOR_DELIVERY" | "DELIVERED" | "FAILED" | null;
+    readonly quotedEtaMinutes: number | null;
+  };
+  readonly events: readonly {
+    readonly type: DeliveryTrackingEventType;
+    readonly occurredAt: string;
+  }[];
+}
+
 export interface DeliveryTrackingAdapter {
-  getTracking(orderId: string, context: TrustedAssistantContext): Promise<ToolExecutionResult<unknown>>;
+  getTracking(orderId: string, context: TrustedAssistantContext): Promise<ToolExecutionResult<DeliveryTrackingData>>;
 }
 
 export interface SupportAdapter {
