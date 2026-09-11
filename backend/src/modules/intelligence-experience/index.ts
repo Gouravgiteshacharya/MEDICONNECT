@@ -5,3 +5,4 @@ export * from "./predictors.js";
 export * from "./routing.js";
 export * from "./safety-policy.js";
 export * from "./tool-registry.js";
+export * from "./support/index.js";
