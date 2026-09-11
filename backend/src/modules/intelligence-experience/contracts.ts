@@ -86,9 +86,8 @@ export interface AssistantResponse {
 }
 
 export interface MedicineDiscoveryQuery {
+  readonly discoveryType: "medicine" | "pharmacy";
   readonly medicineName?: string;
-  readonly latitude?: number;
-  readonly longitude?: number;
   readonly radiusKm?: number;
 }
 
@@ -113,8 +112,31 @@ export interface SupportToolInput {
 }
 
 export interface MedicineDiscoveryData {
-  readonly medicines: readonly unknown[];
-  readonly pharmacies: readonly unknown[];
+  readonly medicine: {
+    readonly name: string;
+    readonly brandName: string | null;
+    readonly genericName: string | null;
+    readonly requiresPrescription: boolean;
+  };
+  readonly pharmacies: readonly {
+    readonly name: string;
+    readonly address: {
+      readonly addressLine1: string;
+      readonly addressLine2: string | null;
+      readonly city: string;
+      readonly state: string;
+      readonly postalCode: string;
+    };
+    readonly availability: "AVAILABLE" | "LOW_STOCK";
+    readonly quantity: number;
+    readonly sellingPrice: string;
+    readonly distanceKm: number;
+    readonly inventory: {
+      readonly freshness: "FRESH" | "STALE";
+      readonly lastUpdated: string;
+    };
+  }[];
+  readonly radiusKm: number;
 }
 
 export interface MedicineDiscoveryAdapter {

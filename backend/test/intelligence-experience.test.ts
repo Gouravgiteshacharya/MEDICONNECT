@@ -350,7 +350,11 @@ test("successful tools receive intent-specific deterministic messages", async ()
   const dependencies = createUnavailableIntelligenceDependencies();
   const assistant = composeIntelligenceModule({
     ...dependencies,
-    medicineDiscovery: { discover: async () => ({ status: "success", data: { medicines: [], pharmacies: [] } }) },
+    medicineDiscovery: { discover: async () => ({ status: "success", data: {
+      medicine: { name: "Crocin", brandName: null, genericName: "Paracetamol", requiresPrescription: false },
+      pharmacies: [],
+      radiusKm: 5,
+    } }) },
     orderContext: { getOrder: async () => ({ status: "success", data: {} }) },
     prescriptionContext: { getPrescriptionStatus: async () => ({ status: "success", data: {} }) },
     deliveryTracking: { getTracking: async () => ({ status: "success", data: {} }) },
@@ -358,7 +362,7 @@ test("successful tools receive intent-specific deterministic messages", async ()
   });
   const id = "33333333-3333-4333-8333-333333333333";
   const cases = [
-    ["Find Crocin near me", "Medicine availability information was retrieved."],
+    ["Find Crocin near me", "Crocin was found, but no eligible pharmacy within 5 km currently reports it as available."],
     ["Find pharmacies near me", "Pharmacy availability information was retrieved."],
     [`Order status for order ID ${id}`, "Your order information was retrieved."],
     [`Prescription status for prescription ID ${id}`, "Your prescription review information was retrieved."],

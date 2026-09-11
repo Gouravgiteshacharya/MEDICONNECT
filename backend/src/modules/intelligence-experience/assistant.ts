@@ -1,5 +1,6 @@
 import type {
   AssistantIntent,
+  MedicineDiscoveryData,
   AssistantRequest,
   AssistantResponse,
   TrustedAssistantContext,
@@ -81,14 +82,28 @@ export class DeterministicAssistant {
     return {
       status: "fulfilled",
       intent: route.intent,
-      message: successMessage(route.intent),
+      message: successMessage(route.intent, result.data),
       suggestedActions: [],
       toolResult: result,
     };
   }
 }
 
-function successMessage(intent: AssistantIntent): string {
+function successMessage(intent: AssistantIntent, data: unknown): string {
+  if (intent === "medicine_discovery" && isMedicineDiscoveryData(data)) {
+    const count = data.pharmacies.length;
+    const pharmacyLabel = count === 1 ? "pharmacy" : "pharmacies";
+    const availability = count > 0
+      ? `${data.medicine.name} is reported available at ${count} ${pharmacyLabel} within ${data.radiusKm} km.`
+      : `${data.medicine.name} was found, but no eligible pharmacy within ${data.radiusKm} km currently reports it as available.`;
+    const stale = data.pharmacies.some(({ inventory }) => inventory.freshness === "STALE")
+      ? " Some availability information was last updated more than 24 hours ago and may have changed."
+      : "";
+    const prescription = data.medicine.requiresPrescription
+      ? " This medicine is marked as requiring a prescription."
+      : "";
+    return `${availability}${stale}${prescription}`;
+  }
   const messages: Partial<Record<AssistantIntent, string>> = {
     medicine_discovery: "Medicine availability information was retrieved.",
     pharmacy_discovery: "Pharmacy availability information was retrieved.",
@@ -98,4 +113,13 @@ function successMessage(intent: AssistantIntent): string {
     support_request: "Your support request was submitted.",
   };
   return messages[intent] ?? "The MediConnect request was completed.";
+}
+
+function isMedicineDiscoveryData(data: unknown): data is MedicineDiscoveryData {
+  if (typeof data !== "object" || data === null) return false;
+  const candidate = data as Record<string, unknown>;
+  if (typeof candidate.radiusKm !== "number" || !Array.isArray(candidate.pharmacies)) return false;
+  if (typeof candidate.medicine !== "object" || candidate.medicine === null) return false;
+  const medicine = candidate.medicine as Record<string, unknown>;
+  return typeof medicine.name === "string" && typeof medicine.requiresPrescription === "boolean";
 }

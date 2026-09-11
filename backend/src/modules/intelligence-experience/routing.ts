@@ -52,12 +52,12 @@ export function routeAssistantRequest(request: AssistantRequest): RoutedAssistan
     };
   }
   if (isPharmacyDiscoveryRequest(message)) {
-    return { intent: "pharmacy_discovery", toolName: "medicine.discovery", toolInput: {} };
+    return { intent: "pharmacy_discovery", toolName: "medicine.discovery", toolInput: { discoveryType: "pharmacy" } };
   }
 
   const medicineName = extractMedicineName(message);
   if (isMedicineDiscoveryRequest(message, medicineName)) {
-    return { intent: "medicine_discovery", toolName: "medicine.discovery", toolInput: { medicineName } };
+    return { intent: "medicine_discovery", toolName: "medicine.discovery", toolInput: { discoveryType: "medicine", medicineName } };
   }
   return { intent: "unknown" };
 }
@@ -90,7 +90,8 @@ function isDosageRequest(message: string): boolean {
 }
 
 function isMedicineSafetyJudgment(message: string): boolean {
-  return /\b(?:is|are)\b.*\b(?:medicine|medication|drug|treatment)\b.*\b(?:safe|appropriate)\b.*\b(?:for\s+me|for\s+my)\b/i.test(message);
+  return /\b(?:is|are)\b.*\b(?:medicine|medication|drug|treatment)\b.*\b(?:safe|appropriate)\b.*\b(?:for\s+me|for\s+my)\b/i.test(message)
+    || /\bis\s+(?!.*\b(?:order|delivery|rider|pharmacy|payment|account|app|service)\b)[a-z0-9][a-z0-9 .-]{1,60}\s+safe\s+for\s+me\b/i.test(message);
 }
 
 function isPrescriptionClinicalJudgment(message: string): boolean {

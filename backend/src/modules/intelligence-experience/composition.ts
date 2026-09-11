@@ -12,6 +12,7 @@ import type {
   ToolExecutionResult,
 } from "./contracts.js";
 import { DeterministicAssistant } from "./assistant.js";
+import { createPharmacyDiscoveryAdapter } from "./adapters/pharmacy-discovery.adapter.js";
 import { ToolRegistry } from "./tool-registry.js";
 
 export interface IntelligenceDependencies {
@@ -37,7 +38,17 @@ export function createUnavailableIntelligenceDependencies(): IntelligenceDepende
   };
 }
 
-export function composeIntelligenceModule(dependencies: IntelligenceDependencies): DeterministicAssistant {
+/** Real medicine discovery plus explicit unavailable boundaries for later domain integrations. */
+export function createIntelligenceDependencies(): IntelligenceDependencies {
+  return {
+    ...createUnavailableIntelligenceDependencies(),
+    medicineDiscovery: createPharmacyDiscoveryAdapter(),
+  };
+}
+
+export function composeIntelligenceModule(
+  dependencies: IntelligenceDependencies = createIntelligenceDependencies(),
+): DeterministicAssistant {
   const registry = new ToolRegistry();
   registry.register({
     name: "medicine.discovery",
@@ -109,9 +120,8 @@ function isRecord(input: unknown): input is Readonly<Record<string, unknown>> {
 
 function isMedicineDiscoveryInput(input: unknown): input is MedicineDiscoveryToolInput {
   if (!isRecord(input)) return false;
-  return (input.medicineName === undefined || typeof input.medicineName === "string")
-    && (input.latitude === undefined || typeof input.latitude === "number")
-    && (input.longitude === undefined || typeof input.longitude === "number")
+  return (input.discoveryType === "medicine" || input.discoveryType === "pharmacy")
+    && (input.medicineName === undefined || typeof input.medicineName === "string")
     && (input.radiusKm === undefined || typeof input.radiusKm === "number");
 }
 
