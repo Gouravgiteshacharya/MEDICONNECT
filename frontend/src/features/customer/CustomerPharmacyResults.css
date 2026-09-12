@@ -375,3 +375,97 @@
     min-height: calc(100dvh - 70px);
   }
 }
+
+/* =========================================================
+   Real discovery integration states
+   ========================================================= */
+
+.customer-location-gate,
+.customer-results-message {
+  margin-top: 24px;
+  padding: 22px 18px;
+
+  border: 1px solid #e5e8ef;
+  border-radius: 20px;
+
+  background: #fff;
+}
+
+.customer-location-gate {
+  text-align: center;
+}
+
+.customer-location-gate-mark {
+  width: 44px;
+  height: 44px;
+
+  margin: 0 auto 13px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 14px;
+
+  background: #edf1ff;
+  color: #29396f;
+
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.customer-location-gate h2 {
+  margin: 0;
+
+  font-size: 18px;
+  letter-spacing: -.03em;
+}
+
+.customer-location-gate p {
+  max-width: 330px;
+
+  margin: 7px auto 0;
+
+  color: #7e879a;
+
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.customer-location-gate button,
+.customer-results-message button {
+  min-height: 42px;
+
+  margin-top: 15px;
+  padding: 0 15px;
+
+  border: 0;
+  border-radius: 999px;
+
+  background: #29396f;
+  color: #fff;
+
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.customer-location-gate button:disabled {
+  opacity: .6;
+}
+
+.customer-results-message strong,
+.customer-results-message span {
+  display: block;
+}
+
+.customer-results-message strong {
+  font-size: 13px;
+}
+
+.customer-results-message span {
+  margin-top: 5px;
+
+  color: #81899b;
+
+  font-size: 10px;
+  line-height: 1.5;
+}

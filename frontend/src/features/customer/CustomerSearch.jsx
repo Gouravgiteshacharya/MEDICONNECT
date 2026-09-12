@@ -1,37 +1,12 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import './CustomerSearch.css'
 
-const medicines = [
-  {
-    name: 'Dolo 650',
-    composition: 'Paracetamol 650 mg',
-    form: 'Tablet',
-    rx: false,
-    nearby: 3,
-  },
-  {
-    name: 'Dolo 500',
-    composition: 'Paracetamol 500 mg',
-    form: 'Tablet',
-    rx: false,
-    nearby: 4,
-  },
-  {
-    name: 'Crocin 650',
-    composition: 'Paracetamol 650 mg',
-    form: 'Tablet',
-    rx: false,
-    nearby: 2,
-  },
-  {
-    name: 'Azithral 500',
-    composition: 'Azithromycin 500 mg',
-    form: 'Tablet',
-    rx: true,
-    nearby: 2,
-  },
-]
+import {
+  getMedicine,
+  searchMedicines,
+} from '../discovery/discoveryService'
+
+import './CustomerSearch.css'
 
 function SearchIcon() {
   return (
@@ -59,31 +34,108 @@ function ClockIcon() {
   )
 }
 
+function medicineSubtitle(medicine) {
+  return (
+    medicine.genericName ||
+    medicine.brandName ||
+    medicine.manufacturer ||
+    'Medicine'
+  )
+}
+
+function compositionLabel(detail) {
+  if (!detail?.compositions?.length) {
+    return medicineSubtitle(detail || {})
+  }
+
+  return detail.compositions
+    .map(
+      (composition) =>
+        `${composition.activeIngredient.name} ${composition.strength}${composition.strengthUnit}`,
+    )
+    .join(' + ')
+}
+
 export default function CustomerSearch() {
   const navigate = useNavigate()
   const inputRef = useRef(null)
 
   const [query, setQuery] = useState('')
+  const [medicines, setMedicines] = useState([])
   const [selectedMedicine, setSelectedMedicine] = useState(null)
 
-  const results = useMemo(() => {
-    const normalized = query.trim().toLowerCase()
+  const [loading, setLoading] = useState(true)
+  const [selecting, setSelecting] = useState(false)
+  const [error, setError] = useState('')
 
-    if (!normalized) {
-      return medicines
+  useEffect(() => {
+    let active = true
+
+    const timer = window.setTimeout(async () => {
+      setLoading(true)
+      setError('')
+
+      try {
+        const result = await searchMedicines(query, {
+          page: 1,
+          pageSize: 20,
+        })
+
+        if (!active) return
+
+        setMedicines(result?.medicines ?? [])
+      } catch (requestError) {
+        if (!active) return
+
+        setMedicines([])
+        setError(
+          requestError?.message ||
+            'Unable to load medicines. Please try again.',
+        )
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }, query.trim() ? 250 : 0)
+
+    return () => {
+      active = false
+      window.clearTimeout(timer)
     }
-
-    return medicines.filter((medicine) => {
-      return (
-        medicine.name.toLowerCase().includes(normalized) ||
-        medicine.composition.toLowerCase().includes(normalized)
-      )
-    })
   }, [query])
 
-  function chooseMedicine(medicine) {
-    setSelectedMedicine(medicine)
-    setQuery(medicine.name)
+  const resultHeading = useMemo(() => {
+    if (loading) return 'Searching...'
+
+    if (!medicines.length) return 'No matches yet'
+
+    return `${medicines.length} medicine${medicines.length === 1 ? '' : 's'} found`
+  }, [loading, medicines.length])
+
+  async function chooseMedicine(medicine) {
+    setSelecting(true)
+    setError('')
+
+    try {
+      const result = await getMedicine(medicine.id)
+      const detail = result?.medicine ?? result
+
+      setSelectedMedicine({
+        ...medicine,
+        ...detail,
+        compositionLabel: compositionLabel(detail),
+      })
+
+      setQuery(detail?.name ?? medicine.name)
+    } catch (requestError) {
+      setError(
+        requestError?.message ||
+          'Unable to load medicine details. Please try again.',
+      )
+    } finally {
+      setSelecting(false)
+    }
   }
 
   function chooseRecent(value) {
@@ -121,7 +173,7 @@ export default function CustomerSearch() {
             ref={inputRef}
             type="search"
             value={query}
-            placeholder="Medicine or composition"
+            placeholder="Medicine, generic or brand"
             autoFocus
             onChange={(event) => {
               setQuery(event.target.value)
@@ -161,7 +213,7 @@ export default function CustomerSearch() {
 
                   <span>
                     <strong>Dolo 650</strong>
-                    <small>Paracetamol 650 mg</small>
+                    <small>Search again</small>
                   </span>
 
                   <span>↗</span>
@@ -175,7 +227,7 @@ export default function CustomerSearch() {
 
                   <span>
                     <strong>Crocin 650</strong>
-                    <small>Paracetamol 650 mg</small>
+                    <small>Search again</small>
                   </span>
 
                   <span>↗</span>
@@ -219,22 +271,26 @@ export default function CustomerSearch() {
           <section className="customer-search-section customer-search-results">
             <div className="customer-search-section-title">
               <span>RESULTS</span>
-
-              <h2>
-                {results.length
-                  ? `${results.length} medicine${results.length === 1 ? '' : 's'} found`
-                  : 'No matches yet'}
-              </h2>
+              <h2>{resultHeading}</h2>
             </div>
 
-            {results.length > 0 ? (
+            {error && (
+              <div className="customer-search-empty">
+                <div>!</div>
+                <strong>Couldn’t load medicines</strong>
+                <span>{error}</span>
+              </div>
+            )}
+
+            {!error && !loading && medicines.length > 0 && (
               <div className="customer-medicine-results">
-                {results.map((medicine) => (
+                {medicines.map((medicine) => (
                   <button
-                    key={medicine.name}
+                    key={medicine.id}
                     type="button"
+                    disabled={selecting}
                     className={
-                      selectedMedicine?.name === medicine.name
+                      selectedMedicine?.id === medicine.id
                         ? 'selected'
                         : ''
                     }
@@ -248,31 +304,30 @@ export default function CustomerSearch() {
                       <div>
                         <strong>{medicine.name}</strong>
 
-                        {medicine.rx && (
+                        {medicine.requiresPrescription && (
                           <span className="customer-rx-badge">Rx</span>
                         )}
                       </div>
 
-                      <span>{medicine.composition}</span>
+                      <span>{medicineSubtitle(medicine)}</span>
 
-                      <small>
-                        {medicine.form} · {medicine.nearby}{' '}
-                        {medicine.nearby === 1 ? 'pharmacy' : 'pharmacies'} nearby
-                      </small>
+                      {medicine.manufacturer && (
+                        <small>{medicine.manufacturer}</small>
+                      )}
                     </div>
 
                     <span className="customer-result-arrow">→</span>
                   </button>
                 ))}
               </div>
-            ) : (
+            )}
+
+            {!error && !loading && medicines.length === 0 && (
               <div className="customer-search-empty">
                 <div>?</div>
-
                 <strong>Try another medicine name</strong>
-
                 <span>
-                  You can also search using the composition.
+                  You can also search using the generic name or manufacturer.
                 </span>
               </div>
             )}
@@ -290,7 +345,7 @@ export default function CustomerSearch() {
               type="button"
               onClick={() => {
                 navigate(
-                  `/app/results?medicine=${encodeURIComponent(selectedMedicine.name)}&composition=${encodeURIComponent(selectedMedicine.composition)}`,
+                  `/app/results?medicineId=${encodeURIComponent(selectedMedicine.id)}`,
                 )
               }}
             >
