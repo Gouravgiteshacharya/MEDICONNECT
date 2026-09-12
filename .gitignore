@@ -2,3 +2,9 @@ node_modules/
 .env
 dist/
 .DS_Store
+/ml/eta/.venv/
+/ml/eta/.generated/
+/ml/eta/**/__pycache__/
+/ml/eta/.pytest_cache/
+/ml/eta/generated/
+/ml/eta/artifacts/

@@ -1,0 +1,18 @@
+{
+  "featureContractVersion": "eta-checkout-features-v1",
+  "rawInputs": {
+    "distanceKm": { "type": "number", "finite": true, "minimum": 0, "unit": "kilometres" },
+    "itemCount": { "type": "integer", "exclusiveMinimum": 0, "meaning": "order item lines, not quantity sum" },
+    "hourOfDay": { "type": "integer", "minimum": 0, "maximum": 23 },
+    "dayOfWeek": { "type": "integer", "minimum": 0, "maximum": 6, "sunday": 0 }
+  },
+  "additionalRawInputs": false,
+  "coercion": false,
+  "orderedFeatures": ["distanceKm", "itemCount", "hourSin", "hourCos", "isMonday", "isTuesday", "isWednesday", "isThursday", "isFriday", "isSaturday"],
+  "hourEncoding": { "hourSin": "sin(2*pi*hourOfDay/24)", "hourCos": "cos(2*pi*hourOfDay/24)" },
+  "weekdayEncoding": "Indicators for dayOfWeek == 1 through 6; Sunday (0) has all six indicators zero",
+  "timeSemantics": "Fixed UTC offset applied at checkout; no daylight-saving inference",
+  "outputUnit": "minutes",
+  "scaling": "Not applied by encoder; future training fits means/scales on train only",
+  "parityAbsoluteTolerance": 1e-12
+}

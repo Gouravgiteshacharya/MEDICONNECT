@@ -9,7 +9,7 @@ import {
   Prisma,
   UserRole,
 } from "../generated/prisma/client.js";
-import { app } from "../src/app.js";
+import { app, createApp } from "../src/app.js";
 import {
   createCustomerOrder,
   MAX_CHECKOUT_ATTEMPTS,
@@ -235,6 +235,47 @@ describe("order creation API", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("observes only committed placement snapshots, preserving response and writes", async () => {
+    mockDeliverySuccess({ distanceKm: 0.123456 });
+    const events: string[] = [];
+    prismaMock.$transaction.mockImplementation(async callback => {
+      events.push("transaction"); const result = await callback(prisma); events.push("committed"); return result;
+    });
+    const observation = { status: "predicted" as const, predictionPoint: "ORDER_PLACEMENT" as const, predictedMinutes: 18.125, modelVersion: "test", dataProvenance: "REAL" as const };
+    const predictOrderPlacement = vi.fn(input => {
+      expect(events.at(-1)).toBe("committed");
+      expect(input).toEqual({ deliveryDistanceKm: 0.123456, items: [null], placedAt: now });
+      input.items.push(null); input.placedAt.setTime(0);
+      return observation;
+    });
+    const onEtaShadowResult = vi.fn();
+    const response = await request(createApp({ etaRuntime: { status: "ready", predictOrderPlacement }, onEtaShadowResult })).post("/api/v1/orders").set("Authorization", authenticateAs()).send(deliveryInput);
+    expect(response.status).toBe(201); expect(predictOrderPlacement).toHaveBeenCalledTimes(1);
+    expect(onEtaShadowResult).toHaveBeenCalledExactlyOnceWith(observation);
+    const created = await prismaMock.order.create.mock.results[0].value;
+    expect(response.body).toEqual({ order: JSON.parse(JSON.stringify(created)) });
+    expect(response.body.order.quotedEtaMinutes).toBe(25); expect(response.body.order.items).toHaveLength(1);
+    expect(prismaMock.order.create.mock.calls[0][0].data).not.toHaveProperty("predictedMinutes");
+    expect(prismaMock.deliveryQuote.updateMany.mock.calls[0][0].data).toEqual({ orderId });
+  });
+  it.each(["unavailable", "throws", "observer throws", "observer rejects"])("isolates shadow %s", async mode => {
+    mockDeliverySuccess();
+    const predictOrderPlacement = vi.fn(() => { if (mode === "throws") throw new Error("PRIVATE"); return { status: "unavailable" as const, reason: "test" }; });
+    const onEtaShadowResult = vi.fn(() => { if (mode === "observer throws") throw new Error("PRIVATE"); if (mode === "observer rejects") return Promise.reject(new Error("PRIVATE")); });
+    const response = await request(createApp({ etaRuntime: { status: "ready", predictOrderPlacement }, onEtaShadowResult })).post("/api/v1/orders").set("Authorization", authenticateAs()).send(deliveryInput);
+    expect(response.status).toBe(201); expect(response.body.order.quotedEtaMinutes).toBe(25); expect(JSON.stringify(response.body)).not.toContain("PRIVATE");
+  });
+  it.each(["pickup", "failure", "retry success", "retry exhaustion"])("shadow call boundary: %s", async mode => {
+    const predictOrderPlacement = vi.fn(() => ({ status: "disabled" as const }));
+    if (mode === "pickup") mockSelfPickupSuccess(); else mockDeliverySuccess();
+    if (mode === "failure") prismaMock.cart.findMany.mockResolvedValue([]);
+    if (mode === "retry success") prismaMock.$transaction.mockRejectedValueOnce(knownError("P2034"));
+    if (mode === "retry exhaustion") prismaMock.$transaction.mockRejectedValue(knownError("P2034"));
+    const response = await request(createApp({ etaRuntime: { status: "disabled", predictOrderPlacement } })).post("/api/v1/orders").set("Authorization", authenticateAs()).send(mode === "pickup" ? selfPickupInput : deliveryInput);
+    expect(response.status).toBe(mode === "failure" ? 404 : mode === "retry exhaustion" ? 409 : 201);
+    expect(predictOrderPlacement).toHaveBeenCalledTimes(mode === "retry success" ? 1 : 0);
   });
 
   it("rejects unauthenticated and non-customer requests", async () => {

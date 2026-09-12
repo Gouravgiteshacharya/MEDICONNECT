@@ -1,0 +1,26 @@
+{
+  "metricContract": "TypeScript evaluateEta minutes; fractions; nearest-rank P90; conventional median",
+  "absoluteTolerance": 1e-12,
+  "cases": [
+    {
+      "name": "early-exact-late",
+      "observations": [
+        {"actualMinutes":20,"predictedMinutes":0},
+        {"actualMinutes":20,"predictedMinutes":10},
+        {"actualMinutes":20,"predictedMinutes":20},
+        {"actualMinutes":20,"predictedMinutes":25},
+        {"actualMinutes":20,"predictedMinutes":35}
+      ],
+      "expected": {
+        "status":"evaluated","sampleCount":5,"excludedCount":0,
+        "metrics": {
+          "mae":10,"medianAbsoluteError":10,"rmse":12.24744871391589,"p90AbsoluteError":20,
+          "meanSignedBias":-2,"medianSignedLateness":0,"p90SignedLateness":20,"p90LateMinutes":20,
+          "within5MinutesRate":0.4,"within10MinutesRate":0.6,"within15MinutesRate":0.8,
+          "overPromiseRate":0.4,"underPromiseRate":0.4,"withinPredictedEtaRate":0.6
+        }
+      }
+    },
+    {"name":"empty","observations":[],"expected":{"status":"unavailable","reason":"no_valid_observations","sampleCount":0,"excludedCount":0}}
+  ]
+}

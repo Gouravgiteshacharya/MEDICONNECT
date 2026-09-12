@@ -1,0 +1,13 @@
+{
+  "featureContractVersion": "eta-checkout-features-v1",
+  "absoluteTolerance": 1e-12,
+  "cases": [
+    { "name": "zero-midnight-sunday", "raw": { "distanceKm": 0, "itemCount": 1, "hourOfDay": 0, "dayOfWeek": 0 }, "expected": [0,1,0,1,0,0,0,0,0,0] },
+    { "name": "noon-monday", "raw": { "distanceKm": 5, "itemCount": 3, "hourOfDay": 12, "dayOfWeek": 1 }, "expected": [5,3,0,-1,1,0,0,0,0,0] },
+    { "name": "morning-saturday", "raw": { "distanceKm": 2.375, "itemCount": 2, "hourOfDay": 6, "dayOfWeek": 6 }, "expected": [2.375,2,1,0,0,0,0,0,0,1] },
+    { "name": "evening-tuesday", "raw": { "distanceKm": 8.125, "itemCount": 4, "hourOfDay": 18, "dayOfWeek": 2 }, "expected": [8.125,4,-1,0,0,1,0,0,0,0] },
+    { "name": "three-wednesday", "raw": { "distanceKm": 0.01, "itemCount": 5, "hourOfDay": 3, "dayOfWeek": 3 }, "expected": [0.01,5,0.7071067811865476,0.7071067811865476,0,0,1,0,0,0] },
+    { "name": "late-thursday", "raw": { "distanceKm": 11.75, "itemCount": 1, "hourOfDay": 23, "dayOfWeek": 4 }, "expected": [11.75,1,-0.2588190451025207,0.9659258262890683,0,0,0,1,0,0] },
+    { "name": "nine-friday", "raw": { "distanceKm": 3.5, "itemCount": 2, "hourOfDay": 9, "dayOfWeek": 5 }, "expected": [3.5,2,0.7071067811865476,-0.7071067811865476,0,0,0,0,1,0] }
+  ]
+}

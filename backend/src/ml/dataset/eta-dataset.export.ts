@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { EtaDataProvenance } from "../eta-model.types.js";
 import { extractEtaDataset } from "./eta-dataset.extractor.js";
 import { loadEtaDataset, validateEtaLoadOptions, type EtaDatasetDataSource, type EtaDatasetLoadOptions } from "./eta-dataset.loader.js";
 import { ETA_DATASET_SCHEMA_VERSION, type EtaDatasetOptions, type EtaDatasetExclusionReason } from "./eta-dataset.types.js";
 
 export interface EtaDatasetExportOptions {
+  readonly dataProvenance: EtaDataProvenance;
   readonly source: EtaDatasetLoadOptions;
   readonly transformer: EtaDatasetOptions;
   readonly generatedAt: Date;
@@ -13,6 +15,7 @@ export interface EtaDatasetExportOptions {
 }
 
 export interface EtaDatasetManifest {
+  readonly dataProvenance: EtaDataProvenance;
   readonly schemaVersion: typeof ETA_DATASET_SCHEMA_VERSION;
   readonly generatedAt: string;
   readonly gitCommit: string;
@@ -37,6 +40,9 @@ export interface EtaDatasetExport {
 
 /** Validate every dataset-defining parameter before the first database read. */
 export function validateEtaExportOptions(options: EtaDatasetExportOptions): void {
+  if (!["REAL", "SYNTHETIC", "MIXED"].includes(options.dataProvenance)) {
+    throw new RangeError("Explicit REAL, SYNTHETIC or MIXED provenance is required");
+  }
   validateEtaLoadOptions(options.source);
   extractEtaDataset([], options.transformer);
   if (!Number.isFinite(options.transformer.fallbackSpeedKmh) || options.transformer.fallbackSpeedKmh <= 0) {
@@ -61,6 +67,7 @@ export async function createEtaDatasetExport(
   const result = extractEtaDataset(records, options.transformer);
   const jsonl = result.rows.map(row => JSON.stringify(row) + "\n").join("");
   const manifest: EtaDatasetManifest = {
+    dataProvenance: options.dataProvenance,
     schemaVersion: ETA_DATASET_SCHEMA_VERSION,
     generatedAt: options.generatedAt.toISOString(), gitCommit: options.gitCommit,
     source: {

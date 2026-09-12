@@ -12,6 +12,7 @@ const testStart = new Date("2026-03-01T00:00:00Z");
 const testEnd = new Date("2026-04-01T00:00:00Z");
 const outcomeCutoff = new Date("2026-04-02T00:00:00Z");
 const options: EtaDatasetExportOptions = {
+  dataProvenance: "REAL",
   source: { placedAtFrom: trainStart, placedAtUntil: testEnd, outcomeCutoff },
   transformer: { trainStart, validationStart, testStart, testEnd, outcomeCutoff, fallbackSpeedKmh: 20, timezoneOffsetMinutes: 330 },
   generatedAt: new Date("2026-04-03T00:00:00Z"), gitCommit: "fixed-test-commit",
@@ -26,6 +27,14 @@ function raw(id = "private-order", distance = 5) {
 function fake(records = [raw()]) { return { order: { findMany: vi.fn().mockResolvedValue(records) } }; }
 
 describe("ETA JSONL and manifest", () => {
+  it.each(["REAL", "SYNTHETIC", "MIXED"] as const)("records explicit %s provenance", async dataProvenance => {
+    expect((await createEtaDatasetExport(fake(), { ...options, dataProvenance })).manifest.dataProvenance).toBe(dataProvenance);
+  });
+  it.each([undefined, "", "UNKNOWN"])("rejects absent/invalid provenance %s before reading", async dataProvenance => {
+    const dataSource = fake();
+    await expect(createEtaDatasetExport(dataSource, { ...options, dataProvenance } as EtaDatasetExportOptions)).rejects.toThrow(RangeError);
+    expect(dataSource.order.findMany).not.toHaveBeenCalled();
+  });
   it("serializes one allowlisted object with a final newline, no BOM, and no IDs or exact row timestamps", async () => {
     const artifact = await createEtaDatasetExport(fake(), options);
     expect(artifact.jsonl.endsWith("\n")).toBe(true);

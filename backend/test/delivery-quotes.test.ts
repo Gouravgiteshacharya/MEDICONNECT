@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { UserRole } from "../src/auth/authenticator.js";
 import type { DeliveryQuoteStore } from "../src/delivery-quotes/delivery-quote.service.js";
@@ -79,6 +79,14 @@ function app(store: DeliveryQuoteStore, auth: RequestHandler = authenticate, dis
 const validBody = { pharmacyId, deliveryAddressId: addressId };
 
 describe("POST /api/v1/delivery-quotes", () => {
+  it("never calls the checkout shadow runtime from quote routes", async () => {
+    const predictOrderPlacement = vi.fn(() => { throw new Error("must not run"); });
+    const { store } = createStore();
+    const instance = createApp({ store, authenticate, deliveryQuoteConfig: config, distanceProvider: provider, now: () => now, etaRuntime: { status: "ready", predictOrderPlacement } });
+    const response = await request(instance).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody);
+    expect(response.status).toBe(201); expect(response.body.data.estimatedDurationMinutes).toBe(11);
+    expect(predictOrderPlacement).not.toHaveBeenCalled();
+  });
   it("creates a customer-safe quote with exact persisted components and server timestamps", async () => {
     const { store, state } = createStore();
     const orderedProvider: DistanceProvider = { calculate: async () => {

@@ -42,6 +42,7 @@ export function parseEtaDatasetCliArgs(args: readonly string[], generatedAt: Dat
   const testEnd = utcDate(required("test-end"));
   const outcomeCutoff = utcDate(required("outcome-cutoff"));
   const exportOptions: EtaDatasetExportOptions = {
+    dataProvenance: "REAL", // This CLI reads Prisma history; synthetic generation is separate.
     source: { placedAtFrom: trainStart, placedAtUntil: testEnd, outcomeCutoff },
     transformer: { trainStart, validationStart, testStart, testEnd, outcomeCutoff,
       fallbackSpeedKmh: Number(required("fallback-speed-kmh")),

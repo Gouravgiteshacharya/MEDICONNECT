@@ -1,3 +1,4 @@
+import { disabledEtaRuntime, type EtaShadowDependencies } from "./ml/eta-runtime.js";
 import cors from "cors";
 import express, { type Express, type RequestHandler } from "express";
 import helmet from "helmet";
@@ -5,7 +6,7 @@ import { prisma } from "./lib/prisma.js";
 import { authenticate as platformAuthenticate } from "./middleware/authenticate.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { notFound } from "./middleware/notFound.js";
-import { apiRoutes } from "./routes/index.js";
+import { createApiRoutes } from "./routes/index.js";
 import { createRiderRouter } from "./riders/rider.routes.js";
 import type { RiderStore } from "./riders/rider.service.js";
 import type { LocationStore } from "./location/location.service.js";
@@ -35,7 +36,7 @@ import { HaversineRouteProvider, type RouteProvider } from "./delivery-routing/r
 import type { RouteStore } from "./delivery-routing/route.service.js";
 import { loadMlConfig, type MlConfig } from "./ml/ml.config.js";
 import type { LogisticsModel } from "./ml/logistics-model.js";
-export interface AppDependencies {
+export interface AppDependencies extends EtaShadowDependencies {
   store?: RiderStore;
   authenticate?: RequestHandler;
   locationConfig?: LocationConfig;
@@ -63,6 +64,8 @@ export function createApp({
   routeProvider = new HaversineRouteProvider(routeConfig.assumedSpeedKmh),
   mlConfig = loadMlConfig(),
   mlModel = null,
+  etaRuntime = disabledEtaRuntime,
+  onEtaShadowResult,
   now = () => new Date(),
 }: AppDependencies): Express {
   const app = express();
@@ -72,7 +75,7 @@ export function createApp({
   app.use(cors());
   app.use(express.json({ limit: "100kb" }));
    app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
-  app.use("/api/v1", apiRoutes);
+  app.use("/api/v1", createApiRoutes({ etaRuntime, onEtaShadowResult }));
   app.use("/api/v1/riders", createDashboardRouter(store as unknown as DashboardStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, offerTimeoutMs: assignmentConfig.offerTimeoutMs, now }));
   app.use("/api/v1/riders", createRiderRouter(store as RiderStore & LocationStore, authenticate, { sampleIntervalMs: locationConfig.sampleIntervalMs, now }));
   app.use("/api/v1/delivery-quotes", createDeliveryQuoteRouter(store as RiderStore & DeliveryQuoteStore, authenticate, {

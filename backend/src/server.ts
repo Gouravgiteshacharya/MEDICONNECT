@@ -1,6 +1,7 @@
+import { createEtaRuntime } from "./ml/eta-runtime.js";
 import type { Server } from "node:http";
 
-import { app } from "./app.js";
+import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./lib/prisma.js";
 
@@ -45,6 +46,8 @@ async function shutdown(signal: NodeJS.Signals) {
 }
 
 try {
+  const etaRuntime = await createEtaRuntime({ ...process.env, NODE_ENV: env.nodeEnv });
+  const app = createApp({ etaRuntime });
   server = app.listen(env.port, () => {
     console.log(`MediConnect API listening on port ${env.port}`);
   });

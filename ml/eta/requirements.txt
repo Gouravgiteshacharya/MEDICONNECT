@@ -1,0 +1,5 @@
+# Future training only; Phase 11A runs entirely on Python 3.12 standard library.
+# NumPy/pandas pins match the available runtime; scikit-learn is not installed/tested here.
+numpy==2.3.5
+pandas==3.0.1
+scikit-learn==1.8.0

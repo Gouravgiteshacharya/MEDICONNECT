@@ -1,0 +1,11 @@
+{
+  "modelVersion": "eta-hand-calculable-synthetic-TEST-ONLY-v1",
+  "absoluteTolerance": 1e-9,
+  "cases": [
+    {"raw":{"distanceKm":0,"itemCount":1,"hourOfDay":0,"dayOfWeek":0},"expectedPrediction":19.25},
+    {"raw":{"distanceKm":5,"itemCount":3,"hourOfDay":12,"dayOfWeek":1},"expectedPrediction":28.25},
+    {"raw":{"distanceKm":2.375,"itemCount":2,"hourOfDay":6,"dayOfWeek":6},"expectedPrediction":32},
+    {"raw":{"distanceKm":8.125,"itemCount":4,"hourOfDay":18,"dayOfWeek":2},"expectedPrediction":35.5},
+    {"raw":{"distanceKm":0.01,"itemCount":5,"hourOfDay":3,"dayOfWeek":3},"expectedPrediction":27.805533905932738}
+  ]
+}

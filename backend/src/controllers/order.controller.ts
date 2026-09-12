@@ -1,3 +1,4 @@
+import type { EtaShadowDependencies } from "../ml/eta-runtime.js";
 import type { Request, Response } from "express";
 
 import {
@@ -18,14 +19,34 @@ function getAuthenticatedCustomerId(req: Request) {
   return customerId;
 }
 
-export async function createOrder(req: Request, res: Response) {
-  const order = await createCustomerOrder(
-    getAuthenticatedCustomerId(req),
-    req.body,
-  );
+export function createOrderController({ etaRuntime, onEtaShadowResult = () => {} }: EtaShadowDependencies = {}) {
+  return async function createOrder(req: Request, res: Response) {
+    const order = await createCustomerOrder(
+      getAuthenticatedCustomerId(req),
+      req.body,
+    );
 
-  res.status(201).json({ order });
+    if (order.fulfillmentMethod === "DELIVERY" && etaRuntime) {
+      // Detached minimal snapshot, after commit; never give the predictor response objects.
+      try {
+        const result = etaRuntime.predictOrderPlacement({
+          deliveryDistanceKm: order.deliveryDistanceKm,
+          placedAt: new Date(order.placedAt.getTime()),
+          items: order.items.map(() => null),
+        });
+        // Whitelist telemetry fields even when a runtime is injected by a caller.
+        const observation = result.status === "predicted"
+          ? { status: result.status, predictionPoint: result.predictionPoint, predictedMinutes: result.predictedMinutes, modelVersion: result.modelVersion, dataProvenance: result.dataProvenance }
+          : result.status === "unavailable"
+            ? { status: result.status, reason: result.reason }
+            : { status: "disabled" as const };
+        await onEtaShadowResult(observation);
+      } catch { /* Optional shadow work must never fail successful checkout. */ }
+    }
+    res.status(201).json({ order });
+  };
 }
+export const createOrder = createOrderController();
 
 export async function listOrders(req: Request, res: Response) {
   const result = await listCustomerOrders(
