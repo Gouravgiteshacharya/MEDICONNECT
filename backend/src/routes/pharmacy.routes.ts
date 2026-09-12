@@ -16,6 +16,7 @@ import { getDashboard } from "../controllers/pharmacyDashboard.controller.js";
 import {
   decideOrder,
   reviewPrescription,
+  updateOrderPreparation,
 } from "../controllers/pharmacyWorkflow.controller.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { authorizeRoles } from "../middleware/authorizeRoles.js";
@@ -36,6 +37,7 @@ import {
   orderDecisionParamsSchema,
   prescriptionReviewParamsSchema,
   reviewPrescriptionSchema,
+  updateOrderPreparationSchema,
 } from "../validators/pharmacyWorkflow.schemas.js";
 
 export const pharmacyRoutes = Router();
@@ -63,6 +65,15 @@ pharmacyRoutes.patch(
   decideOrder,
 );
 
+pharmacyRoutes.patch(
+  "/:pharmacyId/orders/:orderId/preparation",
+  validateRequest({ params: orderDecisionParamsSchema }),
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest(updateOrderPreparationSchema),
+  updateOrderPreparation,
+);
+
 pharmacyRoutes.get(
   "/:pharmacyId/dashboard",
   validateRequest({
@@ -76,16 +87,21 @@ pharmacyRoutes.get(
 
 pharmacyRoutes.get(
   "/:pharmacyId/inventory",
-  validateRequest({ params: inventoryParamsSchema, query: inventoryListQuerySchema }),
+  validateRequest({
+    params: inventoryParamsSchema,
+    query: inventoryListQuerySchema,
+  }),
   ...inventoryAccess,
   listInventory,
 );
+
 pharmacyRoutes.get(
   "/:pharmacyId/inventory/:inventoryId",
   validateRequest({ params: inventoryParamsSchema }),
   ...inventoryAccess,
   getInventoryItem,
 );
+
 pharmacyRoutes.post(
   "/:pharmacyId/inventory",
   validateRequest({ params: inventoryParamsSchema }),
@@ -93,6 +109,7 @@ pharmacyRoutes.post(
   validateRequest(createInventorySchema),
   createInventoryItem,
 );
+
 pharmacyRoutes.patch(
   "/:pharmacyId/inventory/:inventoryId",
   validateRequest({ params: inventoryParamsSchema }),
@@ -108,6 +125,7 @@ pharmacyRoutes.get(
   authorizeRoles(UserRole.PHARMACY_STAFF),
   getOperationalProfile,
 );
+
 pharmacyRoutes.patch(
   "/:pharmacyId/profile",
   validateRequest({ params: pharmacyParamsSchema }),
@@ -116,6 +134,7 @@ pharmacyRoutes.patch(
   validateRequest(updatePharmacyProfileSchema),
   updateOperationalProfile,
 );
+
 pharmacyRoutes.get(
   "/:pharmacyId",
   validateRequest({ params: pharmacyParamsSchema }),
