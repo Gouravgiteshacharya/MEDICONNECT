@@ -1,6 +1,7 @@
+import AssistantVoiceInput from './AssistantVoiceInput.jsx'
 import { useId } from 'react'
 
-export default function AssistantComposer({ draft, onDraftChange, onSubmit, pending }) {
+export default function AssistantComposer({ draft, onDraftChange, onSubmit, pending, recognitionActive, onRecognitionStateChange }) {
   const inputId = useId()
   const isEmpty = draft.trim().length === 0
 
@@ -14,10 +15,11 @@ export default function AssistantComposer({ draft, onDraftChange, onSubmit, pend
           onChange={(event) => onDraftChange(event.target.value)}
           rows="3"
           placeholder="Type an operational request"
-          disabled={pending}
+          disabled={pending || recognitionActive}
         />
-        <button type="submit" disabled={pending || isEmpty}>{pending ? 'Sending...' : 'Send request'}</button>
+        <button type="submit" disabled={pending || recognitionActive || isEmpty}>{pending ? 'Sending...' : 'Send request'}</button>
       </div>
+      <AssistantVoiceInput draft={draft} onDraftChange={onDraftChange} disabled={pending} onRecognitionStateChange={onRecognitionStateChange} />
       <p>Do not include sensitive medical information. This assistant does not provide clinical advice.</p>
     </form>
   )

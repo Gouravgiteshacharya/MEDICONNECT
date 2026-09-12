@@ -570,3 +570,19 @@ test("Support remains explicitly unavailable", async () => {
   assert.equal(response.intent, "support_request");
   assert.deepEqual(response.toolResult, { status: "error", code: "unavailable", message: "Customer support is currently unavailable." });
 });
+
+
+test("text and voice channels use identical deterministic routing and safety", async () => {
+  let calls = 0;
+  const assistant = composeIntelligenceModule({
+    ...createUnavailableIntelligenceDependencies(),
+    deliveryTracking: { getTracking: async () => { calls++; return { status: "success", data: deliveryTrackingData }; } },
+  });
+  for (const message of ["Track order ID 10000000-0000-0000-0000-000000000001", "What dose should I take?"]) {
+    const before = calls;
+    const text = await assistant.respond({ message, channel: "text" }, context);
+    const voice = await assistant.respond({ message, channel: "voice" }, context);
+    assert.deepEqual(voice, text);
+    assert.equal(calls - before, text.status === "refused" ? 0 : 2);
+  }
+});

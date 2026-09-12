@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { assistantClient, ASSISTANT_UNAVAILABLE_MESSAGE, buildAssistantRequest } from './assistant.client.js'
 import AssistantComposer from './AssistantComposer.jsx'
 import AssistantConversation from './AssistantConversation.jsx'
@@ -24,11 +24,17 @@ export default function AssistantView({ client = assistantClient }) {
   const [entries, setEntries] = useState([])
   const [pending, setPending] = useState(false)
   const responseRef = useRef(null)
+  const recognitionActiveRef = useRef(false)
+  const [recognitionActive, setRecognitionActive] = useState(false)
+  const onRecognitionStateChange = useCallback((active) => {
+    recognitionActiveRef.current = active
+    setRecognitionActive(active)
+  }, [])
 
   const submitRequest = async (event) => {
     event.preventDefault()
     const message = draft.trim()
-    if (!message || pending) return
+    if (!message || pending || recognitionActiveRef.current) return
 
     setEntries((current) => [...current, { id: nextMessageId('customer'), role: 'customer', content: message }])
     setDraft('')
@@ -63,10 +69,10 @@ export default function AssistantView({ client = assistantClient }) {
 
       <section className="assistant-workspace" aria-label="MediConnect assistant">
         <AssistantIntro />
-        <AssistantSuggestions onSelect={setDraft} />
+        <AssistantSuggestions onSelect={(value) => { if (!recognitionActiveRef.current && !pending) setDraft(value) }} />
         <section className="assistant-chat" aria-label="Request and response area">
           <AssistantConversation entries={entries} responseRef={responseRef} />
-          <AssistantComposer draft={draft} onDraftChange={setDraft} onSubmit={submitRequest} pending={pending} />
+          <AssistantComposer draft={draft} onDraftChange={setDraft} onSubmit={submitRequest} pending={pending} recognitionActive={recognitionActive} onRecognitionStateChange={onRecognitionStateChange} />
         </section>
       </section>
       <footer className="assistant-footer">Operational guidance only. Medical decisions stay with qualified healthcare professionals.</footer>
