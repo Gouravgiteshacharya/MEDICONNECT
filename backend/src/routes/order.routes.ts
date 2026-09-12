@@ -2,6 +2,7 @@ import { Router } from "express";
 import { UserRole } from "../../generated/prisma/client.js";
 
 import {
+  cancelOrder,
   createOrder,
   getOrder,
   listOrders,
@@ -25,24 +26,42 @@ import {
 
 export const orderRoutes = Router();
 
-orderRoutes.use(authenticate, authorizeRoles(UserRole.CUSTOMER));
-orderRoutes.post("/", validateRequest(createOrderSchema), createOrder);
+orderRoutes.use(
+  authenticate,
+  authorizeRoles(UserRole.CUSTOMER),
+);
+
+orderRoutes.post(
+  "/",
+  validateRequest(createOrderSchema),
+  createOrder,
+);
+
 orderRoutes.get(
   "/",
   validateRequest({ query: orderHistoryQuerySchema }),
   listOrders,
 );
+
 orderRoutes.post(
   "/:orderId/prescriptions",
   validateRequest({ params: prescriptionOrderParamsSchema }),
   validateRequest(createPrescriptionSchema),
   createPrescription,
 );
+
 orderRoutes.get(
   "/:orderId/prescriptions",
   validateRequest({ params: prescriptionOrderParamsSchema }),
   listPrescriptions,
 );
+
+orderRoutes.patch(
+  "/:orderId/cancel",
+  validateRequest({ params: orderParamsSchema }),
+  cancelOrder,
+);
+
 orderRoutes.get(
   "/:orderId",
   validateRequest({ params: orderParamsSchema }),
