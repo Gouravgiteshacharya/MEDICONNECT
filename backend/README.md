@@ -61,6 +61,22 @@ Rider-owned lifecycle actions are exposed under `/api/v1/delivery-lifecycle/:ass
 
 The injected route-provider boundary is called before any write transaction. The default provider uses Haversine distance and `ROUTE_ASSUMED_SPEED_KMH=20`; it is a deterministic fallback, not road routing or traffic-aware navigation. `ROUTE_MAX_LATE_MINUTES` defaults to `5`, and `ROUTE_MAX_STOPS` defaults to `6` with a hard safety limit of eight. A production mapping provider can replace the fallback without changing route contracts. No schema migration is required because `DeliveryStop.sequence` and `estimatedArrivalAt` already exist.
 
+## ETA dataset pipeline
+
+The developer-run ETA pipeline is offline and read-only; it does not replace operational ETA behavior. Schema `eta-checkout-v1` predicts at `CHECKOUT`. Its label is `(successful assignment deliveredAt - order placedAt) / 60000`, retaining fractional minutes and requiring exact agreement with order `completedAt`.
+
+The loader reads stored `Order.deliveryDistanceKm`, `Order.quotedEtaMinutes`, item-line count and minimal eligibility fields. Rows exclude raw IDs, exact timestamps, coordinates, customer/rider/pharmacy details, prescription data and amounts. The distance baseline is `Math.ceil(distanceKm / fallbackSpeedKmh * 60)`. Stored quoted ETA has unknown provider/fallback/model provenance and is not reconstructed.
+
+Run from `backend` using the existing local `tsx` dependency, only after authorization to read the chosen data source. Use a read-only database account or frozen snapshot where possible. The CLI uses the shared Prisma environment configuration (`DIRECT_URL` and existing required application settings). This implementation was validated with synthetic data only.
+
+```powershell
+npx --no-install tsx src/ml/dataset/eta-dataset.cli.ts --confirm-read-only-export --output-directory ./eta-output --placed-at-from 2026-01-01T00:00:00Z --validation-start 2026-02-01T00:00:00Z --test-start 2026-03-01T00:00:00Z --test-end 2026-04-01T00:00:00Z --outcome-cutoff 2026-04-02T00:00:00Z --fallback-speed-kmh 20 --timezone-offset-minutes 330 --git-commit YOUR_COMMIT
+```
+
+Replace the example dates and commit explicitly. Placement windows are `[placed-at-from, validation-start)`, `[validation-start, test-start)` and `[test-start, test-end)`. Outcomes after the explicit cutoff are excluded. This cutoff is snapshot-level; it does not additionally impose per-split label-maturity rules. A mutable database plus fixed dates does not guarantee a repeatable source snapshot.
+
+Output is UTF-8 `eta-dataset.jsonl` plus `eta-dataset.manifest.json`. The manifest records injected generation time, commit, boundaries, speed, timezone, exclusion counts and SHA-256 of the exact JSONL bytes. Empty datasets still produce a manifest. Existing files are always rejected; two-file writing is not atomic, so a failed run may leave partial files. Retry into a fresh directory. The command prints only aggregate counts and output paths. No package script, live routing call or database write is involved.
+
 ## ML-assisted logistics
 
 Milestone 12 adds an injectable prediction boundary to ETA estimation and eligible-rider ranking. Delivery owns the feature contract, orchestration, output guardrails, and deterministic fallback; Intelligence & Experience owns model training, implementation, evaluation, and inference. No trained model or training code is bundled in Delivery. Until an Intelligence-owned predictor is injected, deterministic eligibility and ranking remain authoritative. Invalid predictions, disabled inference, or model exceptions immediately use deterministic dispatch ranking and the routing-provider ETA. Dispatch responses report `ML_ASSISTED` or `DETERMINISTIC_FALLBACK`; audited dispatch attempts store accepted predicted completion time as suitability and retain the deterministic score as route compatibility. Quote responses report the ETA source, model version, baseline, and prediction.
