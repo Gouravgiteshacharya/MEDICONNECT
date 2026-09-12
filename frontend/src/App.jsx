@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { useAuth } from './context/AuthContext'
+import LandingPage from './pages/LandingPage'
 
 const medicines = [
   { name: 'Dolo 650', composition: 'Paracetamol 650 mg', form: 'Tablet', rx: false },
@@ -311,196 +312,16 @@ function App() {
   return (
     <div className="app">
       {view === 'home' ? (
-        <>
-          <header className="nav">
-            <button className="brand brand-button" type="button" onClick={() => setView('home')}>
-              <span className="brand-mark">M</span>
-              <span>MediConnect</span>
-            </button>
-
-            <nav className="nav-actions">
-              <button className="nav-link">For Pharmacies</button>
-              <button className="nav-link">How it works</button>
-            </nav>
-          </header>
-
-          <main>
-            <section className="hero-section">
-              <div className="hero-content">
-                <div className="eyebrow">
-                  <span className="eyebrow-dot" />
-                  Your local pharmacies, connected.
-                </div>
-
-                <h1>
-                  Find your medicine.
-                  <span> Nearby.</span>
-                </h1>
-
-                <p className="hero-copy">
-                  Search once. See which local pharmacies actually have the medicine you
-                  need — then choose pickup or delivery.
-                </p>
-
-                <button
-                  ref={heroSearchRef}
-                  className="hero-search"
-                  type="button"
-                  onClick={openSearch}
-                >
-                  <span className="search-icon">
-                    <SearchIcon />
-                  </span>
-
-                  <span className="search-placeholder">
-                    Search for a medicine...
-                  </span>
-
-                  <span className="search-action">
-                    Search
-                    <ArrowIcon />
-                  </span>
-                </button>
-
-                <div className="auth-actions">
-                  {authenticated ? (
-                    <>
-                      <span>
-                        Hi, <strong>{user?.name?.split(' ')[0]}</strong>
-                      </span>
-                      <span>•</span>
-                      <button type="button" onClick={logout}>
-                        Log out
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span>New to MediConnect?</span>
-                      <button type="button" onClick={() => openAuth('register')}>
-                        Sign up
-                      </button>
-                      <span>•</span>
-                      <button type="button" onClick={() => openAuth('login')}>
-                        Log in
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                <div className="hero-trust">
-                  <div>
-                    <strong>Nearby</strong>
-                    <span>local pharmacies</span>
-                  </div>
-
-                  <div>
-                    <strong>Verified</strong>
-                    <span>medicine availability</span>
-                  </div>
-
-                  <div>
-                    <strong>Your choice</strong>
-                    <span>pickup or delivery</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="story-section">
-              <div className="section-heading">
-                <span>01 — Search</span>
-                <h2>One search across your local pharmacy network.</h2>
-                <p>
-                  Instead of calling pharmacy after pharmacy, tell MediConnect what
-                  medicine you need.
-                </p>
-              </div>
-
-              <div className="demo-window">
-                <div className="demo-search">
-                  <SearchIcon />
-                  <span>Dolo 650</span>
-                </div>
-
-                <div className="demo-result">
-                  <div>
-                    <strong>Sharma Medical Store</strong>
-                    <p>850 m away</p>
-                  </div>
-
-                  <div className="availability">
-                    <strong>In stock</strong>
-                    <span>Updated 6 min ago</span>
-                  </div>
-                </div>
-
-                <div className="demo-result">
-                  <div>
-                    <strong>City Care Pharmacy</strong>
-                    <p>1.2 km away</p>
-                  </div>
-
-                  <div className="availability">
-                    <strong>Confirmed</strong>
-                    <span>12 min ago</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="local-section">
-              <div className="local-card">
-                <span>02 — Choose local</span>
-                <h2>Your neighbourhood pharmacy gets a digital storefront.</h2>
-                <p>
-                  Compare nearby independent pharmacies by availability,
-                  distance, price and fulfilment.
-                </p>
-              </div>
-
-              <div className="local-card dark-card">
-                <span>03 — Fulfilment</span>
-                <h2>Reserve for pickup. Or let MediConnect deliver.</h2>
-                <p>
-                  Once you've found the pharmacy, choose the fulfilment option
-                  that works for you.
-                </p>
-              </div>
-            </section>
-
-            <section className="mission-section">
-              <p>Why MediConnect</p>
-              <h2>
-                We're not replacing local pharmacies. We're connecting them.
-              </h2>
-
-              <button type="button" onClick={openSearch}>
-                Find medicine near me
-                <ArrowIcon />
-              </button>
-            </section>
-          </main>
-
-          <div
-            className={`floating-search-wrap ${
-              showFloatingSearch && !searchFlowOpen ? 'visible' : ''
-            }`}
-          >
-            <button
-              className="floating-search"
-              type="button"
-              onClick={openSearch}
-            >
-              <SearchIcon />
-              <span>Search medicines nearby...</span>
-
-              <div>
-                Search
-                <ArrowIcon />
-              </div>
-            </button>
-          </div>
-        </>
+        <LandingPage
+          authenticated={authenticated}
+          user={user}
+          logout={logout}
+          openAuth={openAuth}
+          openSearch={openSearch}
+          heroSearchRef={heroSearchRef}
+          showFloatingSearch={showFloatingSearch}
+          searchFlowOpen={searchFlowOpen}
+        />
       ) : (
         <div className="results-page">
           <header className="results-header">

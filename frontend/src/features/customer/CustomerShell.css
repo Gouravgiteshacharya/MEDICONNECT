@@ -1,0 +1,61 @@
+.customer-shell {
+  min-height: 100dvh;
+}
+
+.customer-shell-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 100;
+
+  width: min(100%, 520px);
+  min-height: calc(69px + env(safe-area-inset-bottom));
+
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+
+  transform: translateX(-50%);
+
+  border-top: 1px solid #e9ebf2;
+
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(20px);
+}
+
+.customer-shell-nav button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+
+  padding: 4px;
+
+  border: 0;
+  background: transparent;
+
+  color: #8b93a4;
+
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.customer-shell-nav button svg {
+  width: 20px;
+  height: 20px;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.customer-shell-nav button.active {
+  color: #1f2c5c;
+}
+
+.customer-shell-nav button:disabled {
+  opacity: .55;
+}

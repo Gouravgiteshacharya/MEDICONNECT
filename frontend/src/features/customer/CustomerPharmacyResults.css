@@ -1,0 +1,377 @@
+.customer-results-page {
+  min-height: 100dvh;
+  padding-bottom: 96px;
+
+  background: #fbfbfd;
+  color: #18203a;
+}
+
+.customer-results-page button {
+  font: inherit;
+}
+
+.customer-results-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+
+  width: min(100%, 520px);
+
+  margin: 0 auto;
+  padding: 14px 18px 13px;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  border-bottom: 1px solid #e7e9f0;
+
+  background: rgba(251,251,253,.95);
+  backdrop-filter: blur(18px);
+}
+
+.customer-results-back {
+  width: 38px;
+  height: 38px;
+
+  display: grid;
+  place-items: center;
+
+  padding: 0;
+
+  border: 1px solid #e4e7ef;
+  border-radius: 50%;
+
+  background: #fff;
+  color: #36405d;
+}
+
+.customer-results-back svg,
+.customer-pharmacy-verified svg {
+  width: 18px;
+  height: 18px;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.customer-results-header small,
+.customer-results-header strong {
+  display: block;
+}
+
+.customer-results-header small {
+  margin-bottom: 2px;
+
+  color: #9299aa;
+
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+
+.customer-results-header strong {
+  font-size: 15px;
+}
+
+.customer-results-main {
+  width: min(100%, 520px);
+
+  margin: 0 auto;
+  padding: 20px 18px 38px;
+}
+
+.customer-results-medicine {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.customer-results-medicine-mark {
+  width: 58px;
+  height: 58px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 18px;
+
+  background: #fff0b8;
+  color: #62521f;
+
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.customer-results-medicine h1 {
+  margin: 0;
+
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+.customer-results-medicine p {
+  margin: 4px 0 0;
+
+  color: #7e879a;
+
+  font-size: 11px;
+}
+
+.customer-results-medicine span {
+  margin-top: 7px;
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  color: #3f7653;
+
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.customer-results-medicine i {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: #5fa873;
+}
+
+.customer-results-controls {
+  margin-top: 22px;
+
+  display: flex;
+  gap: 7px;
+
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.customer-results-controls::-webkit-scrollbar {
+  display: none;
+}
+
+.customer-results-controls button {
+  min-height: 36px;
+
+  padding: 0 13px;
+
+  flex: 0 0 auto;
+
+  border: 1px solid #e1e4ec;
+  border-radius: 999px;
+
+  background: #fff;
+  color: #667087;
+
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.customer-results-controls button.active {
+  border-color: #29396f;
+
+  background: #29396f;
+  color: #fff;
+}
+
+.customer-pharmacy-list {
+  margin-top: 15px;
+
+  display: grid;
+  gap: 12px;
+}
+
+.customer-pharmacy-card {
+  padding: 16px;
+
+  border: 1px solid #e5e8ef;
+  border-radius: 21px;
+
+  background: #fff;
+
+  box-shadow: 0 8px 26px rgba(26,35,70,.045);
+}
+
+.customer-pharmacy-card.confirmed {
+  border-color: rgba(72,141,94,.24);
+}
+
+.customer-pharmacy-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.customer-pharmacy-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.customer-pharmacy-name-row h2 {
+  margin: 0;
+
+  font-size: 14px;
+  line-height: 1.15;
+}
+
+.customer-pharmacy-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+
+  padding: 3px 6px;
+
+  border-radius: 999px;
+
+  background: #eef1f8;
+  color: #59647e;
+
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.customer-pharmacy-verified svg {
+  width: 10px;
+  height: 10px;
+}
+
+.customer-pharmacy-top p {
+  margin: 5px 0 0;
+
+  color: #848c9e;
+
+  font-size: 10px;
+}
+
+.customer-pharmacy-price {
+  flex: 0 0 auto;
+
+  color: #222c4d;
+
+  font-size: 18px;
+}
+
+.customer-pharmacy-status-row {
+  margin-top: 15px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.customer-stock-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.customer-stock-status i {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+}
+
+.customer-stock-status.stock,
+.customer-stock-status.confirmed {
+  color: #39734d;
+}
+
+.customer-stock-status.stock i,
+.customer-stock-status.confirmed i {
+  background: #58a56e;
+}
+
+.customer-stock-status.checking {
+  color: #8a6d35;
+}
+
+.customer-stock-status.checking i {
+  background: #c69a49;
+}
+
+.customer-pharmacy-status-row small {
+  color: #9198a7;
+
+  font-size: 9px;
+  text-align: right;
+}
+
+.customer-pharmacy-options {
+  margin-top: 13px;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.customer-pharmacy-options span {
+  padding: 6px 8px;
+
+  border-radius: 9px;
+
+  background: #f5f6f9;
+  color: #687187;
+
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.customer-pharmacy-choose {
+  width: 100%;
+  min-height: 44px;
+
+  margin-top: 14px;
+  padding: 0 14px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border: 0;
+  border-radius: 14px;
+
+  background: #29396f;
+  color: #fff;
+
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.customer-pharmacy-choose:disabled {
+  background: #eef0f5;
+  color: #8b93a4;
+
+  cursor: default;
+}
+
+@media (min-width: 721px) {
+  .customer-results-page {
+    background: #eef0f6;
+  }
+
+  .customer-results-main,
+  .customer-results-header {
+    background: #fbfbfd;
+  }
+
+  .customer-results-main {
+    min-height: calc(100dvh - 70px);
+  }
+}
