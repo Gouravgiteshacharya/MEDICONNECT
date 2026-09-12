@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 
 import {
+  completePharmacySelfPickup,
   decidePharmacyOrder,
   reviewPharmacyPrescription,
   updatePharmacyOrderPreparation,
@@ -58,6 +59,19 @@ export async function updateOrderPreparation(
     req.params.pharmacyId as string,
     req.params.orderId as string,
     req.body,
+  );
+
+  res.status(200).json({ order });
+}
+
+export async function completeSelfPickup(
+  req: Request,
+  res: Response,
+) {
+  const order = await completePharmacySelfPickup(
+    getAuthenticatedStaffId(req),
+    req.params.pharmacyId as string,
+    req.params.orderId as string,
   );
 
   res.status(200).json({ order });

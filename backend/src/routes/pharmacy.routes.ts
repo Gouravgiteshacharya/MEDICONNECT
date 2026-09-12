@@ -14,6 +14,7 @@ import {
 } from "../controllers/inventory.controller.js";
 import { getDashboard } from "../controllers/pharmacyDashboard.controller.js";
 import {
+  completeSelfPickup,
   decideOrder,
   reviewPrescription,
   updateOrderPreparation,
@@ -72,6 +73,14 @@ pharmacyRoutes.patch(
   authorizeRoles(UserRole.PHARMACY_STAFF),
   validateRequest(updateOrderPreparationSchema),
   updateOrderPreparation,
+);
+
+pharmacyRoutes.patch(
+  "/:pharmacyId/orders/:orderId/pickup",
+  validateRequest({ params: orderDecisionParamsSchema }),
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  completeSelfPickup,
 );
 
 pharmacyRoutes.get(
