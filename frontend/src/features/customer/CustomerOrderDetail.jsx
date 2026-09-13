@@ -239,6 +239,28 @@ export default function CustomerOrderDetail() {
                 </div>
               </section>
             )}
+
+            {order.items.some((item) => item.requiresPrescription) && (
+              <section className="customer-order-detail-section">
+                <div className="customer-order-detail-section-head">
+                  <span>PRESCRIPTION ACTION</span>
+                  <strong>{statusLabel(order.status)}</strong>
+                </div>
+
+                <p className="customer-order-detail-copy">
+                  Prescription metadata is managed on the linked order
+                  review page.
+                </p>
+
+                <button
+                  type="button"
+                  className="customer-order-detail-action"
+                  onClick={() => navigate(`/app/prescriptions/${order.id}`)}
+                >
+                  Open prescription review
+                </button>
+              </section>
+            )}
           </>
         )}
       </main>

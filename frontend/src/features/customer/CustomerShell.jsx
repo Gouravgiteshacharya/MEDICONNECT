@@ -27,6 +27,15 @@ function OrdersIcon() {
   )
 }
 
+function PrescriptionIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 3h8l3 3v15H5V3Z" />
+      <path d="M15 3v4h4M8 12h8M8 16h5" />
+    </svg>
+  )
+}
+
 function CartIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -56,6 +65,8 @@ export default function CustomerShell() {
     ? 'search'
     : location.pathname.startsWith('/app/orders')
       ? 'orders'
+      : location.pathname.startsWith('/app/prescriptions')
+        ? 'prescriptions'
       : location.pathname.startsWith('/app/cart') ||
           location.pathname.startsWith('/app/checkout') ||
           location.pathname.startsWith('/app/delivery-address')
@@ -88,6 +99,12 @@ export default function CustomerShell() {
       label: 'Orders',
       path: '/app/orders',
       icon: <OrdersIcon />,
+    },
+    {
+      key: 'prescriptions',
+      label: 'Rx',
+      path: '/app/prescriptions',
+      icon: <PrescriptionIcon />,
     },
     {
       key: 'profile',

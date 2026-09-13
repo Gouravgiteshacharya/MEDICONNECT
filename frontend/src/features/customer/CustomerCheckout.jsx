@@ -88,8 +88,14 @@ export default function CustomerCheckout() {
         ? await createDeliveryOrder(deliveryQuoteId)
         : await createPickupOrder()
       const order = result?.order ?? result
+      const requiresPrescription = order.items?.some(
+        (item) => item.requiresPrescription,
+      )
+      const destination = requiresPrescription
+        ? `/app/prescriptions/${order.id}`
+        : `/app/orders/${order.id}`
 
-      navigate(`/app/orders/${order.id}`, {
+      navigate(destination, {
         replace: true,
       })
     } catch (requestError) {

@@ -309,7 +309,8 @@
 }
 
 .customer-order-detail-message button,
-.customer-order-detail-auth button {
+.customer-order-detail-auth button,
+.customer-order-detail-action {
   min-height: 42px;
   margin-top: 17px;
   padding: 0 15px;
@@ -322,6 +323,10 @@
 
   font-size: 10px;
   font-weight: 750;
+}
+
+.customer-order-detail-action {
+  margin-top: 12px;
 }
 
 @media (min-width: 960px) {

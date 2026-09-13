@@ -91,13 +91,13 @@ export default function CustomerApp() {
           <button
             type="button"
             className="customer-quick-card prescription"
-            onClick={() => navigate('/app/orders')}
+            onClick={() => navigate('/app/prescriptions')}
           >
             <span className="customer-quick-icon">Rx</span>
 
             <span>
               <strong>Prescription</strong>
-              <small>Handled in orders</small>
+              <small>Order review records</small>
             </span>
 
             <span>→</span>

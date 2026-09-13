@@ -23,7 +23,7 @@
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
 
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
 
   transform: translateX(-50%);
 

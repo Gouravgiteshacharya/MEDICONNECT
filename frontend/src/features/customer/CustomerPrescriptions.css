@@ -1,0 +1,373 @@
+.customer-prescriptions-page {
+  min-height: 100dvh;
+  padding-bottom: 96px;
+
+  background: #fbfbfd;
+  color: #18203a;
+}
+
+.customer-prescriptions-page button,
+.customer-prescriptions-page input {
+  font: inherit;
+}
+
+.customer-prescriptions-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+
+  width: min(100%, 620px);
+  margin: 0 auto;
+  padding: 14px 18px 13px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+
+  border-bottom: 1px solid #e7e9f0;
+
+  background: rgba(251, 251, 253, .95);
+  backdrop-filter: blur(18px);
+}
+
+.customer-prescriptions-header small,
+.customer-prescriptions-header strong,
+.customer-prescriptions-summary > span,
+.customer-prescriptions-panel-head span,
+.customer-prescription-hero > span {
+  display: block;
+}
+
+.customer-prescriptions-header small,
+.customer-prescriptions-summary > span,
+.customer-prescriptions-panel-head span,
+.customer-prescription-hero > span {
+  color: #9299aa;
+
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+
+.customer-prescriptions-header strong {
+  margin-top: 2px;
+  font-size: 15px;
+}
+
+.customer-prescriptions-header button,
+.customer-prescriptions-message button,
+.customer-prescriptions-auth button,
+.customer-prescriptions-empty button,
+.customer-prescription-form button {
+  min-height: 38px;
+  padding: 0 14px;
+
+  border: 0;
+  border-radius: 999px;
+
+  background: #29396f;
+  color: #fff;
+
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.customer-prescriptions-main {
+  width: min(100%, 620px);
+  margin: 0 auto;
+  padding: 22px 18px 40px;
+}
+
+.customer-prescriptions-summary h1,
+.customer-prescription-hero h1 {
+  margin: 7px 0 0;
+
+  font-size: 31px;
+  line-height: 1;
+  letter-spacing: -.05em;
+}
+
+.customer-prescriptions-summary p,
+.customer-prescription-hero p,
+.customer-prescriptions-copy,
+.customer-prescription-card p,
+.customer-prescription-card small,
+.customer-prescriptions-items span,
+.customer-prescriptions-history span,
+.customer-prescriptions-history small,
+.customer-prescriptions-history p,
+.customer-prescriptions-message span,
+.customer-prescriptions-auth p,
+.customer-prescriptions-empty p,
+.customer-prescriptions-success {
+  color: #858d9e;
+
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.customer-prescriptions-summary p,
+.customer-prescription-hero p,
+.customer-prescriptions-copy {
+  margin: 8px 0 0;
+}
+
+.customer-prescription-hero,
+.customer-prescriptions-panel,
+.customer-prescription-card,
+.customer-prescriptions-message,
+.customer-prescriptions-auth,
+.customer-prescriptions-empty,
+.customer-prescriptions-success {
+  border: 1px solid #e5e8ef;
+  border-radius: 18px;
+
+  background: #fff;
+}
+
+.customer-prescription-hero {
+  padding: 20px;
+
+  background: #29396f;
+  color: #fff;
+}
+
+.customer-prescription-hero > span,
+.customer-prescription-hero p {
+  color: rgba(255, 255, 255, .7);
+}
+
+.customer-prescriptions-list {
+  margin-top: 18px;
+
+  display: grid;
+  gap: 10px;
+}
+
+.customer-prescription-card {
+  width: 100%;
+  min-height: 94px;
+  padding: 14px;
+
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+
+  color: #18203a;
+  text-align: left;
+}
+
+.customer-prescription-card > div:nth-child(2) {
+  min-width: 0;
+}
+
+.customer-prescription-card > div:nth-child(2) > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.customer-prescription-card strong {
+  font-size: 13px;
+}
+
+.customer-prescription-card p {
+  margin: 5px 0 0;
+}
+
+.customer-prescription-card small {
+  display: block;
+  margin-top: 4px;
+}
+
+.customer-prescription-card span {
+  font-weight: 750;
+}
+
+.customer-prescription-card > div:nth-child(2) > div > span {
+  padding: 3px 6px;
+
+  border-radius: 7px;
+
+  background: #f4edf6;
+  color: #72587d;
+
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.customer-prescription-mark {
+  width: 46px;
+  height: 46px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 14px;
+
+  background: #f4edf6;
+  color: #72587d;
+
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.customer-prescriptions-panel {
+  margin-top: 14px;
+  padding: 16px;
+}
+
+.customer-prescriptions-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.customer-prescriptions-panel-head strong {
+  font-size: 12px;
+}
+
+.customer-prescriptions-items,
+.customer-prescriptions-history,
+.customer-prescription-form {
+  margin-top: 13px;
+
+  display: grid;
+  gap: 10px;
+}
+
+.customer-prescriptions-items article,
+.customer-prescriptions-history article {
+  padding: 12px;
+
+  border-radius: 14px;
+
+  background: #f7f8fb;
+}
+
+.customer-prescriptions-items strong,
+.customer-prescriptions-items span,
+.customer-prescriptions-history strong,
+.customer-prescriptions-history span,
+.customer-prescriptions-history small {
+  display: block;
+}
+
+.customer-prescriptions-items span,
+.customer-prescriptions-history span,
+.customer-prescriptions-history small {
+  margin-top: 4px;
+}
+
+.customer-prescriptions-history p {
+  margin: 7px 0 0;
+}
+
+.customer-prescription-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.customer-prescription-form label span {
+  color: #6f7789;
+
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.customer-prescription-form input {
+  width: 100%;
+  min-height: 43px;
+  padding: 0 12px;
+
+  border: 1px solid #dfe3ec;
+  border-radius: 13px;
+
+  background: #fbfbfd;
+  color: #18203a;
+
+  font-size: 12px;
+}
+
+.customer-prescription-form input:focus {
+  border-color: #29396f;
+  outline: 3px solid rgba(41, 57, 111, .12);
+}
+
+.customer-prescription-form button {
+  justify-self: start;
+}
+
+.customer-prescriptions-message,
+.customer-prescriptions-auth,
+.customer-prescriptions-empty,
+.customer-prescriptions-success {
+  padding: 24px;
+}
+
+.customer-prescriptions-auth,
+.customer-prescriptions-empty {
+  text-align: center;
+}
+
+.customer-prescriptions-auth > div,
+.customer-prescriptions-empty > div {
+  width: 48px;
+  height: 48px;
+
+  margin: 0 auto 15px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 15px;
+
+  background: #f4edf6;
+  color: #72587d;
+
+  font-weight: 800;
+}
+
+.customer-prescriptions-auth h1,
+.customer-prescriptions-empty h1 {
+  margin: 0;
+
+  font-size: 24px;
+  letter-spacing: -.04em;
+}
+
+.customer-prescriptions-success {
+  margin-top: 14px;
+
+  background: #eaf4ed;
+  color: #39734d;
+}
+
+@media (min-width: 960px) {
+  .customer-prescriptions-page {
+    padding-bottom: 0;
+    background: #eef0f6;
+  }
+
+  .customer-prescriptions-header,
+  .customer-prescriptions-main {
+    width: min(calc(100% - 72px), 980px);
+  }
+
+  .customer-prescriptions-header {
+    padding-top: 20px;
+    background: rgba(238, 240, 246, .92);
+  }
+
+  .customer-prescriptions-main {
+    padding-top: 32px;
+  }
+
+  .customer-prescriptions-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
