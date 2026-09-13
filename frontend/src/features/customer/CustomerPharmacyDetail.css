@@ -1,0 +1,357 @@
+.customer-pharmacy-detail-page {
+  min-height: 100dvh;
+  padding-bottom: 96px;
+
+  background: #fbfbfd;
+  color: #18203a;
+}
+
+.customer-pharmacy-detail-page button {
+  font: inherit;
+}
+
+.customer-pharmacy-detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+
+  width: min(100%, 520px);
+
+  margin: 0 auto;
+  padding: 14px 18px 13px;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  border-bottom: 1px solid #e7e9f0;
+
+  background: rgba(251,251,253,.95);
+  backdrop-filter: blur(18px);
+}
+
+.customer-pharmacy-detail-header > button {
+  width: 38px;
+  height: 38px;
+
+  display: grid;
+  place-items: center;
+
+  padding: 0;
+
+  border: 1px solid #e4e7ef;
+  border-radius: 50%;
+
+  background: #fff;
+  color: #36405d;
+}
+
+.customer-pharmacy-detail-header svg,
+.customer-detail-verified svg {
+  width: 18px;
+  height: 18px;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.customer-pharmacy-detail-header small,
+.customer-pharmacy-detail-header strong {
+  display: block;
+}
+
+.customer-pharmacy-detail-header small {
+  margin-bottom: 2px;
+
+  color: #9299aa;
+
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+
+.customer-pharmacy-detail-header strong {
+  font-size: 15px;
+}
+
+.customer-pharmacy-detail-main {
+  width: min(100%, 520px);
+
+  margin: 0 auto;
+  padding: 20px 18px 38px;
+}
+
+.customer-detail-medicine {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.customer-detail-mark {
+  width: 58px;
+  height: 58px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 18px;
+
+  background: #fff0b8;
+  color: #62521f;
+
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.customer-detail-medicine h1 {
+  margin: 0;
+
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+.customer-detail-medicine p {
+  margin: 4px 0 0;
+
+  color: #7e879a;
+
+  font-size: 11px;
+}
+
+.customer-detail-rx {
+  display: inline-flex;
+
+  margin-top: 8px;
+  padding: 4px 7px;
+
+  border-radius: 7px;
+
+  background: #f1e6f5;
+  color: #72587d;
+
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.customer-detail-pharmacy-card {
+  margin-top: 24px;
+  padding: 17px;
+
+  border: 1px solid #e5e8ef;
+  border-radius: 20px;
+
+  background: #fff;
+}
+
+.customer-detail-pharmacy-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.customer-detail-pharmacy-top > div > span,
+.customer-detail-quantity > div:first-child > span {
+  color: #9198a9;
+
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+
+.customer-detail-pharmacy-top h2 {
+  margin: 4px 0 0;
+
+  font-size: 16px;
+  letter-spacing: -.025em;
+}
+
+.customer-detail-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  padding: 4px 7px;
+
+  border-radius: 999px;
+
+  background: #eef1f8;
+  color: #59647e;
+
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.customer-detail-verified svg {
+  width: 10px;
+  height: 10px;
+}
+
+.customer-detail-pharmacy-card > p {
+  margin: 10px 0 0;
+
+  color: #80889a;
+
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.customer-detail-status {
+  margin-top: 13px;
+}
+
+.customer-detail-status span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  color: #3b7650;
+
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.customer-detail-status i {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: #5aa26e;
+}
+
+.customer-detail-quantity {
+  margin-top: 18px;
+  padding: 16px 2px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  border-top: 1px solid #e7e9f0;
+  border-bottom: 1px solid #e7e9f0;
+}
+
+.customer-detail-quantity > div:first-child strong {
+  display: block;
+
+  margin-top: 4px;
+
+  font-size: 13px;
+}
+
+.customer-detail-quantity-control {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.customer-detail-quantity-control button {
+  width: 34px;
+  height: 34px;
+
+  display: grid;
+  place-items: center;
+
+  padding: 0;
+
+  border: 1px solid #e1e4ec;
+  border-radius: 11px;
+
+  background: #fff;
+  color: #29396f;
+
+  font-size: 18px;
+}
+
+.customer-detail-quantity-control strong {
+  min-width: 20px;
+
+  text-align: center;
+
+  font-size: 13px;
+}
+
+.customer-detail-error {
+  margin-top: 15px;
+  padding: 11px 12px;
+
+  border-radius: 13px;
+
+  background: #fff1f1;
+  color: #934141;
+
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.customer-detail-add {
+  width: 100%;
+  min-height: 58px;
+
+  margin-top: 20px;
+  padding: 0 16px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border: 0;
+  border-radius: 17px;
+
+  background: #29396f;
+  color: #fff;
+
+  text-align: left;
+}
+
+.customer-detail-add strong,
+.customer-detail-add small {
+  display: block;
+}
+
+.customer-detail-add strong {
+  font-size: 12px;
+}
+
+.customer-detail-add small {
+  margin-top: 2px;
+
+  color: rgba(255,255,255,.62);
+
+  font-size: 9px;
+}
+
+.customer-detail-add:disabled {
+  opacity: .65;
+}
+
+.customer-detail-message {
+  padding: 18px;
+
+  border: 1px solid #e5e8ef;
+  border-radius: 18px;
+
+  background: #fff;
+}
+
+.customer-detail-message strong {
+  font-size: 12px;
+}
+
+@media (min-width: 721px) {
+  .customer-pharmacy-detail-page {
+    background: #eef0f6;
+  }
+
+  .customer-pharmacy-detail-header,
+  .customer-pharmacy-detail-main {
+    background: #fbfbfd;
+  }
+}

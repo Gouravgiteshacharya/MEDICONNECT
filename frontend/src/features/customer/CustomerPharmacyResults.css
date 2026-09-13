@@ -469,3 +469,25 @@
   font-size: 10px;
   line-height: 1.5;
 }
+
+.customer-location-actions {
+  margin-top: 15px;
+
+  display: grid;
+  gap: 8px;
+}
+
+.customer-location-actions > button {
+  width: 100%;
+  min-height: 42px;
+
+  margin-top: 0 !important;
+}
+
+.customer-demo-location-button {
+  border: 1px solid #dfe3ec !important;
+
+  background: #fff !important;
+  color: #29396f !important;
+}
+

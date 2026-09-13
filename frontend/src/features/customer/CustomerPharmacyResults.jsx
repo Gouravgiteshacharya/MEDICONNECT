@@ -220,6 +220,16 @@ export default function CustomerPharmacyResults() {
     return items
   }, [availability, sortBy])
 
+  function useDemoLocation() {
+    setError('')
+    setLocationStatus('ready')
+
+    setLocation({
+      latitude: 19.3150,
+      longitude: 84.7935,
+    })
+  }
+
   function requestLocation() {
     setError('')
 
@@ -316,15 +326,27 @@ export default function CustomerPharmacyResults() {
               availability and distance.
             </p>
 
-            <button
-              type="button"
-              disabled={locationStatus === 'requesting'}
-              onClick={requestLocation}
-            >
-              {locationStatus === 'requesting'
-                ? 'Getting location...'
-                : 'Use current location'}
-            </button>
+            <div className="customer-location-actions">
+              <button
+                type="button"
+                disabled={locationStatus === 'requesting'}
+                onClick={requestLocation}
+              >
+                {locationStatus === 'requesting'
+                  ? 'Getting location...'
+                  : 'Use current location'}
+              </button>
+
+              {import.meta.env.DEV && (
+                <button
+                  type="button"
+                  className="customer-demo-location-button"
+                  onClick={useDemoLocation}
+                >
+                  Use demo location
+                </button>
+              )}
+            </div>
           </section>
         )}
 
