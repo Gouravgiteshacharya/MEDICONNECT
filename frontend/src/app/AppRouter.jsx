@@ -1,6 +1,15 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 import LandingExperience from '../App'
+import AdminBlockedPage from '../features/admin/AdminBlockedPage'
+import AdminDeliveries from '../features/admin/AdminDeliveries'
+import AdminDeliveryDetail from '../features/admin/AdminDeliveryDetail'
+import AdminOrderDetail from '../features/admin/AdminOrderDetail'
+import AdminOrders from '../features/admin/AdminOrders'
+import AdminOverview from '../features/admin/AdminOverview'
+import AdminRiskDetail from '../features/admin/AdminRiskDetail'
+import AdminShell from '../features/admin/AdminShell'
+import AdminSupportDetail from '../features/admin/AdminSupportDetail'
 import CustomerApp from '../features/customer/CustomerApp'
 import CustomerSearch from '../features/customer/CustomerSearch'
 import CustomerPharmacyResults from '../features/customer/CustomerPharmacyResults'
@@ -67,6 +76,42 @@ export default function AppRouter() {
               element={<PharmacyPrescriptionReview />}
             />
             <Route path="profile" element={<PharmacyProfile />} />
+          </Route>
+          <Route path="/admin" element={<AdminShell />}>
+            <Route index element={<AdminOverview />} />
+            <Route
+              path="pharmacies"
+              element={<AdminBlockedPage type="pharmacies" />}
+            />
+            <Route
+              path="inventory"
+              element={<AdminBlockedPage type="inventory" />}
+            />
+            <Route path="orders" element={<AdminOrders />} />
+            <Route path="orders/:orderId" element={<AdminOrderDetail />} />
+            <Route path="deliveries" element={<AdminDeliveries />} />
+            <Route
+              path="deliveries/:deliveryId"
+              element={<AdminDeliveryDetail />}
+            />
+            <Route
+              path="riders"
+              element={<AdminBlockedPage type="riders" />}
+            />
+            <Route
+              path="support"
+              element={<AdminBlockedPage type="support" />}
+            />
+            <Route path="support/:ticketId" element={<AdminSupportDetail />} />
+            <Route
+              path="risk"
+              element={<AdminBlockedPage type="risk" />}
+            />
+            <Route path="risk/:riskId" element={<AdminRiskDetail />} />
+            <Route
+              path="metrics"
+              element={<AdminBlockedPage type="metrics" />}
+            />
           </Route>
           <Route path="/rider" element={<RiderApp />} />
         </Routes>
