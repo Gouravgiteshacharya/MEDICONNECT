@@ -454,15 +454,201 @@
 
 @media (min-width: 721px) {
   .customer-search-page {
-    background: #eef0f6;
+    padding-bottom: 48px;
+    background:
+      radial-gradient(circle at top right, rgba(255, 240, 184, 0.38), transparent 31%),
+      linear-gradient(180deg, #f5f6fa 0%, #eef0f6 100%);
   }
 
-  .customer-search-main,
   .customer-search-header {
-    background: #fbfbfd;
+    width: min(calc(100% - 64px), 1180px);
+    min-height: 76px;
+    padding: 16px 0;
+    border-bottom: 1px solid rgba(218, 222, 233, 0.9);
+    background: rgba(245, 246, 250, 0.9);
+  }
+
+  .customer-search-header strong {
+    font-size: 17px;
+  }
+
+  .customer-search-header small {
+    font-size: 10px;
+  }
+
+  .customer-search-back {
+    width: 42px;
+    height: 42px;
   }
 
   .customer-search-main {
-    min-height: calc(100dvh - 70px);
+    width: min(calc(100% - 64px), 1180px);
+    min-height: calc(100dvh - 76px);
+    margin: 0 auto;
+    padding: 48px 0 72px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: start;
+    column-gap: 32px;
+  }
+
+  .customer-search-input {
+    grid-column: 1 / -1;
+    min-height: 72px;
+    padding: 0 22px;
+    border-radius: 22px;
+    box-shadow: 0 18px 50px rgba(26, 35, 70, 0.075);
+  }
+
+  .customer-search-input input {
+    font-size: 17px;
+  }
+
+  .customer-search-section {
+    margin-top: 36px;
+  }
+
+  .customer-search-main > .customer-search-section:first-of-type {
+    grid-column: 1;
+  }
+
+  .customer-search-main > .customer-search-section:nth-of-type(2) {
+    grid-column: 2;
+  }
+
+  .customer-search-results {
+    grid-column: 1;
+    margin-top: 36px;
+  }
+
+  .customer-search-main:not(:has(.customer-search-selection))
+    .customer-search-results {
+    grid-column: 1 / -1;
+  }
+
+  .customer-search-main:not(:has(.customer-search-selection))
+    .customer-medicine-results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-search-section-title h2 {
+    margin-top: 7px;
+    font-size: 30px;
+    letter-spacing: -0.045em;
+  }
+
+  .customer-search-section-title > span {
+    font-size: 10px;
+  }
+
+  .customer-search-recents {
+    margin-top: 18px;
+    overflow: hidden;
+    border: 1px solid #e2e5ed;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  .customer-search-recents button {
+    min-height: 72px;
+    padding: 14px 18px;
+  }
+
+  .customer-search-recents button:last-child {
+    border-bottom: 0;
+  }
+
+  .customer-search-chips {
+    margin-top: 18px;
+    gap: 10px;
+  }
+
+  .customer-search-chips button {
+    min-height: 44px;
+    padding: 0 18px;
+    font-size: 12px;
+  }
+
+  .customer-medicine-results {
+    margin-top: 18px;
+    gap: 12px;
+  }
+
+  .customer-medicine-results > button {
+    min-height: 86px;
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .customer-medicine-results > button:hover {
+    transform: translateY(-2px);
+    border-color: #cbd1df;
+    box-shadow: 0 14px 30px rgba(31, 44, 92, 0.08);
+  }
+
+  .customer-result-copy strong {
+    font-size: 14px;
+  }
+
+  .customer-result-copy > span {
+    font-size: 11px;
+  }
+
+  .customer-result-copy small {
+    font-size: 10px;
+  }
+
+  .customer-search-selection {
+    grid-column: 2;
+    position: sticky;
+    top: 112px;
+    bottom: auto;
+    z-index: 10;
+    margin-top: 36px;
+    padding: 22px;
+    display: grid;
+    gap: 18px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 20px 55px rgba(31, 44, 92, 0.11);
+  }
+
+  .customer-search-selection::before {
+    content: "Ready to search nearby pharmacies";
+    display: block;
+    color: #68728b;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .customer-search-selection strong {
+    margin-top: 4px;
+    font-size: 18px;
+  }
+
+  .customer-search-selection button {
+    width: 100%;
+    min-height: 50px;
+    justify-content: center;
+    border-radius: 14px;
+    font-size: 12px;
+  }
+
+  .customer-search-empty {
+    min-height: 180px;
+    align-content: center;
+    background: rgba(255, 255, 255, 0.62);
+  }
+}
+
+@media (min-width: 1100px) {
+  .customer-search-main,
+  .customer-search-header {
+    width: min(calc(100% - 96px), 1220px);
+  }
+
+  .customer-search-main {
+    grid-template-columns: minmax(0, 1fr) 350px;
+    column-gap: 40px;
   }
 }
