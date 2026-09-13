@@ -28,14 +28,14 @@ interface Options {
   riderCoordinates?: boolean;
   existingLive?: boolean; competing?: boolean; assignmentWriteCount?: number; orderWriteCount?: number; riderWriteCount?: number;
   serializationFailures?: number;
-  batchId?: string;
+  batchId?: string; offerExpiresAt?: Date | null;
 }
 function createStore(options: Options = {}) {
   const order = { id: orderId, orderNumber: "MED-1", fulfillmentMethod: options.fulfillmentMethod ?? "DELIVERY", status: options.orderStatus ?? "READY_FOR_PICKUP", pharmacyId: "50000000-0000-0000-0000-000000000001" };
   const rider = { id: riderId, userId: riderUserId, availability: options.availability ?? "AVAILABLE", isActive: options.riderActive ?? true,
     currentLatitude: options.riderCoordinates === false ? null : 28.6139, currentLongitude: options.riderCoordinates === false ? null : 77.209,
     lastLocationAt: options.lastLocationAt === undefined ? new Date(now.getTime() - 5_000) : options.lastLocationAt, user: { isActive: options.userActive ?? true } };
-  const assignment: any = { id: assignmentId, orderId, riderId: options.assignmentRiderId ?? riderId, batchId: options.batchId ?? null, status: options.assignmentStatus ?? "OFFERED", assignedAt, acceptedAt: null, declinedAt: null, timedOutAt: null, order };
+  const assignment: any = { id: assignmentId, orderId, riderId: options.assignmentRiderId ?? riderId, batchId: options.batchId ?? null, status: options.assignmentStatus ?? "OFFERED", assignedAt, offerExpiresAt: options.offerExpiresAt ?? null, acceptedAt: null, declinedAt: null, timedOutAt: null, order };
   const state = { assignment, order, rider, batchStatus: options.batchId ? "PLANNED" : null as string | null, events: [] as any[], creates: [] as any[], assignmentWrites: [] as any[], orderWrites: [] as any[], riderWrites: [] as any[], transactionAttempts: 0 };
   const store: AssignmentStore = {
     deliveryPartner: {
@@ -83,6 +83,35 @@ function app(store: AssignmentStore, clock = now, auth: RequestHandler = authent
 }
 
 describe("delivery assignment offers", () => {
+  it("stores a new deadline and exposes only the existing expiresAt field", async () => {
+    const { store, state } = createStore();
+    const response = await request(app(store)).post("/api/v1/delivery-assignments/offers").set("Authorization", "Bearer admin").send({ orderId, riderId });
+    expect(state.creates[0].data.offerExpiresAt).toEqual(new Date(now.getTime() + 30000));
+    expect(response.body.data.expiresAt).toBe(new Date(now.getTime() + 30000).toISOString());
+    expect(response.body.data).not.toHaveProperty("offerExpiresAt");
+  });
+  it.each(["accept", "decline"])("uses stored deadline before expiry despite a shorter current config: %s", async action => {
+    const deadline = new Date(now.getTime() + 60000); const { store, state } = createStore({ offerExpiresAt: deadline });
+    const response = await request(app(store, new Date(deadline.getTime() - 1))).post(`/api/v1/delivery-assignments/${assignmentId}/${action}`).set("Authorization", "Bearer rider").send({});
+    expect(response.status).toBe(200); expect(state.assignment.offerExpiresAt).toEqual(deadline); expect(response.body.data.expiresAt).toBe(deadline.toISOString());
+  });
+  it.each([0, 1, 20000])("expires at/after stored deadline with processing timestamp +%s", async delay => {
+    const deadline = new Date(now.getTime() - 1); const processing = new Date(deadline.getTime() + delay);
+    const { store, state } = createStore({ offerExpiresAt: deadline });
+    const response = await request(app(store, processing)).post(`/api/v1/delivery-assignments/${assignmentId}/accept`).set("Authorization", "Bearer rider").send({});
+    expect(response.status).toBe(409); expect(state.assignment.status).toBe("TIMED_OUT"); expect(state.assignment.timedOutAt).toEqual(processing); expect(state.assignment.offerExpiresAt).toEqual(deadline);
+  });
+  it.each(["decline", "list"])("uses persisted timeout for %s", async action => {
+    const { store, state } = createStore({ offerExpiresAt: new Date(now.getTime() - 1) });
+    const client = request(app(store));
+    const response = action === "list" ? await client.get("/api/v1/delivery-assignments/offers/me").set("Authorization", "Bearer rider") : await client.post(`/api/v1/delivery-assignments/${assignmentId}/decline`).set("Authorization", "Bearer rider").send({});
+    expect(response.status).toBe(action === "list" ? 200 : 409); expect(state.assignment.timedOutAt).toEqual(now);
+  });
+  it("does not fabricate a deadline on legacy rows", async () => {
+    const { store, state } = createStore();
+    await request(app(store)).get("/api/v1/delivery-assignments/offers/me").set("Authorization", "Bearer rider");
+    expect(state.assignment.offerExpiresAt).toBeNull(); expect(state.assignmentWrites).toEqual([]);
+  });
   it("lets an admin create an eligible offer without changing the order", async () => {
     const { store, state } = createStore();
     const response = await request(app(store)).post("/api/v1/delivery-assignments/offers").set("Authorization", "Bearer admin").send({ orderId, riderId });

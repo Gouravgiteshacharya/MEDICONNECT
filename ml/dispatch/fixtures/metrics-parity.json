@@ -1,0 +1,65 @@
+{
+  "description": "Independent known four-observation classification example; log loss clips at float64 epsilon.",
+  "labels": [
+    false,
+    false,
+    true,
+    true
+  ],
+  "probabilities": [
+    0.1,
+    0.4,
+    0.35,
+    0.8
+  ],
+  "expected": {
+    "logLoss": 0.47228795380917615,
+    "brier": 0.15812500000000002,
+    "rocAuc": 0.75,
+    "averagePrecision": 0.8333333333333334,
+    "accuracyAt05": 0.75,
+    "precisionAt05": 1,
+    "recallAt05": 0.5,
+    "predictedPositiveRate": 0.25,
+    "actualAcceptanceRate": 0.5,
+    "sampleCount": 4
+  },
+  "extremeSigmoid": [
+    {
+      "logit": -1000,
+      "probability": 0.0
+    },
+    {
+      "logit": -745,
+      "probability": 5e-324
+    },
+    {
+      "logit": -100,
+      "probability": 3.720075976020836e-44
+    },
+    {
+      "logit": -1,
+      "probability": 0.2689414213699951
+    },
+    {
+      "logit": 0,
+      "probability": 0.5
+    },
+    {
+      "logit": 1,
+      "probability": 0.7310585786300049
+    },
+    {
+      "logit": 100,
+      "probability": 1.0
+    },
+    {
+      "logit": 745,
+      "probability": 1.0
+    },
+    {
+      "logit": 1000,
+      "probability": 1.0
+    }
+  ]
+}

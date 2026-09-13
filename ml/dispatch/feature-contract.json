@@ -1,0 +1,27 @@
+{
+  "featureContractVersion": "dispatch-acceptance-features-v1",
+  "datasetSchemaVersion": "dispatch-acceptance-v1",
+  "predictionPoint": "DISPATCH_PRE_OFFER",
+  "rawFeatures": {
+    "riderDistanceKm": "finite number >= 0",
+    "activeWorkload": "integer >= 0",
+    "hourOfDay": "integer 0..23",
+    "dayOfWeek": "integer 0..6; Sunday=0"
+  },
+  "orderedFeatures": [
+    "riderDistanceKm",
+    "activeWorkload",
+    "hourSin",
+    "hourCos",
+    "isMonday",
+    "isTuesday",
+    "isWednesday",
+    "isThursday",
+    "isFriday",
+    "isSaturday"
+  ],
+  "hourEncoding": "sin/cos(2*pi*hourOfDay/24)",
+  "weekdayReference": "Sunday",
+  "coercion": false,
+  "extraFields": "reject"
+}

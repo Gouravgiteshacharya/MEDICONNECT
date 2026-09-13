@@ -1,3 +1,4 @@
+import { assignmentExpiresAt } from "../delivery-assignments/assignment.expiry.js";
 import { ApiError } from "../utils/ApiError.js";
 import { haversineDistanceKm, validateCoordinates } from "../location/coordinates.js";
 import { classifyLocationFreshness } from "../location/freshness.js";
@@ -10,7 +11,7 @@ export interface BatchStore {
   deliveryStop: { createMany(args: unknown): Promise<{ count: number }>; };
   $transaction<T>(callback: (tx: BatchStore) => Promise<T>, options?: unknown): Promise<T>;
 }
-export interface BatchOptions extends BatchConfig { freshnessThresholdMs: number; now: () => Date; }
+export interface BatchOptions extends BatchConfig { offerTimeoutMs: number; freshnessThresholdMs: number; now: () => Date; }
 const orderSelect = { id: true, orderNumber: true, status: true, fulfillmentMethod: true, deliveryLatitudeSnapshot: true, deliveryLongitudeSnapshot: true, quotedEtaMinutes: true, pharmacy: { select: { id: true, name: true, latitude: true, longitude: true } } };
 function point(latitude: unknown, longitude: unknown, code: string) { const value = { latitude: latitude as number, longitude: longitude as number }; try { validateCoordinates(value); return value; } catch { throw new ApiError(422, "Required batch coordinates are unavailable", code); } }
 function p2034(error: unknown) { return typeof error === "object" && error !== null && "code" in error && (error as any).code === "P2034"; }
@@ -39,7 +40,7 @@ export async function createCompatibleBatch(store: BatchStore, input: { riderId:
     const batch = await tx.deliveryBatch.create({ data: { riderId: rider.id, status: "PLANNED" }, select: { id: true, riderId: true, status: true, createdAt: true } });
     const attached = await tx.deliveryAssignment.updateMany({ where: { id: primary.id, riderId: rider.id, batchId: null, status: primary.status }, data: { batchId: batch.id } });
     if (attached.count !== 1) throw new ApiError(409, "Primary assignment changed concurrently", "BATCH_CONFLICT");
-    const offer = await tx.deliveryAssignment.create({ data: { orderId: candidate.id, riderId: rider.id, batchId: batch.id, status: "OFFERED", assignmentScore: pharmacySeparationKm + dropoffSeparationKm, assignedAt: now }, select: { id: true, orderId: true, riderId: true, batchId: true, status: true, assignedAt: true } });
+    const offer = await tx.deliveryAssignment.create({ data: { orderId: candidate.id, riderId: rider.id, batchId: batch.id, status: "OFFERED", assignmentScore: pharmacySeparationKm + dropoffSeparationKm, assignedAt: now, offerExpiresAt: assignmentExpiresAt(now, options.offerTimeoutMs) }, select: { id: true, orderId: true, riderId: true, batchId: true, status: true, assignedAt: true } });
     const stops = primary.status === "ACCEPTED" ? [
       ["PHARMACY_PICKUP", primaryPickup, primary.id, primary.order.id, primary.order.pharmacy.name], ["PHARMACY_PICKUP", candidatePickup, offer.id, candidate.id, candidate.pharmacy.name], ["CUSTOMER_DROPOFF", primaryDrop, primary.id, primary.order.id, "Primary customer"], ["CUSTOMER_DROPOFF", candidateDrop, offer.id, candidate.id, "Candidate customer"],
     ] : [["PHARMACY_PICKUP", candidatePickup, offer.id, candidate.id, candidate.pharmacy.name], ["CUSTOMER_DROPOFF", primaryDrop, primary.id, primary.order.id, "Primary customer"], ["CUSTOMER_DROPOFF", candidateDrop, offer.id, candidate.id, "Candidate customer"]];

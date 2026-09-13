@@ -1,0 +1,165 @@
+{
+  "featureContractVersion": "dispatch-acceptance-features-v1",
+  "orderedFeatures": [
+    "riderDistanceKm",
+    "activeWorkload",
+    "hourSin",
+    "hourCos",
+    "isMonday",
+    "isTuesday",
+    "isWednesday",
+    "isThursday",
+    "isFriday",
+    "isSaturday"
+  ],
+  "tolerance": 1e-12,
+  "cases": [
+    {
+      "name": "weekday-0",
+      "raw": {
+        "riderDistanceKm": 0.0,
+        "activeWorkload": 0,
+        "hourOfDay": 0,
+        "dayOfWeek": 0
+      },
+      "encoded": [
+        0.0,
+        0,
+        0.0,
+        1.0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "weekday-1",
+      "raw": {
+        "riderDistanceKm": 0.25,
+        "activeWorkload": 1,
+        "hourOfDay": 6,
+        "dayOfWeek": 1
+      },
+      "encoded": [
+        0.25,
+        1,
+        1.0,
+        6.123233995736766e-17,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "weekday-2",
+      "raw": {
+        "riderDistanceKm": 0.5,
+        "activeWorkload": 2,
+        "hourOfDay": 12,
+        "dayOfWeek": 2
+      },
+      "encoded": [
+        0.5,
+        2,
+        1.2246467991473532e-16,
+        -1.0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "weekday-3",
+      "raw": {
+        "riderDistanceKm": 0.75,
+        "activeWorkload": 3,
+        "hourOfDay": 18,
+        "dayOfWeek": 3
+      },
+      "encoded": [
+        0.75,
+        3,
+        -1.0,
+        -1.8369701987210297e-16,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "weekday-4",
+      "raw": {
+        "riderDistanceKm": 1.0,
+        "activeWorkload": 4,
+        "hourOfDay": 23,
+        "dayOfWeek": 4
+      },
+      "encoded": [
+        1.0,
+        4,
+        -0.25881904510252157,
+        0.9659258262890681,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "weekday-5",
+      "raw": {
+        "riderDistanceKm": 1.25,
+        "activeWorkload": 5,
+        "hourOfDay": 7,
+        "dayOfWeek": 5
+      },
+      "encoded": [
+        1.25,
+        5,
+        0.9659258262890683,
+        -0.25881904510252063,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "name": "weekday-6",
+      "raw": {
+        "riderDistanceKm": 1.5,
+        "activeWorkload": 6,
+        "hourOfDay": 15,
+        "dayOfWeek": 6
+      },
+      "encoded": [
+        1.5,
+        6,
+        -0.7071067811865471,
+        -0.7071067811865479,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    }
+  ]
+}

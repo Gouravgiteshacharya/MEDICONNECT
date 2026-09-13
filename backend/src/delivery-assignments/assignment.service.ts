@@ -11,7 +11,7 @@ interface Rider { id: string; userId: string; availability: string; isActive: bo
 interface Order { id: string; orderNumber: string; fulfillmentMethod: string; status: string; pharmacyId: string; pharmacy?: unknown; }
 interface Assignment {
   id: string; orderId: string; riderId: string; batchId: string | null; status: string; assignedAt: Date;
-  acceptedAt?: Date | null; declinedAt?: Date | null; timedOutAt?: Date | null; order: Order;
+  offerExpiresAt?: Date | null; acceptedAt?: Date | null; declinedAt?: Date | null; timedOutAt?: Date | null; order: Order;
 }
 interface WriteResult { count: number; }
 
@@ -39,7 +39,7 @@ export interface AssignmentStore {
 export interface AssignmentOptions extends AssignmentConfig { freshnessThresholdMs: number; now: () => Date; }
 const SERIALIZABLE_RETRY_LIMIT = 3;
 const offerProjection = {
-  id: true, orderId: true, riderId: true, batchId: true, status: true, assignedAt: true, acceptedAt: true, declinedAt: true, timedOutAt: true,
+  id: true, orderId: true, riderId: true, batchId: true, status: true, assignedAt: true, offerExpiresAt: true, acceptedAt: true, declinedAt: true, timedOutAt: true,
   order: { select: { id: true, orderNumber: true, fulfillmentMethod: true, status: true, pharmacyId: true,
     deliveryAddressLabelSnapshot: true, deliveryLatitudeSnapshot: true, deliveryLongitudeSnapshot: true,
     deliveryDistanceKm: true, quotedEtaMinutes: true,
@@ -53,7 +53,8 @@ function nowFrom(options: AssignmentOptions): Date {
   return now;
 }
 function project(assignment: Assignment, timeoutMs: number) {
-  return { ...assignment, expiresAt: assignmentExpiresAt(assignment.assignedAt, timeoutMs) };
+  const { offerExpiresAt, ...publicAssignment } = assignment;
+  return { ...publicAssignment, expiresAt: assignmentExpiresAt(assignment.assignedAt, timeoutMs, offerExpiresAt) };
 }
 
 function isSerializationConflict(error: unknown): boolean {
@@ -90,7 +91,7 @@ export async function createAssignmentOffer(store: AssignmentStore, input: Creat
     if (freshness === "STALE") throw new ApiError(409, "Rider location is stale", "RIDER_LOCATION_STALE");
     const live = await tx.deliveryAssignment.findFirst({ where: { orderId: order.id, status: { in: LIVE_ASSIGNMENT_STATUSES } }, select: { id: true } });
     if (live) throw new ApiError(409, "A live assignment already exists", "LIVE_ASSIGNMENT_EXISTS");
-    const created = await tx.deliveryAssignment.create({ data: { orderId: order.id, riderId: rider.id, status: "OFFERED", assignedAt: now }, select: offerProjection });
+    const created = await tx.deliveryAssignment.create({ data: { orderId: order.id, riderId: rider.id, status: "OFFERED", assignedAt: now, offerExpiresAt: assignmentExpiresAt(now, options.offerTimeoutMs) }, select: offerProjection });
     return project(created, options.offerTimeoutMs);
   });
 }
@@ -113,7 +114,7 @@ export async function listMyOffers(store: AssignmentStore, userId: string, optio
     const offers = await tx.deliveryAssignment.findMany({ where: { riderId: rider.id, status: "OFFERED" }, select: offerProjection, orderBy: { assignedAt: "asc" } });
     const actionable: Assignment[] = [];
     for (const offer of offers) {
-      if (isAssignmentOfferExpired(offer.assignedAt, now, options.offerTimeoutMs)) {
+      if (isAssignmentOfferExpired(offer.assignedAt, now, options.offerTimeoutMs, offer.offerExpiresAt)) {
         await tx.deliveryAssignment.updateMany({ where: { id: offer.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
         await tx.dispatchAttempt?.updateMany({ where: { assignmentId: offer.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
         await cancelPlannedBatch(tx, offer.batchId);
@@ -130,7 +131,7 @@ export async function acceptAssignmentOffer(store: AssignmentStore, userId: stri
     const assignment = await tx.deliveryAssignment.findFirst({ where: { id: assignmentId, riderId: rider.id }, select: offerProjection });
     if (!assignment) throw new ApiError(404, "Assignment offer not found", "OFFER_NOT_FOUND");
     if (assignment.status !== "OFFERED") throw new ApiError(409, "Assignment offer is not actionable", "OFFER_NOT_ACTIONABLE");
-    if (isAssignmentOfferExpired(assignment.assignedAt, now, options.offerTimeoutMs)) {
+    if (isAssignmentOfferExpired(assignment.assignedAt, now, options.offerTimeoutMs, assignment.offerExpiresAt)) {
       await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
       await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
       await cancelPlannedBatch(tx, assignment.batchId);
@@ -169,7 +170,7 @@ export async function declineAssignmentOffer(store: AssignmentStore, userId: str
     const assignment = await tx.deliveryAssignment.findFirst({ where: { id: assignmentId, riderId: rider.id }, select: offerProjection });
     if (!assignment) throw new ApiError(404, "Assignment offer not found", "OFFER_NOT_FOUND");
     if (assignment.status !== "OFFERED") throw new ApiError(409, "Assignment offer is not actionable", "OFFER_NOT_ACTIONABLE");
-    if (isAssignmentOfferExpired(assignment.assignedAt, now, options.offerTimeoutMs)) {
+    if (isAssignmentOfferExpired(assignment.assignedAt, now, options.offerTimeoutMs, assignment.offerExpiresAt)) {
       await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "TIMED_OUT", timedOutAt: now } });
       await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "TIMED_OUT" } });
       await cancelPlannedBatch(tx, assignment.batchId);

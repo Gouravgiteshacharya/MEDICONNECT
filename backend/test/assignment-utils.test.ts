@@ -12,3 +12,11 @@ describe("assignment offer configuration and expiry", () => {
     expect(isAssignmentOfferExpired(assignedAt, new Date(assignedAt.getTime() + 30_000), 30_000)).toBe(true);
   });
 });
+
+it("persisted deadlines override timeout configuration; null preserves legacy behavior", () => {
+  const start = new Date("2026-01-01T00:00:00Z"), deadline = new Date(start.getTime() + 45000);
+  expect(assignmentExpiresAt(start, 1, deadline)).toEqual(deadline);
+  expect(isAssignmentOfferExpired(start, new Date(deadline.getTime() - 1), 1, deadline)).toBe(false);
+  expect(isAssignmentOfferExpired(start, deadline, 999999, deadline)).toBe(true);
+  expect(assignmentExpiresAt(start, 30000, null)).toEqual(new Date(start.getTime() + 30000));
+});

@@ -1,3 +1,4 @@
+import { disabledDispatchRuntime, type DispatchShadowDependencies } from "./ml/dispatch-runtime.js";
 import { disabledEtaRuntime, type EtaShadowDependencies } from "./ml/eta-runtime.js";
 import cors from "cors";
 import express, { type Express, type RequestHandler } from "express";
@@ -36,7 +37,7 @@ import { HaversineRouteProvider, type RouteProvider } from "./delivery-routing/r
 import type { RouteStore } from "./delivery-routing/route.service.js";
 import { loadMlConfig, type MlConfig } from "./ml/ml.config.js";
 import type { LogisticsModel } from "./ml/logistics-model.js";
-export interface AppDependencies extends EtaShadowDependencies {
+export interface AppDependencies extends EtaShadowDependencies, DispatchShadowDependencies {
   store?: RiderStore;
   authenticate?: RequestHandler;
   locationConfig?: LocationConfig;
@@ -66,6 +67,8 @@ export function createApp({
   mlModel = null,
   etaRuntime = disabledEtaRuntime,
   onEtaShadowResult,
+  dispatchShadowRuntime = disabledDispatchRuntime,
+  onDispatchShadowResult,
   now = () => new Date(),
 }: AppDependencies): Express {
   const app = express();
@@ -85,11 +88,11 @@ export function createApp({
     ...assignmentConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
   }));
   app.use("/api/v1/dispatch", createDispatchRouter(store as unknown as DispatchStore, authenticate, {
-    ...dispatchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, mlModel: logisticsModel, maxPredictionMinutes: mlConfig.maxPredictionMinutes, timezoneOffsetMinutes: mlConfig.timezoneOffsetMinutes, now,
+    ...dispatchConfig, dispatchShadowRuntime, onDispatchShadowResult, offerTimeoutMs: assignmentConfig.offerTimeoutMs, freshnessThresholdMs: locationConfig.freshnessThresholdMs, mlModel: logisticsModel, maxPredictionMinutes: mlConfig.maxPredictionMinutes, timezoneOffsetMinutes: mlConfig.timezoneOffsetMinutes, now,
   }));
   app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { now }));
  
-  app.use("/api/v1/delivery-batches", createBatchRouter(store as unknown as BatchStore, authenticate, { ...batchConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
+  app.use("/api/v1/delivery-batches", createBatchRouter(store as unknown as BatchStore, authenticate, { ...batchConfig, offerTimeoutMs: assignmentConfig.offerTimeoutMs, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use("/api/v1/delivery-batches", createRouteRouter(store as unknown as RouteStore, authenticate, { ...routeConfig, provider: routeProvider, now }));
   app.use(notFound);
   app.use(errorHandler);

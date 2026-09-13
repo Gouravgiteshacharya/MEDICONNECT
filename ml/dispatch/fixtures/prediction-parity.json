@@ -1,0 +1,254 @@
+{
+  "description": "Hand-verifiable SYNTHETIC TEST-ONLY parameters, not trained or deployable. raw/probability aliases preserve Phase12C fixture consumers.",
+  "artifact": {
+    "artifactSchemaVersion": "dispatch-model-artifact-v1",
+    "modelType": "logistic_regression",
+    "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+    "datasetSchemaVersion": "dispatch-acceptance-v1",
+    "featureContractVersion": "dispatch-acceptance-features-v1",
+    "orderedFeatures": [
+      "riderDistanceKm",
+      "activeWorkload",
+      "hourSin",
+      "hourCos",
+      "isMonday",
+      "isTuesday",
+      "isWednesday",
+      "isThursday",
+      "isFriday",
+      "isSaturday"
+    ],
+    "preprocessing": {
+      "means": [
+        1,
+        2,
+        0.1,
+        -0.2,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.6
+      ],
+      "scales": [
+        2,
+        2,
+        0.5,
+        2,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    "coefficients": [
+      1,
+      -1,
+      0.2,
+      0.1,
+      0.05,
+      0.1,
+      -0.1,
+      0.2,
+      -0.2,
+      0.3
+    ],
+    "intercept": 0.7,
+    "output": {
+      "type": "acceptance_probability",
+      "positiveClass": "accepted_before_expiry"
+    },
+    "trainingMetadata": {
+      "dataProvenance": "SYNTHETIC",
+      "datasetSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "gitCommit": "contract-test-only",
+      "trainedAt": "2026-09-13T00:00:00.000Z",
+      "trainingRows": 0,
+      "validationRows": 0,
+      "testRows": 0
+    },
+    "evaluation": {
+      "validationLogLoss": null,
+      "testLogLoss": null,
+      "validationBrier": null,
+      "testBrier": null
+    }
+  },
+  "cases": [
+    {
+      "name": "case-1",
+      "rawFeatures": {
+        "riderDistanceKm": 0.0,
+        "activeWorkload": 0,
+        "hourOfDay": 0,
+        "dayOfWeek": 0
+      },
+      "expectedAcceptanceProbability": 0.7658456258197971,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": 1.185,
+      "raw": {
+        "riderDistanceKm": 0.0,
+        "activeWorkload": 0,
+        "hourOfDay": 0,
+        "dayOfWeek": 0
+      },
+      "probability": 0.7658456258197971
+    },
+    {
+      "name": "case-2",
+      "rawFeatures": {
+        "riderDistanceKm": 0.25,
+        "activeWorkload": 1,
+        "hourOfDay": 6,
+        "dayOfWeek": 1
+      },
+      "expectedAcceptanceProbability": 0.7702989490466019,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": 1.21,
+      "raw": {
+        "riderDistanceKm": 0.25,
+        "activeWorkload": 1,
+        "hourOfDay": 6,
+        "dayOfWeek": 1
+      },
+      "probability": 0.7702989490466019
+    },
+    {
+      "name": "case-3",
+      "rawFeatures": {
+        "riderDistanceKm": 0.5,
+        "activeWorkload": 2,
+        "hourOfDay": 12,
+        "dayOfWeek": 2
+      },
+      "expectedAcceptanceProbability": 0.595078473866134,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": 0.385,
+      "raw": {
+        "riderDistanceKm": 0.5,
+        "activeWorkload": 2,
+        "hourOfDay": 12,
+        "dayOfWeek": 2
+      },
+      "probability": 0.595078473866134
+    },
+    {
+      "name": "case-4",
+      "rawFeatures": {
+        "riderDistanceKm": 0.75,
+        "activeWorkload": 3,
+        "hourOfDay": 18,
+        "dayOfWeek": 3
+      },
+      "expectedAcceptanceProbability": 0.3957193885288144,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": -0.42333333333333334,
+      "raw": {
+        "riderDistanceKm": 0.75,
+        "activeWorkload": 3,
+        "hourOfDay": 18,
+        "dayOfWeek": 3
+      },
+      "probability": 0.3957193885288144
+    },
+    {
+      "name": "case-5",
+      "rawFeatures": {
+        "riderDistanceKm": 1.0,
+        "activeWorkload": 4,
+        "hourOfDay": 23,
+        "dayOfWeek": 4
+      },
+      "expectedAcceptanceProbability": 0.40848512605742465,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": -0.37023132672655534,
+      "raw": {
+        "riderDistanceKm": 1.0,
+        "activeWorkload": 4,
+        "hourOfDay": 23,
+        "dayOfWeek": 4
+      },
+      "probability": 0.40848512605742465
+    },
+    {
+      "name": "case-6",
+      "rawFeatures": {
+        "riderDistanceKm": 1.25,
+        "activeWorkload": 5,
+        "hourOfDay": 7,
+        "dayOfWeek": 5
+      },
+      "expectedAcceptanceProbability": 0.3997347060841031,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": -0.40657062173949865,
+      "raw": {
+        "riderDistanceKm": 1.25,
+        "activeWorkload": 5,
+        "hourOfDay": 7,
+        "dayOfWeek": 5
+      },
+      "probability": 0.3997347060841031
+    },
+    {
+      "name": "case-7",
+      "rawFeatures": {
+        "riderDistanceKm": 1.5,
+        "activeWorkload": 6,
+        "hourOfDay": 15,
+        "dayOfWeek": 6
+      },
+      "expectedAcceptanceProbability": 0.20049586974746278,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": -1.3831980515339464,
+      "raw": {
+        "riderDistanceKm": 1.5,
+        "activeWorkload": 6,
+        "hourOfDay": 15,
+        "dayOfWeek": 6
+      },
+      "probability": 0.20049586974746278
+    },
+    {
+      "name": "case-8",
+      "rawFeatures": {
+        "riderDistanceKm": 2001,
+        "activeWorkload": 2,
+        "hourOfDay": 0,
+        "dayOfWeek": 0
+      },
+      "expectedAcceptanceProbability": 1.0,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": 1000.6850000000001,
+      "raw": {
+        "riderDistanceKm": 2001,
+        "activeWorkload": 2,
+        "hourOfDay": 0,
+        "dayOfWeek": 0
+      },
+      "probability": 1.0
+    },
+    {
+      "name": "case-9",
+      "rawFeatures": {
+        "riderDistanceKm": 1,
+        "activeWorkload": 2002,
+        "hourOfDay": 0,
+        "dayOfWeek": 0
+      },
+      "expectedAcceptanceProbability": 0.0,
+      "modelVersion": "dispatch-logistic-TEST-ONLY-v1",
+      "expectedLogit": -999.3149999999999,
+      "raw": {
+        "riderDistanceKm": 1,
+        "activeWorkload": 2002,
+        "hourOfDay": 0,
+        "dayOfWeek": 0
+      },
+      "probability": 0.0
+    }
+  ],
+  "absoluteTolerance": 1e-12
+}

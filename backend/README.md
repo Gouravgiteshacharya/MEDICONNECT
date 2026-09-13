@@ -82,3 +82,65 @@ Output is UTF-8 `eta-dataset.jsonl` plus `eta-dataset.manifest.json`. The manife
 Milestone 12 adds an injectable prediction boundary to ETA estimation and eligible-rider ranking. Delivery owns the feature contract, orchestration, output guardrails, and deterministic fallback; Intelligence & Experience owns model training, implementation, evaluation, and inference. No trained model or training code is bundled in Delivery. Until an Intelligence-owned predictor is injected, deterministic eligibility and ranking remain authoritative. Invalid predictions, disabled inference, or model exceptions immediately use deterministic dispatch ranking and the routing-provider ETA. Dispatch responses report `ML_ASSISTED` or `DETERMINISTIC_FALLBACK`; audited dispatch attempts store accepted predicted completion time as suitability and retain the deterministic score as route compatibility. Quote responses report the ETA source, model version, baseline, and prediction.
 
 `ML_LOGISTICS_ENABLED` defaults to `true`. `ML_MAX_PREDICTION_MINUTES` defaults to `240` and rejects implausible output. `ML_FALLBACK_SPEED_KMH` defaults to `20` and supplies an explainable baseline when the Haversine distance provider has no duration. `ML_TIMEZONE_OFFSET_MINUTES` defaults to `330` (India Standard Time) for the peak-hour feature. The local inference boundary is synchronous and performs no network I/O.
+
+## Milestone 12A: durable dispatch instrumentation
+
+Apply the additive `20260913000000_dispatch_instrumentation` migration before
+running this application version. It was generated from local schema files;
+no database migration is automatically applied at startup. Existing rows remain
+null; no historical expiry or policy is backfilled.
+
+Each committed automatic dispatch shortlist shares a server UUID. One-based
+`deterministicRank` is captured before optional legacy ML reranking; existing
+`routeCompatibilityScore` retains the deterministic score. Typed attempt columns
+snapshot the policy version, configured shortlist cap (not actual count), radius,
+workload penalty and freshness threshold. Milliseconds use Float to preserve the
+existing configuration's numeric range and fractional precision. Actual shortlist
+size is the round row count. Unique round/rider and round/rank indexes prevent
+ambiguous snapshots while allowing legacy null-round rows. Shared configuration
+is repeated on the existing bounded shortlist to avoid a new round table.
+
+`selectionPolicy` uses existing `DETERMINISTIC_FALLBACK`/`ML_ASSISTED` terminology.
+`legacyModelVersion` records the existing round response's selected model version,
+or null on deterministic fallback. This is provenance, not a new model. Ranking,
+eligibility, winner selection and retry limits are unchanged. Candidate writes
+and offer linkage commit together; failed attempts leave no round history.
+
+All new dispatch, manual and batch offers store `offerExpiresAt` once as assignedAt
+plus the configured timeout. Accept/decline/list and dashboard use this deadline;
+legacy null values retain the existing configuration-based fallback. Acceptance
+is allowed only strictly before the deadline; at/after it the offer expires.
+`timedOutAt` remains processing time. Internal fields are not added to responses;
+the existing public `expiresAt` reflects the immutable deadline.
+
+No labels, datasets or shadow-model columns are added. Future extraction must
+join an actually offered assignment to its matching dispatch snapshot, exclude
+unoffered candidates from negative labels, and exclude ambiguous pre-decision
+administrative/cancellation cases. Schema status fields alone do not establish a
+reliable cancellation history. Legacy null-deadline rows are not automatically
+label-ready. Internal relational IDs stay in the operational DB; future exports
+must remove them. No new names, contact details, coordinates or prescription data
+are recorded by this instrumentation.
+
+## Phase 12B: offline dispatch acceptance dataset
+
+`dispatch-acceptance-v1` exports one actually offered rider-assignment pair per
+row, using a matching dispatch snapshot. It is offline/read-only and requires an
+immutable `offerExpiresAt`; legacy null deadlines are excluded. Unoffered candidates
+are never negatives. Consistent pre-deadline acceptance is positive (including
+later failed deliveries); explicit pre-deadline decline and mature recorded timeout
+are negative. Unresolved, contradictory, or administratively ambiguous cases are
+excluded. `timedOutAt` is processing time, never the deadline.
+
+The loader expands linked offer chains beyond the requested window so whole-order
+half-open temporal splits cannot silently cross boundaries. Dataset-local sequential
+keys replace internal IDs. No identities, exact timestamps, coordinates, contact,
+address, item or prescription data are exported. Both recorded selection policies
+are counted in the manifest, not used as features. Tests use synthetic records and
+fake read-only dependencies; no live DB, migration application or model training.
+
+The developer CLI requires explicit windows, cutoff, offset, generation timestamp,
+commit, output directory and `--confirm-read-only-export`. Exclusive writes refuse
+existing files; failures may leave partial output, so retry in a fresh directory.
+See [dispatch dataset documentation](../ml/dispatch/README.md) for the exact CLI,
+projection, label/exclusion precedence, manifest and remaining audit limitations.

@@ -339,6 +339,8 @@ model DeliveryAssignment {
   status          DeliveryAssignmentStatus @default(OFFERED)
   assignmentScore Float?
   assignedAt      DateTime                 @default(now())
+  // Null only for legacy offers; never backfilled from current timeout config.
+  offerExpiresAt  DateTime?
   acceptedAt      DateTime?
   declinedAt      DateTime?
   timedOutAt      DateTime?
@@ -371,7 +373,18 @@ model DispatchAttempt {
   suitabilityScore          Float?
   riderDistanceToPharmacyKm Float?
   workloadSignal            Int?
+  // Existing deterministic score; retained even when legacy ML selects the winner.
   routeCompatibilityScore   Float?
+  dispatchRoundId           String? @db.Uuid
+  deterministicRank         Int?
+  dispatchPolicyVersion     String?
+  selectionPolicy           String?
+  legacyModelVersion        String?
+  workloadPenaltyKm         Float?
+  shortlistSize             Int?
+  searchRadiusKm            Float?
+  // Float preserves existing configuration semantics (fractional/large milliseconds).
+  freshnessThresholdMs      Float?
   status                    DispatchAttemptStatus
   attemptedAt               DateTime              @default(now())
 
@@ -379,6 +392,8 @@ model DispatchAttempt {
   rider      DeliveryPartner     @relation(fields: [riderId], references: [id], onDelete: Restrict)
   assignment DeliveryAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
 
+  @@unique([dispatchRoundId, riderId])
+  @@unique([dispatchRoundId, deterministicRank])
   @@index([orderId, attemptedAt])
   @@index([riderId, attemptedAt])
   @@index([assignmentId])

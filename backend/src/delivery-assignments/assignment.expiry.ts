@@ -1,6 +1,7 @@
-export function assignmentExpiresAt(assignedAt: Date, timeoutMs: number): Date {
-  return new Date(assignedAt.getTime() + timeoutMs);
+/** Persisted deadlines take precedence; null retains legacy configuration behavior. */
+export function assignmentExpiresAt(assignedAt: Date, timeoutMs: number, offerExpiresAt?: Date | null): Date {
+  return offerExpiresAt ?? new Date(assignedAt.getTime() + timeoutMs);
 }
-export function isAssignmentOfferExpired(assignedAt: Date, now: Date, timeoutMs: number): boolean {
-  return now.getTime() >= assignmentExpiresAt(assignedAt, timeoutMs).getTime();
+export function isAssignmentOfferExpired(assignedAt: Date, now: Date, timeoutMs: number, offerExpiresAt?: Date | null): boolean {
+  return now.getTime() >= assignmentExpiresAt(assignedAt, timeoutMs, offerExpiresAt).getTime();
 }

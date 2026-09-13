@@ -1,3 +1,4 @@
+import { createDispatchRuntime } from "./ml/dispatch-runtime.js";
 import { createEtaRuntime } from "./ml/eta-runtime.js";
 import type { Server } from "node:http";
 
@@ -47,7 +48,8 @@ async function shutdown(signal: NodeJS.Signals) {
 
 try {
   const etaRuntime = await createEtaRuntime({ ...process.env, NODE_ENV: env.nodeEnv });
-  const app = createApp({ etaRuntime });
+  const dispatchShadowRuntime = await createDispatchRuntime({ ...process.env, NODE_ENV: env.nodeEnv });
+  const app = createApp({ etaRuntime, dispatchShadowRuntime });
   server = app.listen(env.port, () => {
     console.log(`MediConnect API listening on port ${env.port}`);
   });

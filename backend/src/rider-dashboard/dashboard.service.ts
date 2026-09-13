@@ -16,8 +16,8 @@ export async function getRiderDashboard(store: DashboardStore, userId: string, o
   const now = options.now(); if (!Number.isFinite(now.getTime())) throw new Error("Dashboard clock returned an invalid date");
   const rider = await store.deliveryPartner.findUnique({ where: { userId }, include: { user: { select: { name: true, phone: true, isActive: true } } } });
   if (!rider) throw new ApiError(404, "Rider profile not found", "RIDER_NOT_FOUND");
-  const assignments = await store.deliveryAssignment.findMany({ where: { riderId: rider.id, status: { in: ["OFFERED", ...activeStatuses, ...historyStatuses] } }, orderBy: { assignedAt: "desc" }, take: 30, select: { id: true, batchId: true, status: true, assignedAt: true, acceptedAt: true, pickedUpAt: true, deliveredAt: true, order: { select: orderProjection } } });
-  const offers = assignments.filter((item) => item.status === "OFFERED" && !isAssignmentOfferExpired(item.assignedAt, now, options.offerTimeoutMs)).map((item) => operational(item, assignmentExpiresAt(item.assignedAt, options.offerTimeoutMs)));
+  const assignments = await store.deliveryAssignment.findMany({ where: { riderId: rider.id, status: { in: ["OFFERED", ...activeStatuses, ...historyStatuses] } }, orderBy: { assignedAt: "desc" }, take: 30, select: { id: true, batchId: true, status: true, assignedAt: true, offerExpiresAt: true, acceptedAt: true, pickedUpAt: true, deliveredAt: true, order: { select: orderProjection } } });
+  const offers = assignments.filter((item) => item.status === "OFFERED" && !isAssignmentOfferExpired(item.assignedAt, now, options.offerTimeoutMs, item.offerExpiresAt)).map((item) => operational(item, assignmentExpiresAt(item.assignedAt, options.offerTimeoutMs, item.offerExpiresAt)));
   const active = assignments.filter((item) => activeStatuses.includes(item.status)).map((item) => ({ ...operational(item), nextAction: nextAction(item.status) }));
   const history = assignments.filter((item) => historyStatuses.includes(item.status)).slice(0, 10).map((item) => operational(item));
   const activeBatchIds = [...new Set(active.map((item) => item.batchId).filter(Boolean))];
