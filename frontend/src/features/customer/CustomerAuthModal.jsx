@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import './CustomerAuthModal.css'
 
 export default function CustomerAuthModal({
   open,
+  initialMode = 'login',
   onClose,
   onAuthenticated,
 }) {
   const { login, register } = useAuth()
 
-  const [mode, setMode] = useState('login')
+  const [mode, setMode] = useState(initialMode)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -19,6 +20,13 @@ export default function CustomerAuthModal({
     phone: '',
     password: '',
   })
+
+  useEffect(() => {
+    if (open) {
+      setMode(initialMode)
+      setError('')
+    }
+  }, [initialMode, open])
 
   if (!open) return null
 

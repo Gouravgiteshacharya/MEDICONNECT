@@ -27,6 +27,16 @@ function OrdersIcon() {
   )
 }
 
+function CartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 6h2l1.5 9h8.8l1.3-6.5H8" />
+      <circle cx="10" cy="19" r="1.5" />
+      <circle cx="17" cy="19" r="1.5" />
+    </svg>
+  )
+}
+
 function ProfileIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -40,54 +50,96 @@ export default function CustomerShell() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const activeTab = location.pathname.startsWith('/app/search')
+  const activeTab = location.pathname.startsWith('/app/search') ||
+    location.pathname.startsWith('/app/results') ||
+    location.pathname.startsWith('/app/pharmacy')
     ? 'search'
     : location.pathname.startsWith('/app/orders')
       ? 'orders'
-      : location.pathname.startsWith('/app/profile')
-        ? 'profile'
-        : 'home'
+      : location.pathname.startsWith('/app/cart') ||
+          location.pathname.startsWith('/app/checkout') ||
+          location.pathname.startsWith('/app/delivery-address')
+        ? 'cart'
+        : location.pathname.startsWith('/app/profile')
+          ? 'profile'
+          : 'home'
+
+  const navItems = [
+    {
+      key: 'home',
+      label: 'Home',
+      path: '/app',
+      icon: <HomeIcon />,
+    },
+    {
+      key: 'search',
+      label: 'Search',
+      path: '/app/search',
+      icon: <SearchIcon />,
+    },
+    {
+      key: 'cart',
+      label: 'Cart',
+      path: '/app/cart',
+      icon: <CartIcon />,
+    },
+    {
+      key: 'orders',
+      label: 'Orders',
+      path: '/app/orders',
+      icon: <OrdersIcon />,
+    },
+    {
+      key: 'profile',
+      label: 'Profile',
+      path: '/app/profile',
+      icon: <ProfileIcon />,
+    },
+  ]
 
   return (
     <div className="customer-shell">
-      <Outlet />
-
-      <nav className="customer-shell-nav" aria-label="Customer navigation">
+      <aside className="customer-shell-sidebar" aria-label="Customer workspace">
         <button
-          className={activeTab === 'home' ? 'active' : ''}
+          className="customer-shell-brand"
           type="button"
           onClick={() => navigate('/app')}
         >
-          <HomeIcon />
-          <span>Home</span>
+          <span>M</span>
+          <strong>MediConnect</strong>
         </button>
 
-        <button
-          className={activeTab === 'search' ? 'active' : ''}
-          type="button"
-          onClick={() => navigate('/app/search')}
-        >
-          <SearchIcon />
-          <span>Search</span>
-        </button>
+        <nav aria-label="Customer navigation">
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              className={activeTab === item.key ? 'active' : ''}
+              type="button"
+              onClick={() => navigate(item.path)}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
 
-        <button
-          className={activeTab === 'orders' ? 'active' : ''}
-          type="button"
-          disabled
-        >
-          <OrdersIcon />
-          <span>Orders</span>
-        </button>
+      <div className="customer-shell-content">
+        <Outlet />
+      </div>
 
-        <button
-          className={activeTab === 'profile' ? 'active' : ''}
-          type="button"
-          disabled
-        >
-          <ProfileIcon />
-          <span>Profile</span>
-        </button>
+      <nav className="customer-shell-nav" aria-label="Customer navigation">
+        {navItems.map((item) => (
+          <button
+            key={item.key}
+            className={activeTab === item.key ? 'active' : ''}
+            type="button"
+            onClick={() => navigate(item.path)}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </button>
+        ))}
       </nav>
     </div>
   )

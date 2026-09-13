@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './landing.css'
 
 function SearchIcon() {
@@ -36,9 +36,9 @@ function CheckIcon() {
 }
 
 const demoPharmacies = [
-  { name: 'Sharma Medical Store', distance: '0.02 km', price: '₹32', status: 'In stock', tone: 'good' },
-  { name: 'Health Point Pharmacy', distance: '0.50 km', price: '₹31', status: 'Low stock', tone: 'low' },
-  { name: 'City Care Pharmacy', distance: '0.58 km', price: '₹30', status: 'In stock', tone: 'good' },
+  { name: 'Example Medical Store', distance: '0.02 km', price: '₹32', status: 'In stock', tone: 'good' },
+  { name: 'Example Health Pharmacy', distance: '0.50 km', price: '₹31', status: 'Low stock', tone: 'low' },
+  { name: 'Example Care Pharmacy', distance: '0.58 km', price: '₹30', status: 'In stock', tone: 'good' },
 ]
 
 function LandingPage({
@@ -47,15 +47,15 @@ function LandingPage({
   logout,
   openAuth,
   openSearch,
-  heroSearchRef,
-  showFloatingSearch,
-  searchFlowOpen,
+  openApp,
 }) {
   const [fulfilmentPreview, setFulfilmentPreview] = useState('delivery')
   const [audience, setAudience] = useState('customers')
   const [activeDemo, setActiveDemo] = useState(null)
   const [activeNav, setActiveNav] = useState('')
   const [nearPageEnd, setNearPageEnd] = useState(false)
+  const [showFloatingSearch, setShowFloatingSearch] = useState(false)
+  const heroSearchRef = useRef(null)
 
   const goToSection = (id, navName = '') => {
     const target = document.getElementById(id)
@@ -124,6 +124,18 @@ function LandingPage({
 
 
   useEffect(() => {
+    const target = heroSearchRef.current
+    if (!target) return undefined
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowFloatingSearch(!entry.isIntersecting)
+    })
+
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     const finalSection = document.getElementById('mc-final-section')
     const footer = document.getElementById('mc-footer')
 
@@ -169,7 +181,12 @@ function LandingPage({
   return (
     <div className={`mc-landing audience-${audience}`}>
       <header className="mc-nav">
-        <button className="mc-brand" type="button" aria-label="MediConnect home">
+        <button
+          className="mc-brand"
+          type="button"
+          aria-label="MediConnect app home"
+          onClick={openApp}
+        >
           <span className="mc-logo">M</span>
 
           <span className="mc-brand-copy">
@@ -231,7 +248,7 @@ function LandingPage({
         </nav>
 
         <div className="mc-nav-actions">
-          <button className="mc-location" type="button" onClick={openSearch}>
+          <button className="mc-location" type="button" onClick={() => openSearch()}>
             <PinIcon />
             <span>Brahmapur</span>
           </button>
@@ -304,7 +321,7 @@ function LandingPage({
               <span>Popular</span>
 
               {['Dolo 650', 'Crocin', 'Azithral', 'Paracetamol'].map((item) => (
-                <button key={item} type="button" onClick={openSearch}>
+                <button key={item} type="button" onClick={() => openSearch(item)}>
                   {item}
                 </button>
               ))}
@@ -325,7 +342,7 @@ function LandingPage({
               <span className="mc-stock-dot good" />
 
               <div>
-                <strong>City Care Pharmacy</strong>
+                <strong>Example Care Pharmacy</strong>
                 <small>0.58 km away · In stock</small>
               </div>
 
@@ -340,7 +357,7 @@ function LandingPage({
 
                 <div className="mc-device-brand-copy">
                   <strong>MediConnect</strong>
-                  <small>Medicine search</small>
+                  <small>Product preview</small>
                 </div>
               </div>
 
@@ -350,7 +367,7 @@ function LandingPage({
               </div>
 
               <div className="mc-device-label">
-                3 pharmacies nearby
+                Example availability results
               </div>
 
               {demoPharmacies.map((pharmacy, index) => (
@@ -409,7 +426,7 @@ function LandingPage({
 
               <div>
                 <strong>Available nearby</strong>
-                <small>Sharma Medical · In stock</small>
+                <small>Example pharmacy · In stock</small>
               </div>
 
               <span className="mc-callout-link" />
@@ -444,8 +461,8 @@ function LandingPage({
               </span>
 
               <div>
-                <strong>Prescription ready</strong>
-                <small>Upload and verify when needed</small>
+                    <strong>Prescription flow</strong>
+                    <small>Upload when required</small>
               </div>
 
               <span className="mc-callout-link" />
@@ -468,27 +485,11 @@ function LandingPage({
               <span className="mc-callout-link" />
             </div>
 
-            <div
-              className={`mc-floating-card mc-floating-c ${
-                activeDemo === 'rx' ? 'active' : ''
-              }`}
-              onMouseEnter={() => setActiveDemo('rx')}
-              onMouseLeave={() => setActiveDemo(null)}
-            >
-              <span className="mc-mini-check">
-                <CheckIcon />
-              </span>
-
-              <div>
-                <strong>Prescription ready</strong>
-                <small>Continue securely</small>
-              </div>
-            </div>
           </div>
         </section>
 
         <section className="mc-bento mc-reveal">
-          <button className="mc-bento-card mc-yellow" type="button" onClick={openSearch}>
+          <button className="mc-bento-card mc-yellow" type="button" onClick={() => openSearch()}>
             <span className="mc-card-number">01</span>
 
             <div>
@@ -499,7 +500,7 @@ function LandingPage({
             <ArrowIcon />
           </button>
 
-          <button className="mc-bento-card mc-mint" type="button" onClick={openSearch}>
+          <button className="mc-bento-card mc-mint" type="button" onClick={() => openSearch()}>
             <span className="mc-card-number">02</span>
 
             <div>
@@ -510,7 +511,7 @@ function LandingPage({
             <ArrowIcon />
           </button>
 
-          <button className="mc-bento-card mc-pink" type="button" onClick={openSearch}>
+          <button className="mc-bento-card mc-pink" type="button" onClick={() => openSearch()}>
             <div className="mc-fulfilment-ghost" aria-hidden="true">
               <span>Pickup</span>
 
@@ -529,7 +530,7 @@ function LandingPage({
             <ArrowIcon />
           </button>
 
-          <button className="mc-bento-card mc-blue" type="button" onClick={openSearch}>
+          <button className="mc-bento-card mc-blue" type="button" onClick={() => openSearch()}>
             <span className="mc-card-number">04</span>
 
             <div>
@@ -621,7 +622,7 @@ function LandingPage({
                 <div className="mc-audience-preview mc-customer-preview">
                   <div className="mc-preview-top">
                     <div>
-                      <small>CUSTOMER VIEW</small>
+                      <small>PRODUCT PREVIEW</small>
                       <strong>Dolo 650 nearby</strong>
                     </div>
 
@@ -636,7 +637,7 @@ function LandingPage({
                   <div className="mc-customer-preview-row">
                     <i className="good" />
                     <div>
-                      <strong>City Care Pharmacy</strong>
+                      <strong>Example Care Pharmacy</strong>
                       <small>0.58 km · In stock</small>
                     </div>
                     <b>₹30</b>
@@ -645,7 +646,7 @@ function LandingPage({
                   <div className="mc-customer-preview-row">
                     <i />
                     <div>
-                      <strong>Health Point Pharmacy</strong>
+                      <strong>Example Health Pharmacy</strong>
                       <small>0.50 km · Low stock</small>
                     </div>
                     <b>₹31</b>
@@ -655,13 +656,13 @@ function LandingPage({
                     <article>
                       <small>Best price</small>
                       <strong>₹30</strong>
-                      <span>City Care</span>
+                      <span>Example Care</span>
                     </article>
 
                     <article>
                       <small>Nearest</small>
                       <strong>0.50 km</strong>
-                      <span>Health Point</span>
+                      <span>Example Health</span>
                     </article>
 
                     <article>
@@ -674,10 +675,10 @@ function LandingPage({
                   <div className="mc-customer-preview-footer">
                     <span>
                       <i className="good" />
-                      Availability updated recently
+                      Example inventory status
                     </span>
 
-                    <button type="button" onClick={openSearch}>
+                    <button type="button" onClick={() => openSearch()}>
                       Search medicines nearby
                       <ArrowIcon />
                     </button>
@@ -723,11 +724,11 @@ function LandingPage({
                 <div className="mc-audience-preview mc-pharmacy-preview">
                   <div className="mc-preview-top">
                     <div>
-                      <small>PHARMACY VIEW</small>
-                      <strong>Sharma Medical Store</strong>
+                      <small>PRODUCT PREVIEW</small>
+                      <strong>Example Medical Store</strong>
                     </div>
 
-                    <span className="mc-pharmacy-live">Live</span>
+                    <span className="mc-pharmacy-live">Example</span>
                   </div>
 
                   <div className="mc-pharmacy-preview-stats">
@@ -774,7 +775,7 @@ function LandingPage({
                         <strong>Popular medicines</strong>
                       </div>
 
-                      <span>Live availability</span>
+                      <span>Example availability</span>
                     </div>
 
                     <div className="mc-pharmacy-inventory-row">
@@ -877,12 +878,12 @@ function LandingPage({
                   {type === 'compare' && (
                     <div className="mc-journey-compare">
                       <span>
-                        <small>City Care</small>
+                        <small>Example Care</small>
                         <strong>₹30</strong>
                       </span>
 
                       <span>
-                        <small>Health Point</small>
+                        <small>Example Health</small>
                         <strong>₹31</strong>
                       </span>
                     </div>
@@ -922,7 +923,7 @@ function LandingPage({
               <span>Compare before choosing</span>
             </div>
 
-            <button type="button" onClick={openSearch}>
+            <button type="button" onClick={() => openSearch()}>
               Search a medicine
               <ArrowIcon />
             </button>
@@ -935,20 +936,20 @@ function LandingPage({
                 <strong>Dolo 650</strong>
               </div>
 
-              <span>3 pharmacies nearby</span>
+              <span>Example results</span>
             </div>
 
             <div className="mc-live-summary">
               <article>
                 <small>Best price</small>
                 <strong>₹30</strong>
-                <span>City Care</span>
+                <span>Example Care</span>
               </article>
 
               <article>
                 <small>Nearest</small>
                 <strong>0.50 km</strong>
-                <span>Health Point</span>
+                <span>Example Health</span>
               </article>
 
               <article>
@@ -996,7 +997,7 @@ function LandingPage({
                     <b>{pharmacy.price}</b>
                   </div>
 
-                  <button type="button" onClick={openSearch}>
+                  <button type="button" onClick={() => openSearch()}>
                     View
                     <ArrowIcon />
                   </button>
@@ -1065,10 +1066,10 @@ function LandingPage({
             </div>
 
             {[
-              ['Sharma Medical', 'In stock'],
-              ['City Care', 'Available'],
-              ['Health Point', 'Low stock'],
-              ['Local Pharmacy', 'Connected'],
+              ['Example Medical', 'In stock'],
+              ['Example Care', 'Available'],
+              ['Example Health', 'Low stock'],
+              ['Example Pharmacy', 'Connected'],
             ].map(([name, status], index) => (
               <div
                 className={`mc-network-node node-${index + 1}`}
@@ -1198,7 +1199,7 @@ function LandingPage({
                     <div className="mc-pickup-sign">PHARMACY</div>
 
                     <div className="mc-pickup-window">
-                      <span>Reserved</span>
+                      <span>Selected</span>
                       <strong>Dolo 650</strong>
                     </div>
                   </div>
@@ -1207,8 +1208,8 @@ function LandingPage({
                     <span className="mc-ready-dot" />
 
                     <div>
-                      <small>READY FOR PICKUP</small>
-                      <strong>10–15 min</strong>
+                      <small>PICKUP REQUEST</small>
+                      <strong>Pharmacy review</strong>
                     </div>
                   </div>
                 </div>
@@ -1216,17 +1217,17 @@ function LandingPage({
                 <div className="mc-fulfilment-details">
                   <span>PICKUP</span>
 
-                  <h3>Reserve before you leave.</h3>
+                  <h3>Request pickup before you leave.</h3>
 
                   <p>
-                    The pharmacy prepares your medicine and keeps it ready for
-                    collection.
+                    The pharmacy reviews the order and prepares it for
+                    collection when accepted.
                   </p>
 
                   <div className="mc-fulfilment-info">
                     <article>
                       <small>Pharmacy</small>
-                      <strong>City Care Pharmacy</strong>
+                      <strong>Example Care Pharmacy</strong>
                     </article>
 
                     <article>
@@ -1235,8 +1236,8 @@ function LandingPage({
                     </article>
 
                     <article>
-                      <small>Ready in</small>
-                      <strong>10–15 min</strong>
+                      <small>Next step</small>
+                      <strong>Pharmacy review</strong>
                     </article>
                   </div>
                 </div>
@@ -1281,7 +1282,7 @@ function LandingPage({
                   <div className="mc-fulfilment-info">
                     <article>
                       <small>Pharmacy</small>
-                      <strong>City Care Pharmacy</strong>
+                      <strong>Example Care Pharmacy</strong>
                     </article>
 
                     <article>
@@ -1315,12 +1316,12 @@ function LandingPage({
           <div className="mc-tracking-card mc-tracking-card-compact">
             <div className="mc-tracking-head">
               <div>
-                <small>ORDER #MC4821</small>
+                <small>EXAMPLE ORDER</small>
                 <strong>Dolo 650</strong>
               </div>
 
               <div className="mc-tracking-eta">
-                <small>ESTIMATED ARRIVAL</small>
+                <small>EXAMPLE ARRIVAL</small>
                 <span>18 min</span>
               </div>
             </div>
@@ -1348,8 +1349,8 @@ function LandingPage({
               <span className="mc-tracking-rider-dot" />
 
               <div>
-                <small>RIDER STATUS</small>
-                <strong>Picked up from City Care Pharmacy</strong>
+                <small>EXAMPLE RIDER STATUS</small>
+                <strong>Picked up from example pharmacy</strong>
               </div>
 
               <span>On the way</span>
@@ -1409,11 +1410,11 @@ function LandingPage({
           <div className="mc-pharmacy-dashboard">
             <div className="mc-dashboard-top">
               <div>
-                <small>PHARMACY DASHBOARD</small>
-                <strong>Sharma Medical Store</strong>
+                <small>PRODUCT PREVIEW</small>
+                <strong>Example Medical Store</strong>
               </div>
 
-              <span>Live</span>
+              <span>Example</span>
             </div>
 
             <div className="mc-dashboard-grid">
@@ -1469,7 +1470,7 @@ function LandingPage({
             We’ll help you find where to get it.
           </p>
 
-          <button type="button" onClick={openSearch}>
+          <button type="button" onClick={() => openSearch()}>
             <SearchIcon />
             <span>Search Dolo 650, Crocin, Paracetamol...</span>
             <ArrowIcon />
@@ -1495,10 +1496,10 @@ function LandingPage({
 
       <div
         className={`mc-floating-search ${
-          showFloatingSearch && !searchFlowOpen && !nearPageEnd ? 'visible' : ''
+          showFloatingSearch && !nearPageEnd ? 'visible' : ''
         }`}
       >
-        <button type="button" onClick={openSearch}>
+        <button type="button" onClick={() => openSearch()}>
           <SearchIcon />
           <span>Search medicines nearby</span>
           <ArrowIcon />

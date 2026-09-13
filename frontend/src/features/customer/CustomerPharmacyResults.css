@@ -376,6 +376,36 @@
   }
 }
 
+@media (min-width: 960px) {
+  .customer-results-page {
+    padding-bottom: 0;
+  }
+
+  .customer-results-header,
+  .customer-results-main {
+    width: min(calc(100% - 72px), 1100px);
+  }
+
+  .customer-results-header {
+    padding-top: 20px;
+    background: rgba(238, 240, 246, .92);
+  }
+
+  .customer-results-main {
+    padding-top: 32px;
+    background: transparent;
+  }
+
+  .customer-pharmacy-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-location-gate,
+  .customer-results-message {
+    max-width: 560px;
+  }
+}
+
 /* =========================================================
    Real discovery integration states
    ========================================================= */
@@ -490,4 +520,3 @@
   background: #fff !important;
   color: #29396f !important;
 }
-

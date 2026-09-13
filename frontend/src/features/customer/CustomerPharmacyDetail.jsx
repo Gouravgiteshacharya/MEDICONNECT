@@ -4,7 +4,6 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
   getMedicine,
-  getMedicineAvailability,
 } from '../discovery/discoveryService'
 import { addCartItem } from '../commerce/cartService'
 import CustomerAuthModal from './CustomerAuthModal'
@@ -15,14 +14,6 @@ function BackIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M19 12H5m6-6-6 6 6 6" />
-    </svg>
-  )
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m5 12 4 4L19 6" />
     </svg>
   )
 }
@@ -40,12 +31,6 @@ function compositionLabel(medicine) {
     .join(' + ')
 }
 
-function availabilityLabel(status) {
-  if (status === 'LOW_STOCK') return 'Low stock'
-  if (status === 'AVAILABLE') return 'In stock'
-  return status
-}
-
 export default function CustomerPharmacyDetail() {
   const navigate = useNavigate()
   const { pharmacyId } = useParams()
@@ -56,8 +41,6 @@ export default function CustomerPharmacyDetail() {
   const { authenticated } = useAuth()
 
   const [medicine, setMedicine] = useState(null)
-  const [inventory, setInventory] = useState(null)
-
   const [quantity, setQuantity] = useState(1)
 
   const [loading, setLoading] = useState(true)
@@ -88,14 +71,6 @@ export default function CustomerPharmacyDetail() {
 
         setMedicine(medicineDetail)
 
-        /*
-          Re-check availability using the pharmacy coordinates already
-          returned by the discovery flow once this screen receives them
-          in a future route-state refactor.
-
-          For now, the detail screen is entered from a pharmacy result
-          that was already validated by the backend.
-        */
       } catch (requestError) {
         if (!active) return
 
@@ -208,19 +183,18 @@ export default function CustomerPharmacyDetail() {
                 </div>
 
                 <span className="customer-detail-verified">
-                  <CheckIcon />
-                  Verified
+                  Selected
                 </span>
               </div>
 
               <p>
-                This pharmacy was selected from your nearby availability results.
+                This pharmacy was selected from the availability results.
               </p>
 
               <div className="customer-detail-status">
                 <span>
                   <i />
-                  Availability verified by MediConnect
+                  Stock will be checked again before adding
                 </span>
               </div>
             </section>

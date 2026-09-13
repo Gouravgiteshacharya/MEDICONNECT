@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
   getMedicine,
@@ -58,15 +58,25 @@ function compositionLabel(detail) {
 
 export default function CustomerSearch() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const inputRef = useRef(null)
 
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [medicines, setMedicines] = useState([])
   const [selectedMedicine, setSelectedMedicine] = useState(null)
 
   const [loading, setLoading] = useState(true)
   const [selecting, setSelecting] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const nextQuery = searchParams.get('q')
+
+    if (nextQuery !== null) {
+      setQuery(nextQuery)
+      setSelectedMedicine(null)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     let active = true

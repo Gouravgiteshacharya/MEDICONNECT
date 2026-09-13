@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
+import {
+  API_BASE,
+  getAccessToken,
+} from '../../services/apiClient'
 import './RiderApp.css'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api/v1'
-const token = () => localStorage.getItem('mediconnect_access_token')
+const token = getAccessToken
 async function api(path, options = {}) {
   if (!token()) throw new Error('Secure rider sign-in is not connected yet.')
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}`, ...options.headers } })

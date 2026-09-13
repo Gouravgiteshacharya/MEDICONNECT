@@ -1,11 +1,22 @@
 import { apiRequest } from '../../services/apiClient'
 
 export async function createPickupOrder() {
+  return createOrder({
+    fulfillmentMethod: 'SELF_PICKUP',
+  })
+}
+
+export async function createDeliveryOrder(deliveryQuoteId) {
+  return createOrder({
+    fulfillmentMethod: 'DELIVERY',
+    deliveryQuoteId,
+  })
+}
+
+export async function createOrder(body) {
   return apiRequest('/orders', {
     method: 'POST',
-    body: {
-      fulfillmentMethod: 'SELF_PICKUP',
-    },
+    body,
   })
 }
 

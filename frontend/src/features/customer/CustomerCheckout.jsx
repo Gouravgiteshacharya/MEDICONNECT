@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../../context/AuthContext'
 import { getCart } from '../commerce/cartService'
-import { createPickupOrder } from '../commerce/orderService'
+import {
+  createDeliveryOrder,
+  createPickupOrder,
+} from '../commerce/orderService'
 
 import './CustomerCheckout.css'
 
@@ -25,12 +28,16 @@ function CheckIcon() {
 
 export default function CustomerCheckout() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { authenticated, initializing } = useAuth()
 
   const [cart, setCart] = useState(null)
   const [loading, setLoading] = useState(true)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState('')
+  const deliveryQuoteId = searchParams.get('deliveryQuoteId')
+  const missingDeliveryQuote =
+    cart?.fulfillmentMethod === 'DELIVERY' && !deliveryQuoteId
 
   const loadCart = useCallback(async () => {
     if (!authenticated) {
@@ -68,11 +75,18 @@ export default function CustomerCheckout() {
   async function placeOrder() {
     if (!cart) return
 
+    if (missingDeliveryQuote) {
+      setError('Choose a delivery address and quote before placing this order.')
+      return
+    }
+
     setPlacing(true)
     setError('')
 
     try {
-      const result = await createPickupOrder()
+      const result = cart.fulfillmentMethod === 'DELIVERY'
+        ? await createDeliveryOrder(deliveryQuoteId)
+        : await createPickupOrder()
       const order = result?.order ?? result
 
       navigate(`/app/orders/${order.id}`, {
@@ -113,7 +127,11 @@ export default function CustomerCheckout() {
 
         <div>
           <small>CHECKOUT</small>
-          <strong>Pickup order</strong>
+          <strong>
+            {cart?.fulfillmentMethod === 'DELIVERY'
+              ? 'Delivery order'
+              : 'Pickup order'}
+          </strong>
         </div>
       </header>
 
@@ -136,7 +154,11 @@ export default function CustomerCheckout() {
         ) : (
           <>
             <section className="customer-checkout-intro">
-              <span>SELF PICKUP</span>
+              <span>
+                {cart.fulfillmentMethod === 'DELIVERY'
+                  ? 'DELIVERY'
+                  : 'SELF PICKUP'}
+              </span>
 
               <h1>Review your order.</h1>
 
@@ -186,14 +208,39 @@ export default function CustomerCheckout() {
                 </div>
 
                 <div>
-                  <strong>Pickup from pharmacy</strong>
+                  <strong>
+                    {cart.fulfillmentMethod === 'DELIVERY'
+                      ? 'Delivery to saved address'
+                      : 'Pickup from pharmacy'}
+                  </strong>
 
                   <small>
-                    Pharmacy ID · {cart.pharmacyId}
+                    {cart.fulfillmentMethod === 'DELIVERY'
+                      ? `Address ID · ${cart.deliveryAddressId}`
+                      : `Pharmacy ID · ${cart.pharmacyId}`}
                   </small>
                 </div>
               </div>
             </section>
+
+            {cart.fulfillmentMethod === 'DELIVERY' &&
+              missingDeliveryQuote && (
+                <section className="customer-checkout-note">
+                  <strong>Delivery quote required.</strong>
+
+                  <p>
+                    Return to address selection so MediConnect can calculate
+                    a delivery quote for this order.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate('/app/delivery-address')}
+                  >
+                    Choose address
+                  </button>
+                </section>
+              )}
 
             {cart.items.some(
               (item) => item.medicine.requiresPrescription,
@@ -230,14 +277,16 @@ export default function CustomerCheckout() {
             <button
               className="customer-checkout-place"
               type="button"
-              disabled={placing}
+              disabled={placing || missingDeliveryQuote}
               onClick={placeOrder}
             >
               <span>
                 <strong>
                   {placing
                     ? 'Placing order...'
-                    : 'Place pickup order'}
+                    : cart.fulfillmentMethod === 'DELIVERY'
+                      ? 'Place delivery order'
+                      : 'Place pickup order'}
                 </strong>
 
                 <small>

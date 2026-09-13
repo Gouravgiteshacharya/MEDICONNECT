@@ -292,6 +292,22 @@
   color: #81899b;
 }
 
+.customer-checkout-note button {
+  min-height: 38px;
+
+  margin-top: 11px;
+  padding: 0 13px;
+
+  border: 0;
+  border-radius: 999px;
+
+  background: #29396f;
+  color: #fff;
+
+  font-size: 10px;
+  font-weight: 750;
+}
+
 .customer-checkout-error {
   margin-top: 14px;
   padding: 11px 12px;
@@ -398,5 +414,63 @@
   .customer-checkout-main,
   .customer-checkout-header {
     background: #fbfbfd;
+  }
+}
+
+@media (min-width: 960px) {
+  .customer-checkout-page {
+    padding-bottom: 0;
+  }
+
+  .customer-checkout-header,
+  .customer-checkout-main {
+    width: min(calc(100% - 72px), 980px);
+  }
+
+  .customer-checkout-header {
+    padding-top: 20px;
+    background: rgba(238, 240, 246, .92);
+  }
+
+  .customer-checkout-main {
+    padding-top: 32px;
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 16px;
+
+    background: transparent;
+  }
+
+  .customer-checkout-intro,
+  .customer-checkout-items,
+  .customer-checkout-rx,
+  .customer-checkout-note,
+  .customer-checkout-error {
+    grid-column: 1;
+  }
+
+  .customer-checkout-pharmacy,
+  .customer-checkout-place {
+    grid-column: 2;
+  }
+
+  .customer-checkout-pharmacy {
+    position: sticky;
+    top: 98px;
+
+    align-self: start;
+
+    margin-top: 0;
+  }
+
+  .customer-checkout-place {
+    align-self: start;
+    margin-top: 0;
+  }
+
+  .customer-checkout-empty,
+  .customer-checkout-message {
+    grid-column: 1 / -1;
   }
 }

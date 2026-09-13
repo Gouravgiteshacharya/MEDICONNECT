@@ -1,5 +1,14 @@
 .customer-shell {
   min-height: 100dvh;
+  background: #eef0f6;
+}
+
+.customer-shell-content {
+  min-width: 0;
+}
+
+.customer-shell-sidebar {
+  display: none;
 }
 
 .customer-shell-nav {
@@ -14,14 +23,19 @@
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
 
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
 
   transform: translateX(-50%);
 
   border-top: 1px solid #e9ebf2;
 
-  background: rgba(255,255,255,.96);
+  background: rgba(255, 255, 255, .96);
   backdrop-filter: blur(20px);
+}
+
+.customer-shell-nav button,
+.customer-shell-sidebar button {
+  font: inherit;
 }
 
 .customer-shell-nav button {
@@ -41,7 +55,8 @@
   font-weight: 650;
 }
 
-.customer-shell-nav button svg {
+.customer-shell-nav button svg,
+.customer-shell-sidebar button svg {
   width: 20px;
   height: 20px;
 
@@ -56,6 +71,98 @@
   color: #1f2c5c;
 }
 
-.customer-shell-nav button:disabled {
-  opacity: .55;
+@media (min-width: 960px) {
+  .customer-shell {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+
+  .customer-shell-content {
+    min-height: 100dvh;
+  }
+
+  .customer-shell-sidebar {
+    position: sticky;
+    top: 0;
+
+    height: 100dvh;
+    padding: 22px 18px;
+
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 28px;
+
+    border-right: 1px solid #dfe3ec;
+
+    background: rgba(255, 255, 255, .82);
+    backdrop-filter: blur(18px);
+  }
+
+  .customer-shell-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    padding: 0;
+
+    border: 0;
+    background: transparent;
+    color: #18203a;
+
+    text-align: left;
+  }
+
+  .customer-shell-brand > span {
+    width: 42px;
+    height: 42px;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 14px;
+
+    background: #29396f;
+    color: #fff;
+
+    font-weight: 900;
+  }
+
+  .customer-shell-brand strong {
+    font-size: 15px;
+  }
+
+  .customer-shell-sidebar nav {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+  }
+
+  .customer-shell-sidebar nav button {
+    min-height: 46px;
+    padding: 0 12px;
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    border: 0;
+    border-radius: 14px;
+
+    background: transparent;
+    color: #737c91;
+
+    font-size: 12px;
+    font-weight: 750;
+    text-align: left;
+  }
+
+  .customer-shell-sidebar nav button.active,
+  .customer-shell-sidebar nav button:hover {
+    background: #edf1ff;
+    color: #29396f;
+  }
+
+  .customer-shell-nav {
+    display: none;
+  }
 }

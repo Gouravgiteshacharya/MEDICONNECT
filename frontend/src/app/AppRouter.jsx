@@ -7,6 +7,10 @@ import CustomerPharmacyResults from '../features/customer/CustomerPharmacyResult
 import CustomerPharmacyDetail from '../features/customer/CustomerPharmacyDetail'
 import CustomerCart from '../features/customer/CustomerCart'
 import CustomerCheckout from '../features/customer/CustomerCheckout'
+import CustomerDeliveryAddress from '../features/customer/CustomerDeliveryAddress'
+import CustomerOrderDetail from '../features/customer/CustomerOrderDetail'
+import CustomerOrders from '../features/customer/CustomerOrders'
+import CustomerProfile from '../features/customer/CustomerProfile'
 import CustomerShell from '../features/customer/CustomerShell'
 import { AuthProvider } from '../context/AuthContext'
 import RiderApp from '../features/rider/RiderApp'
@@ -26,7 +30,14 @@ export default function AppRouter() {
               element={<CustomerPharmacyDetail />}
             />
             <Route path="cart" element={<CustomerCart />} />
+            <Route
+              path="delivery-address"
+              element={<CustomerDeliveryAddress />}
+            />
             <Route path="checkout" element={<CustomerCheckout />} />
+            <Route path="orders" element={<CustomerOrders />} />
+            <Route path="orders/:orderId" element={<CustomerOrderDetail />} />
+            <Route path="profile" element={<CustomerProfile />} />
           </Route>
           <Route path="/rider" element={<RiderApp />} />
         </Routes>

@@ -134,6 +134,8 @@ export default function CustomerCart() {
     }
   }
 
+  const hasCartItems = Boolean(cart?.items?.length)
+
   if (initializing) {
     return (
       <div className="customer-cart-page">
@@ -189,7 +191,7 @@ export default function CustomerCart() {
           </div>
         )}
 
-        {authenticated && !loading && !cart && (
+        {authenticated && !loading && (!cart || !hasCartItems) && (
           <section className="customer-cart-empty">
             <div>+</div>
 
@@ -208,7 +210,7 @@ export default function CustomerCart() {
           </section>
         )}
 
-        {authenticated && !loading && cart && (
+        {authenticated && !loading && cart && hasCartItems && (
           <>
             <section className="customer-cart-summary">
               <span>PHARMACY CART</span>

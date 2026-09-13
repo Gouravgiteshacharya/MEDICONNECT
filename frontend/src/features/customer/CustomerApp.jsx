@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import './CustomerApp.css'
 
 function SearchIcon() {
@@ -6,32 +7,6 @@ function SearchIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="11" cy="11" r="7" />
       <path d="m16.2 16.2 4 4" />
-    </svg>
-  )
-}
-
-function HomeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 10.5 12 4l8 6.5V20H4Z" />
-    </svg>
-  )
-}
-
-function OrdersIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="5" y="4" width="14" height="16" rx="2" />
-      <path d="M8 9h8M8 13h8M8 17h5" />
-    </svg>
-  )
-}
-
-function ProfileIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M5 21c.6-4.1 3-6 7-6s6.4 1.9 7 6" />
     </svg>
   )
 }
@@ -56,6 +31,8 @@ function BellIcon() {
 
 export default function CustomerApp() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const avatarLabel = user?.name?.charAt(0)?.toUpperCase() || 'M'
 
   return (
     <div className="customer-app">
@@ -78,8 +55,13 @@ export default function CustomerApp() {
             <BellIcon />
           </button>
 
-          <button className="customer-avatar" type="button" aria-label="Profile">
-            G
+          <button
+            className="customer-avatar"
+            type="button"
+            aria-label="Profile"
+            onClick={() => navigate('/app/profile')}
+          >
+            {avatarLabel}
           </button>
         </div>
       </header>
@@ -106,18 +88,26 @@ export default function CustomerApp() {
         </button>
 
         <section className="customer-quick-grid">
-          <button type="button" className="customer-quick-card prescription">
+          <button
+            type="button"
+            className="customer-quick-card prescription"
+            onClick={() => navigate('/app/orders')}
+          >
             <span className="customer-quick-icon">Rx</span>
 
             <span>
               <strong>Prescription</strong>
-              <small>Upload or view</small>
+              <small>Handled in orders</small>
             </span>
 
             <span>→</span>
           </button>
 
-          <button type="button" className="customer-quick-card orders">
+          <button
+            type="button"
+            className="customer-quick-card orders"
+            onClick={() => navigate('/app/orders')}
+          >
             <span className="customer-quick-icon">02</span>
 
             <span>
@@ -136,7 +126,9 @@ export default function CustomerApp() {
               <h2>Medicine availability</h2>
             </div>
 
-            <button type="button">See all</button>
+            <button type="button" onClick={() => navigate('/app/search')}>
+              See all
+            </button>
           </div>
 
           <button

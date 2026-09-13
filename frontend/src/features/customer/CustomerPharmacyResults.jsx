@@ -16,14 +16,6 @@ function BackIcon() {
   )
 }
 
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m5 12 4 4L19 6" />
-    </svg>
-  )
-}
-
 function compositionLabel(medicine) {
   if (!medicine?.compositions?.length) {
     return medicine?.genericName || medicine?.brandName || ''
@@ -315,7 +307,7 @@ export default function CustomerPharmacyResults() {
           </div>
         </section>
 
-        {!location && (
+        {medicineId && !location && (
           <section className="customer-location-gate">
             <div className="customer-location-gate-mark">⌖</div>
 
@@ -416,8 +408,7 @@ export default function CustomerPharmacyResults() {
                       <h2>{item.pharmacy.name}</h2>
 
                       <span className="customer-pharmacy-verified">
-                        <CheckIcon />
-                        Verified
+                        Stock checked
                       </span>
                     </div>
 
