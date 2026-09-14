@@ -16,8 +16,8 @@ import type {
 } from "../validators/pharmacyWorkflow.schemas.js";
 import {
   getActivePharmacyMembership,
-  type PharmacyMembershipDataSource,
   type PharmacyMembershipContext,
+  type PharmacyMembershipDataSource,
 } from "./pharmacyMembership.service.js";
 
 export const MAX_PHARMACY_WORKFLOW_ATTEMPTS = 3;
@@ -56,6 +56,7 @@ const pharmacyPrescriptionSelect = {
   reviewerStaffId: true,
   reviewNotes: true,
   rejectionReason: true,
+  supersedesPrescriptionId: true,
 } satisfies Prisma.PrescriptionSelect;
 
 const pharmacyOrderSelect = {
@@ -206,10 +207,15 @@ function validateReviewState(
   prescription: {
     status: PrescriptionStatus;
     order: { status: OrderStatus };
+    supersededByPrescription?: { id: string } | null;
   } | null,
 ) {
   if (!prescription) {
     throw prescriptionNotFoundError();
+  }
+
+  if (prescription.supersededByPrescription) {
+    throw prescriptionReviewNotAllowedError();
   }
 
   if (
@@ -242,8 +248,7 @@ function aggregatePrescriptionStatus(
     statuses.some(
       (status) =>
         status === PrescriptionStatus.PENDING_REVIEW ||
-        status ===
-          PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
+        status === PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
     )
   ) {
     return OrderStatus.PRESCRIPTION_PENDING;
@@ -280,16 +285,68 @@ async function reviewPrescriptionAttempt(
         tx,
       );
 
-      const current =
-        await tx.prescription.findFirst({
+      const current = await tx.prescription.findFirst({
+        where: {
+          id: prescriptionId,
+          order: { pharmacyId },
+        },
+        select: {
+          id: true,
+          orderId: true,
+          status: true,
+          supersededByPrescription: {
+            select: {
+              id: true,
+            },
+          },
+          order: {
+            select: {
+              status: true,
+            },
+          },
+        },
+      });
+
+      validateReviewState(current);
+
+      const updated = await tx.prescription.updateMany({
+        where: {
+          id: prescriptionId,
+          orderId: current!.orderId,
+          status: {
+            in: reviewableStatuses,
+          },
+          supersededByPrescription: null,
+          order: {
+            pharmacyId,
+            status: OrderStatus.PRESCRIPTION_PENDING,
+          },
+        },
+        data: {
+          status: input.status,
+          reviewedAt: now,
+          reviewerStaffId: membership.id,
+          reviewNotes: input.reviewNotes ?? null,
+          rejectionReason:
+            input.status === PrescriptionStatus.REJECTED
+              ? input.rejectionReason
+              : null,
+        },
+      });
+
+      if (updated.count !== 1) {
+        const latest = await tx.prescription.findFirst({
           where: {
             id: prescriptionId,
             order: { pharmacyId },
           },
           select: {
-            id: true,
-            orderId: true,
             status: true,
+            supersededByPrescription: {
+              select: {
+                id: true,
+              },
+            },
             order: {
               select: {
                 status: true,
@@ -298,98 +355,55 @@ async function reviewPrescriptionAttempt(
           },
         });
 
-      validateReviewState(current);
-
-      const updated =
-        await tx.prescription.updateMany({
-          where: {
-            id: prescriptionId,
-            orderId: current!.orderId,
-            status: {
-              in: reviewableStatuses,
-            },
-            order: {
-              pharmacyId,
-              status:
-                OrderStatus.PRESCRIPTION_PENDING,
-            },
-          },
-          data: {
-            status: input.status,
-            reviewedAt: now,
-            reviewerStaffId: membership.id,
-            reviewNotes:
-              input.reviewNotes ?? null,
-            rejectionReason:
-              input.status ===
-              PrescriptionStatus.REJECTED
-                ? input.rejectionReason
-                : null,
-          },
-        });
-
-      if (updated.count !== 1) {
-        const latest =
-          await tx.prescription.findFirst({
-            where: {
-              id: prescriptionId,
-              order: { pharmacyId },
-            },
-            select: {
-              status: true,
-              order: {
-                select: {
-                  status: true,
-                },
-              },
-            },
-          });
-
         validateReviewState(latest);
         throw prescriptionReviewConflictError();
       }
 
-      const prescriptions =
-        await tx.prescription.findMany({
-          where: {
-            orderId: current!.orderId,
+      const prescriptions = await tx.prescription.findMany({
+        where: {
+          orderId: current!.orderId,
+        },
+        select: {
+          status: true,
+          supersededByPrescription: {
+            select: {
+              id: true,
+            },
           },
-          select: {
-            status: true,
-          },
-        });
+        },
+      });
 
-      const orderStatus =
-        aggregatePrescriptionStatus(
-          prescriptions.map(
-            (item) => item.status,
-          ),
-        );
+      const activePrescriptions = prescriptions.filter(
+        (item) => item.supersededByPrescription === null,
+      );
 
-      const orderUpdated =
-        await tx.order.updateMany({
-          where: {
-            id: current!.orderId,
-            pharmacyId,
-            status:
-              OrderStatus.PRESCRIPTION_PENDING,
-          },
-          data: {
-            status: orderStatus,
-          },
-        });
+      const orderStatus = aggregatePrescriptionStatus(
+        activePrescriptions.map(
+          (item) => item.status,
+        ),
+      );
+
+      const orderUpdated = await tx.order.updateMany({
+        where: {
+          id: current!.orderId,
+          pharmacyId,
+          status: OrderStatus.PRESCRIPTION_PENDING,
+        },
+        data: {
+          status: orderStatus,
+        },
+      });
 
       if (orderUpdated.count !== 1) {
         throw prescriptionReviewNotAllowedError();
       }
 
-      const result =
-        await tx.prescription.findUnique({
-          where: {
-            id: prescriptionId,
-          },
-          select: pharmacyPrescriptionSelect,
-        });
+      const result = await tx.prescription.findUnique({
+        where: {
+          id: prescriptionId,
+        },
+        select: pharmacyPrescriptionSelect,
+      });
 
       if (!result) {
         throw prescriptionNotFoundError();
@@ -434,8 +448,7 @@ export async function reviewPharmacyPrescription(
       }
 
       if (
-        attempt ===
-        MAX_PHARMACY_WORKFLOW_ATTEMPTS
+        attempt === MAX_PHARMACY_WORKFLOW_ATTEMPTS
       ) {
         throw prescriptionReviewConflictError();
       }
@@ -458,8 +471,7 @@ function nextOrderStatus(
   if (input.decision === "REJECT") {
     if (
       order.status === OrderStatus.CREATED ||
-      order.status ===
-        OrderStatus.PRESCRIPTION_APPROVED
+      order.status === OrderStatus.PRESCRIPTION_APPROVED
     ) {
       return OrderStatus.REJECTED_BY_PHARMACY;
     }
@@ -502,26 +514,25 @@ async function decideOrderAttempt(
         tx,
       );
 
-      const order =
-        await tx.order.findFirst({
-          where: {
-            id: orderId,
-            pharmacyId,
-          },
-          select: {
-            id: true,
-            status: true,
-            items: {
-              where: {
-                requiresPrescription: true,
-              },
-              select: {
-                id: true,
-              },
-              take: 1,
+      const order = await tx.order.findFirst({
+        where: {
+          id: orderId,
+          pharmacyId,
+        },
+        select: {
+          id: true,
+          status: true,
+          items: {
+            where: {
+              requiresPrescription: true,
             },
+            select: {
+              id: true,
+            },
+            take: 1,
           },
-        });
+        },
+      });
 
       if (!order) {
         throw orderNotFoundError();
@@ -532,33 +543,30 @@ async function decideOrderAttempt(
         input,
       );
 
-      const updated =
-        await tx.order.updateMany({
-          where: {
-            id: order.id,
-            pharmacyId,
-            status: order.status,
-          },
-          data: {
-            status,
-            ...(status ===
-            OrderStatus.CONFIRMED
-              ? { confirmedAt: now }
-              : {}),
-          },
-        });
+      const updated = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          pharmacyId,
+          status: order.status,
+        },
+        data: {
+          status,
+          ...(status === OrderStatus.CONFIRMED
+            ? { confirmedAt: now }
+            : {}),
+        },
+      });
 
       if (updated.count !== 1) {
         throw orderDecisionNotAllowedError();
       }
 
-      const result =
-        await tx.order.findUnique({
-          where: {
-            id: order.id,
-          },
-          select: pharmacyOrderSelect,
-        });
+      const result = await tx.order.findUnique({
+        where: {
+          id: order.id,
+        },
+        select: pharmacyOrderSelect,
+      });
 
       if (!result) {
         throw orderNotFoundError();
@@ -603,8 +611,7 @@ export async function decidePharmacyOrder(
       }
 
       if (
-        attempt ===
-        MAX_PHARMACY_WORKFLOW_ATTEMPTS
+        attempt === MAX_PHARMACY_WORKFLOW_ATTEMPTS
       ) {
         throw orderDecisionConflictError();
       }
@@ -655,17 +662,16 @@ async function updateOrderPreparationAttempt(
         tx,
       );
 
-      const order =
-        await tx.order.findFirst({
-          where: {
-            id: orderId,
-            pharmacyId,
-          },
-          select: {
-            id: true,
-            status: true,
-          },
-        });
+      const order = await tx.order.findFirst({
+        where: {
+          id: orderId,
+          pharmacyId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
 
       if (!order) {
         throw orderNotFoundError();
@@ -676,29 +682,27 @@ async function updateOrderPreparationAttempt(
         input.status,
       );
 
-      const updated =
-        await tx.order.updateMany({
-          where: {
-            id: order.id,
-            pharmacyId,
-            status: order.status,
-          },
-          data: {
-            status: input.status,
-          },
-        });
+      const updated = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          pharmacyId,
+          status: order.status,
+        },
+        data: {
+          status: input.status,
+        },
+      });
 
       if (updated.count !== 1) {
         throw orderPreparationNotAllowedError();
       }
 
-      const result =
-        await tx.order.findUnique({
-          where: {
-            id: order.id,
-          },
-          select: pharmacyOrderSelect,
-        });
+      const result = await tx.order.findUnique({
+        where: {
+          id: order.id,
+        },
+        select: pharmacyOrderSelect,
+      });
 
       if (!result) {
         throw orderNotFoundError();
@@ -741,8 +745,7 @@ export async function updatePharmacyOrderPreparation(
       }
 
       if (
-        attempt ===
-        MAX_PHARMACY_WORKFLOW_ATTEMPTS
+        attempt === MAX_PHARMACY_WORKFLOW_ATTEMPTS
       ) {
         throw orderPreparationConflictError();
       }
@@ -770,18 +773,17 @@ async function completeSelfPickupAttempt(
         tx,
       );
 
-      const order =
-        await tx.order.findFirst({
-          where: {
-            id: orderId,
-            pharmacyId,
-          },
-          select: {
-            id: true,
-            status: true,
-            fulfillmentMethod: true,
-          },
-        });
+      const order = await tx.order.findFirst({
+        where: {
+          id: orderId,
+          pharmacyId,
+        },
+        select: {
+          id: true,
+          status: true,
+          fulfillmentMethod: true,
+        },
+      });
 
       if (!order) {
         throw orderNotFoundError();
@@ -796,34 +798,32 @@ async function completeSelfPickupAttempt(
         throw orderPickupNotAllowedError();
       }
 
-      const updated =
-        await tx.order.updateMany({
-          where: {
-            id: order.id,
-            pharmacyId,
-            fulfillmentMethod:
-              FulfillmentMethod.SELF_PICKUP,
-            status:
-              OrderStatus.READY_FOR_PICKUP,
-          },
-          data: {
-            status:
-              OrderStatus.PICKED_UP_BY_CUSTOMER,
-            completedAt: now,
-          },
-        });
+      const updated = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          pharmacyId,
+          fulfillmentMethod:
+            FulfillmentMethod.SELF_PICKUP,
+          status:
+            OrderStatus.READY_FOR_PICKUP,
+        },
+        data: {
+          status:
+            OrderStatus.PICKED_UP_BY_CUSTOMER,
+          completedAt: now,
+        },
+      });
 
       if (updated.count !== 1) {
         throw orderPickupNotAllowedError();
       }
 
-      const result =
-        await tx.order.findUnique({
-          where: {
-            id: order.id,
-          },
-          select: pharmacyOrderSelect,
-        });
+      const result = await tx.order.findUnique({
+        where: {
+          id: order.id,
+        },
+        select: pharmacyOrderSelect,
+      });
 
       if (!result) {
         throw orderNotFoundError();
@@ -866,8 +866,7 @@ export async function completePharmacySelfPickup(
       }
 
       if (
-        attempt ===
-        MAX_PHARMACY_WORKFLOW_ATTEMPTS
+        attempt === MAX_PHARMACY_WORKFLOW_ATTEMPTS
       ) {
         throw orderPickupConflictError();
       }
