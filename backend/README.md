@@ -144,3 +144,15 @@ commit, output directory and `--confirm-read-only-export`. Exclusive writes refu
 existing files; failures may leave partial output, so retry in a fresh directory.
 See [dispatch dataset documentation](../ml/dispatch/README.md) for the exact CLI,
 projection, label/exclusion precedence, manifest and remaining audit limitations.
+
+## Phase 13A: operational risk persistence
+
+The operational-risk module provides strict evidence contracts, durable
+occurrence idempotency and revision-checked lifecycle persistence. Legacy
+`RiskAssessment` remains unchanged. Phase 13B adds pure rules; Phase 13C wires
+failure-isolated post-commit hooks and tracking observations. Apply the 13A risk
+migration before deploying the server; startup never auto-migrates. Phase 13D adds
+ADMIN-only queue/detail and lifecycle APIs with safe evidence projections. Phase
+13E adds explicitly invoked, bounded reconciliation for missed detections and
+stale-assessment recovery. No scheduler, support tickets or ML are enabled. See
+[operational risk documentation](docs/operational-risk.md).

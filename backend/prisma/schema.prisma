@@ -31,6 +31,10 @@ model User {
   riskAssessments          RiskAssessment[]    @relation("RiskTargetUser")
   reviewedRiskAssessments  RiskAssessment[]    @relation("RiskReviewedByAdmin")
 
+  acknowledgedOperationalRisks OperationalRiskAssessment[] @relation("OperationalRiskAcknowledgedBy")
+  resolvedOperationalRisks     OperationalRiskAssessment[] @relation("OperationalRiskResolvedBy")
+  dismissedOperationalRisks    OperationalRiskAssessment[] @relation("OperationalRiskDismissedBy")
+
   @@index([role])
   @@index([isActive])
 }
@@ -86,6 +90,8 @@ model Pharmacy {
   carts          Cart[]
   orders         Order[]
   deliveryQuotes DeliveryQuote[]
+
+  operationalRiskAssessments OperationalRiskAssessment[]
 
   @@index([city, state])
   @@index([isActive, isVerified])
@@ -255,6 +261,7 @@ model Order {
   deliveryQuote       DeliveryQuote?       @relation("OrderDeliveryQuote")
   supportTickets      SupportTicket[]
   riskAssessments     RiskAssessment[]
+  operationalRiskAssessments OperationalRiskAssessment[]
 
   @@index([customerId, createdAt])
   @@index([pharmacyId, createdAt])
@@ -747,4 +754,76 @@ enum RiskReviewStatus {
   REVIEWED
   DISMISSED
   ACTION_REQUIRED
+}
+// Operational attention only; independent of legacy RiskAssessment.
+model OperationalRiskAssessment {
+  id                    String                          @id @default(uuid()) @db.Uuid
+  ruleCode              String
+  ruleVersion           String
+  evidenceSchemaVersion Int
+  entityType            OperationalRiskEntityType
+  entityId              String                          @db.Uuid
+  orderId               String?                         @db.Uuid
+  pharmacyId            String?                         @db.Uuid
+  occurrenceKey         String
+  severity              OperationalRiskSeverity
+  status                OperationalRiskStatus           @default(OPEN)
+  resolutionPolicy      OperationalRiskResolutionPolicy
+  evidence              Json
+  sourceOccurredAt      DateTime?
+  detectedAt            DateTime
+  lastEvaluatedAt       DateTime
+  acknowledgedAt        DateTime?
+  acknowledgedByAdminId String?                         @db.Uuid
+  resolvedAt            DateTime?
+  resolvedByAdminId     String?                         @db.Uuid
+  dismissedAt           DateTime?
+  dismissedByAdminId    String?                         @db.Uuid
+  resolutionReason      String?
+  revision              Int                             @default(0)
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+
+  order               Order?    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  pharmacy            Pharmacy? @relation(fields: [pharmacyId], references: [id], onDelete: Restrict)
+  acknowledgedByAdmin User?     @relation("OperationalRiskAcknowledgedBy", fields: [acknowledgedByAdminId], references: [id], onDelete: Restrict)
+  resolvedByAdmin     User?     @relation("OperationalRiskResolvedBy", fields: [resolvedByAdminId], references: [id], onDelete: Restrict)
+  dismissedByAdmin    User?     @relation("OperationalRiskDismissedBy", fields: [dismissedByAdminId], references: [id], onDelete: Restrict)
+
+  @@unique([ruleCode, ruleVersion, entityType, entityId, occurrenceKey], name: "occurrence", map: "operational_risk_occurrence_key")
+  @@index([status, severity, detectedAt])
+  @@index([entityType, entityId, detectedAt])
+  @@index([orderId, detectedAt])
+  @@index([pharmacyId, detectedAt])
+  @@index([ruleCode, status])
+  @@index([acknowledgedByAdminId])
+  @@index([resolvedByAdminId])
+  @@index([dismissedByAdminId])
+}
+
+enum OperationalRiskEntityType {
+  ORDER
+  DELIVERY_ASSIGNMENT
+  PRESCRIPTION
+  PHARMACY_INVENTORY
+}
+
+enum OperationalRiskSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum OperationalRiskStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+enum OperationalRiskResolutionPolicy {
+  AUTO_RESOLVABLE
+  MANUAL_RESOLUTION
+  HISTORICAL_EVENT_ONLY
 }

@@ -132,7 +132,7 @@ describe("shadow candidate scoring and safe observation", () => {
     expect(source).not.toMatch(/LogisticsModel|predictDispatch|prisma|deliveryAssignment|console\./);
     const server = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
     expect(server.match(/await createDispatchRuntime\(/g)).toHaveLength(1);
-    expect(server).toContain("createApp({ etaRuntime, dispatchShadowRuntime })");
+    expect(server).toMatch(/createApp\(\{\s*etaRuntime,\s*dispatchShadowRuntime\s*[,}]/);
     const service = readFileSync(new URL("../src/dispatch/dispatch.service.ts", import.meta.url), "utf8");
     expect(service).not.toMatch(/createDispatchRuntime|loadDispatchModelArtifact/);
   });

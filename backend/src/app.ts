@@ -1,3 +1,5 @@
+import { createRiskHooks, type RiskHookDependencies } from "./risk/risk.hooks.js";
+import { createRiskRouter } from "./risk/risk.routes.js";
 import { disabledDispatchRuntime, type DispatchShadowDependencies } from "./ml/dispatch-runtime.js";
 import { disabledEtaRuntime, type EtaShadowDependencies } from "./ml/eta-runtime.js";
 import cors from "cors";
@@ -37,7 +39,7 @@ import { HaversineRouteProvider, type RouteProvider } from "./delivery-routing/r
 import type { RouteStore } from "./delivery-routing/route.service.js";
 import { loadMlConfig, type MlConfig } from "./ml/ml.config.js";
 import type { LogisticsModel } from "./ml/logistics-model.js";
-export interface AppDependencies extends EtaShadowDependencies, DispatchShadowDependencies {
+export interface AppDependencies extends EtaShadowDependencies, DispatchShadowDependencies, RiskHookDependencies {
   store?: RiderStore;
   authenticate?: RequestHandler;
   locationConfig?: LocationConfig;
@@ -69,28 +71,31 @@ export function createApp({
   onEtaShadowResult,
   dispatchShadowRuntime = disabledDispatchRuntime,
   onDispatchShadowResult,
+  riskService, readActiveRiskAssignments, onRiskHookError,
   now = () => new Date(),
 }: AppDependencies): Express {
   const app = express();
+  const riskHooks = createRiskHooks({ riskService, readActiveRiskAssignments, onRiskHookError });
   const logisticsModel = mlConfig.enabled ? mlModel : null;
   app.disable("x-powered-by");
   app.use(helmet());
   app.use(cors());
   app.use(express.json({ limit: "100kb" }));
-   app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
+  app.use("/api/v1/admin/risk-assessments", createRiskRouter(authenticate, riskService, now));
+   app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { riskHooks, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use("/api/v1", createApiRoutes({ etaRuntime, onEtaShadowResult }));
   app.use("/api/v1/riders", createDashboardRouter(store as unknown as DashboardStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, offerTimeoutMs: assignmentConfig.offerTimeoutMs, now }));
-  app.use("/api/v1/riders", createRiderRouter(store as RiderStore & LocationStore, authenticate, { sampleIntervalMs: locationConfig.sampleIntervalMs, now }));
+  app.use("/api/v1/riders", createRiderRouter(store as RiderStore & LocationStore, authenticate, { riskHooks, freshnessThresholdMs: locationConfig.freshnessThresholdMs, sampleIntervalMs: locationConfig.sampleIntervalMs, now }));
   app.use("/api/v1/delivery-quotes", createDeliveryQuoteRouter(store as RiderStore & DeliveryQuoteStore, authenticate, {
     config: deliveryQuoteConfig, distanceProvider, freshnessThresholdMs: locationConfig.freshnessThresholdMs, mlModel: logisticsModel, maxPredictionMinutes: mlConfig.maxPredictionMinutes, fallbackSpeedKmh: mlConfig.fallbackSpeedKmh, timezoneOffsetMinutes: mlConfig.timezoneOffsetMinutes, now,
   }));
   app.use("/api/v1/delivery-assignments", createAssignmentRouter(store as unknown as AssignmentStore, authenticate, {
-    ...assignmentConfig, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
+    ...assignmentConfig, riskHooks, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now,
   }));
   app.use("/api/v1/dispatch", createDispatchRouter(store as unknown as DispatchStore, authenticate, {
     ...dispatchConfig, dispatchShadowRuntime, onDispatchShadowResult, offerTimeoutMs: assignmentConfig.offerTimeoutMs, freshnessThresholdMs: locationConfig.freshnessThresholdMs, mlModel: logisticsModel, maxPredictionMinutes: mlConfig.maxPredictionMinutes, timezoneOffsetMinutes: mlConfig.timezoneOffsetMinutes, now,
   }));
-  app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { now }));
+  app.use("/api/v1/delivery-lifecycle", createLifecycleRouter(store as unknown as LifecycleStore, authenticate, { riskHooks, now }));
  
   app.use("/api/v1/delivery-batches", createBatchRouter(store as unknown as BatchStore, authenticate, { ...batchConfig, offerTimeoutMs: assignmentConfig.offerTimeoutMs, freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use("/api/v1/delivery-batches", createRouteRouter(store as unknown as RouteStore, authenticate, { ...routeConfig, provider: routeProvider, now }));

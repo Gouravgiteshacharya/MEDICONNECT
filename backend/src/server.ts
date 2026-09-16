@@ -1,3 +1,5 @@
+import { PrismaOperationalRiskRepository } from "./risk/risk.repository.js";
+import { OperationalRiskService } from "./risk/risk.service.js";
 import { createDispatchRuntime } from "./ml/dispatch-runtime.js";
 import { createEtaRuntime } from "./ml/eta-runtime.js";
 import type { Server } from "node:http";
@@ -49,7 +51,14 @@ async function shutdown(signal: NodeJS.Signals) {
 try {
   const etaRuntime = await createEtaRuntime({ ...process.env, NODE_ENV: env.nodeEnv });
   const dispatchShadowRuntime = await createDispatchRuntime({ ...process.env, NODE_ENV: env.nodeEnv });
-  const app = createApp({ etaRuntime, dispatchShadowRuntime });
+  const riskService = new OperationalRiskService(new PrismaOperationalRiskRepository(prisma.operationalRiskAssessment));
+  const app = createApp({ etaRuntime, dispatchShadowRuntime, riskService,
+    readActiveRiskAssignments: async riderId => (await prisma.deliveryAssignment.findMany({
+      where: { riderId, status: { in: ["ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"] } },
+      select: { id: true, status: true, orderId: true },
+    })).map(row => ({ assignmentId: row.id, assignmentStatus: row.status, orderId: row.orderId })),
+    onRiskHookError: event => { console.warn("Operational risk hook unavailable", event); },
+  });
   server = app.listen(env.port, () => {
     console.log(`MediConnect API listening on port ${env.port}`);
   });

@@ -2,11 +2,11 @@ import { Router } from "express";
 import type { Authenticator } from "../auth/authenticator.js";
 import { requireAuthentication, requireRole } from "../middleware/authorization.js";
 import { ApiError } from "../utils/ApiError.js";
-import type { LocationStore } from "../location/location.service.js";
+import type { LocationStore, UpdateLocationOptions } from "../location/location.service.js";
 import { updateRiderLocation } from "../location/location.service.js";
 import { parseLocationInput } from "../location/location.validation.js";
 import { getRiderProfile, MANUAL_AVAILABILITIES, setRiderAvailability, type ManualAvailability, type RiderStore } from "./rider.service.js";
-export interface RiderRouterOptions { sampleIntervalMs: number; now: () => Date; }
+export interface RiderRouterOptions extends UpdateLocationOptions {}
 export function createRiderRouter(store: RiderStore & LocationStore, authenticate: Authenticator, options: RiderRouterOptions): Router {
   const router = Router();
   router.use(authenticate, requireAuthentication, requireRole("DELIVERY_PARTNER"));

@@ -1,3 +1,4 @@
+import { runRiskHook, type RiskHooks } from "../risk/risk.hooks.js";
 import type { RiderStore } from "../riders/rider.service.js";
 import { getRiderProfile } from "../riders/rider.service.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -12,7 +13,7 @@ export interface LocationStore extends RiderStore {
     create(args: unknown): Promise<unknown>;
   };
 }
-export interface UpdateLocationOptions { sampleIntervalMs: number; now: () => Date; }
+export interface UpdateLocationOptions { riskHooks?: RiskHooks; freshnessThresholdMs?: number; sampleIntervalMs: number; now: () => Date; }
 
 export async function updateRiderLocation(
   store: LocationStore,
@@ -20,7 +21,7 @@ export async function updateRiderLocation(
   input: LocationInput,
   options: UpdateLocationOptions,
 ) {
-  return store.$transaction(async (baseTransaction) => {
+  const outcome = await store.$transaction(async (baseTransaction) => {
     const transaction = baseTransaction as LocationStore;
     const rider = await getRiderProfile(transaction, userId);
     if (!rider.isActive || !rider.user.isActive) throw new ApiError(409, "Inactive riders cannot update location", "RIDER_INACTIVE");
@@ -64,6 +65,8 @@ export async function updateRiderLocation(
         recordedAt: now,
       } });
     }
-    return { rider: updatedRider, historyRecorded };
+    return { response: { rider: updatedRider, historyRecorded }, recovery: { riderId: rider.id, lastLocationAt: now, evaluatedAt: now, freshnessThresholdMs: options.freshnessThresholdMs ?? NaN } };
   }, { isolationLevel: "Serializable" });
+  await runRiskHook(() => options.riskHooks?.locationUpdated(outcome.recovery));
+  return outcome.response;
 }

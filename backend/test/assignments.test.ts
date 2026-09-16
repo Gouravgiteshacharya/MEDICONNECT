@@ -1,14 +1,18 @@
+import { RiskTestStore } from "./risk-test-store.js";
+import { OperationalRiskService } from "../src/risk/risk.service.js";
+import { createRiskHooks } from "../src/risk/risk.hooks.js";
+import { acceptAssignmentOffer, declineAssignmentOffer, listMyOffers } from "../src/delivery-assignments/assignment.service.js";
 import type { RequestHandler } from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { UserRole } from "../src/auth/authenticator.js";
 import type { AssignmentStore } from "../src/delivery-assignments/assignment.service.js";
 
-const orderId = "10000000-0000-0000-0000-000000000001";
-const riderId = "20000000-0000-0000-0000-000000000001";
-const riderUserId = "30000000-0000-0000-0000-000000000001";
-const assignmentId = "40000000-0000-0000-0000-000000000001";
+const orderId = "10000000-0000-4000-8000-000000000001";
+const riderId = "20000000-0000-4000-8000-000000000001";
+const riderUserId = "30000000-0000-4000-8000-000000000001";
+const assignmentId = "40000000-0000-4000-8000-000000000001";
 const now = new Date("2026-08-30T12:00:00.000Z");
 const assignedAt = new Date(now.getTime() - 10_000);
 
@@ -16,10 +20,10 @@ function authentication(users: Record<string, { userId: string; role: UserRole }
   return (req, _res, next) => { const token = req.header("authorization")?.replace(/^Bearer /, ""); if (token && users[token]) req.user = { id: users[token].userId, role: users[token].role }; next(); };
 }
 const authenticate = authentication({
-  admin: { userId: "00000000-0000-0000-0000-000000000001", role: "ADMIN" },
+  admin: { userId: "00000000-0000-4000-8000-000000000001", role: "ADMIN" },
   rider: { userId: riderUserId, role: "DELIVERY_PARTNER" },
-  other: { userId: "30000000-0000-0000-0000-000000000002", role: "DELIVERY_PARTNER" },
-  customer: { userId: "00000000-0000-0000-0000-000000000002", role: "CUSTOMER" },
+  other: { userId: "30000000-0000-4000-8000-000000000002", role: "DELIVERY_PARTNER" },
+  customer: { userId: "00000000-0000-4000-8000-000000000002", role: "CUSTOMER" },
 });
 
 interface Options {
@@ -31,7 +35,7 @@ interface Options {
   batchId?: string; offerExpiresAt?: Date | null;
 }
 function createStore(options: Options = {}) {
-  const order = { id: orderId, orderNumber: "MED-1", fulfillmentMethod: options.fulfillmentMethod ?? "DELIVERY", status: options.orderStatus ?? "READY_FOR_PICKUP", pharmacyId: "50000000-0000-0000-0000-000000000001" };
+  const order = { id: orderId, orderNumber: "MED-1", fulfillmentMethod: options.fulfillmentMethod ?? "DELIVERY", status: options.orderStatus ?? "READY_FOR_PICKUP", pharmacyId: "50000000-0000-4000-8000-000000000001" };
   const rider = { id: riderId, userId: riderUserId, availability: options.availability ?? "AVAILABLE", isActive: options.riderActive ?? true,
     currentLatitude: options.riderCoordinates === false ? null : 28.6139, currentLongitude: options.riderCoordinates === false ? null : 77.209,
     lastLocationAt: options.lastLocationAt === undefined ? new Date(now.getTime() - 5_000) : options.lastLocationAt, user: { isActive: options.userActive ?? true } };
@@ -48,7 +52,7 @@ function createStore(options: Options = {}) {
     },
     deliveryAssignment: {
       findFirst: async (args: any) => {
-        if (args.where?.orderId === orderId && args.where?.id?.not) return options.competing ? { id: "60000000-0000-0000-0000-000000000001" } as any : null;
+        if (args.where?.orderId === orderId && args.where?.id?.not) return options.competing ? { id: "60000000-0000-4000-8000-000000000001" } as any : null;
         if (args.where?.orderId === orderId && !args.where?.id) return options.existingLive ? assignment : null;
         if (args.where?.id === assignmentId && args.where?.riderId === riderId && assignment.riderId === riderId) return assignment;
         return null;
@@ -161,17 +165,17 @@ describe("delivery assignment offers", () => {
     expect(response.status).toBe(200); expect(state.assignment.status).toBe("DECLINED"); expect(state.order.status).toBe("READY_FOR_PICKUP"); expect(state.rider.availability).toBe("AVAILABLE");
   });
   it("allows a busy rider to accept a batched offer and activates the batch", async () => {
-    const batchId = "70000000-0000-0000-0000-000000000001"; const { store, state } = createStore({ availability: "BUSY", batchId });
+    const batchId = "70000000-0000-4000-8000-000000000001"; const { store, state } = createStore({ availability: "BUSY", batchId });
     const response = await request(app(store)).post(`/api/v1/delivery-assignments/${assignmentId}/accept`).set("Authorization", "Bearer rider").send({});
     expect(response.status).toBe(200); expect(state.assignment.status).toBe("ACCEPTED"); expect(state.rider.availability).toBe("BUSY"); expect(state.batchStatus).toBe("ACTIVE"); expect(state.riderWrites).toHaveLength(0);
   });
   it("cancels and detaches a planned batch when its second offer is declined", async () => {
-    const batchId = "70000000-0000-0000-0000-000000000001"; const { store, state } = createStore({ availability: "BUSY", batchId });
+    const batchId = "70000000-0000-4000-8000-000000000001"; const { store, state } = createStore({ availability: "BUSY", batchId });
     const response = await request(app(store)).post(`/api/v1/delivery-assignments/${assignmentId}/decline`).set("Authorization", "Bearer rider").send({});
     expect(response.status).toBe(200); expect(state.batchStatus).toBe("CANCELLED"); expect(state.assignment.batchId).toBeNull();
   });
   it("hides another rider's offer", async () => {
-    const response = await request(app(createStore({ assignmentRiderId: "20000000-0000-0000-0000-000000000002" }).store)).post(`/api/v1/delivery-assignments/${assignmentId}/accept`).set("Authorization", "Bearer rider").send({});
+    const response = await request(app(createStore({ assignmentRiderId: "20000000-0000-4000-8000-000000000002" }).store)).post(`/api/v1/delivery-assignments/${assignmentId}/accept`).set("Authorization", "Bearer rider").send({});
     expect(response.status).toBe(404); expect(response.body.code).toBe("OFFER_NOT_FOUND");
   });
   it.each(["accept", "decline"])("expires at the exact boundary during %s", async (action) => {
@@ -208,5 +212,55 @@ describe("delivery assignment offers", () => {
   it("uses the Platform Core authentication boundary by default", async () => {
     const response = await request(createApp({ store: createStore().store as any, assignmentConfig: { offerTimeoutMs: 30_000 }, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 } })).get("/api/v1/delivery-assignments/offers/me");
     expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
+  });
+});
+
+
+describe("assignment post-commit risk integration", () => {
+  it.each(["list", "accept", "decline"])("%s records timeout strictly after commit and preserves response", async action => {
+    const state = createStore({ offerExpiresAt: new Date(now.getTime() - 1) });
+    const riskStore = new RiskTestStore(); const service = new OperationalRiskService(riskStore.repository());
+    let committed = false; const transaction = state.store.$transaction.bind(state.store);
+    state.store.$transaction = async (work, opts) => { const result = await transaction(work, opts); committed = true; return result; };
+    const original = service.recordDetection.bind(service);
+    const recorded = vi.spyOn(service, "recordDetection").mockImplementation(input => { expect(committed).toBe(true); expect(state.state.assignment.status).toBe("TIMED_OUT"); return original(input); });
+    const application = createApp({ store: state.store as any, authenticate, riskService: service, now: () => now, assignmentConfig: { offerTimeoutMs: 30_000 }, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 } });
+    const response = action === "list" ? await request(application).get("/api/v1/delivery-assignments/offers/me").set("Authorization", "Bearer rider") : await request(application).post(`/api/v1/delivery-assignments/${assignmentId}/${action}`).set("Authorization", "Bearer rider").send({});
+    expect(response.status).toBe(action === "list" ? 200 : 409);
+    if (action === "list") expect(response.body.data).toEqual([]); else expect(response.body.code).toBe("OFFER_EXPIRED");
+    expect(recorded).toHaveBeenCalledTimes(1); expect(riskStore.rows.size).toBe(1);
+    expect([...riskStore.rows.values()][0]).toMatchObject({ entityId: assignmentId, orderId, status: "OPEN", occurrenceKey: assignmentId });
+    expect(JSON.stringify(response.body)).not.toMatch(/risk|severity|evidence/i);
+  });
+  it.each([acceptAssignmentOffer, declineAssignmentOffer])("nonexpired action emits no timeout risk", async action => {
+    const { store } = createStore(); const riskStore = new RiskTestStore();
+    await action(store, riderUserId, assignmentId, { now: () => now, offerTimeoutMs: 30_000, freshnessThresholdMs: 60_000, riskHooks: createRiskHooks({ riskService: new OperationalRiskService(riskStore.repository()) }) });
+    expect(riskStore.creates).toBe(0);
+  });
+  it("rollback after timeout mutation never invokes risk", async () => {
+    const { store, state } = createStore({ offerExpiresAt: new Date(now.getTime() - 1) });
+    store.dispatchAttempt = { updateMany: async () => { throw new Error("domain rollback"); } };
+    const callback = vi.fn();
+    await expect(listMyOffers(store, riderUserId, { now: () => now, offerTimeoutMs: 30_000, freshnessThresholdMs: 60_000, riskHooks: { ...createRiskHooks(), assignmentTimedOut: callback } })).rejects.toThrow("domain rollback");
+    expect(callback).not.toHaveBeenCalled(); expect(state.assignment.status).toBe("OFFERED");
+  });
+  it("serialization rollback after mutation only emits for the final committed attempt", async () => {
+    const { store, state } = createStore({ offerExpiresAt: new Date(now.getTime() - 1) });
+    const transaction = store.$transaction.bind(store); let attempts = 0;
+    store.$transaction = async (work, options) => transaction(async tx => { const value = await work(tx); attempts++; if (attempts === 1) throw Object.assign(new Error("retry"), { code: "P2034" }); return value; }, options);
+    const riskStore = new RiskTestStore();
+    await listMyOffers(store, riderUserId, { now: () => now, offerTimeoutMs: 30_000, freshnessThresholdMs: 60_000, riskHooks: createRiskHooks({ riskService: new OperationalRiskService(riskStore.repository()) }) });
+    expect(attempts).toBe(2); expect(riskStore.creates).toBe(1); expect(state.assignment.status).toBe("TIMED_OUT");
+  });
+  it.each(["list", "accept", "decline"])("risk and observer failures cannot change %s timeout outcome", async action => {
+    const { store, state } = createStore({ offerExpiresAt: new Date(now.getTime() - 1) }); const riskStore = new RiskTestStore(); riskStore.createError = new Error("risk failure");
+    const options = { now: () => now, offerTimeoutMs: 30_000, freshnessThresholdMs: 60_000, riskHooks: createRiskHooks({ riskService: new OperationalRiskService(riskStore.repository()), onRiskHookError: async () => { throw new Error("observer"); } }) };
+    if (action === "list") expect(await listMyOffers(store, riderUserId, options)).toEqual([]);
+    else await expect((action === "accept" ? acceptAssignmentOffer : declineAssignmentOffer)(store, riderUserId, assignmentId, options)).rejects.toMatchObject({ code: "OFFER_EXPIRED" });
+    expect(state.assignment.status).toBe("TIMED_OUT"); expect(riskStore.creates).toBe(1);
+  });
+  it("a zero-row timeout update does not fabricate a risk occurrence", async () => {
+    const { store } = createStore({ offerExpiresAt: new Date(now.getTime() - 1), assignmentWriteCount: 0 }); const callback = vi.fn();
+    await listMyOffers(store, riderUserId, { now: () => now, offerTimeoutMs: 30_000, freshnessThresholdMs: 60_000, riskHooks: { ...createRiskHooks(), assignmentTimedOut: callback } }); expect(callback).not.toHaveBeenCalled();
   });
 });

@@ -1,10 +1,11 @@
+import { runRiskHook, type RiskHooks } from "../risk/risk.hooks.js";
 import { ApiError } from "../utils/ApiError.js";
 import { haversineDistanceKm, validateCoordinates } from "../location/coordinates.js";
 import { classifyLocationFreshness } from "../location/freshness.js";
 
 interface TrackingStore { order: { findFirst(args: unknown): Promise<any>; }; }
 export type { TrackingStore };
-export interface TrackingOptions { freshnessThresholdMs: number; now: () => Date; }
+export interface TrackingOptions { riskHooks?: RiskHooks; freshnessThresholdMs: number; now: () => Date; }
 const terminalStatuses = new Set(["DELIVERED", "CANCELLED", "REJECTED_BY_PHARMACY"]);
 const assignmentStatuses = ["ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED", "FAILED"];
 
@@ -49,6 +50,7 @@ export async function getCustomerTracking(store: TrackingStore, customerId: stri
       } catch { locationFreshness = "UNAVAILABLE"; location = null; remainingDistanceKm = null; }
     }
   }
+  if (assignment && !locationSharingEnded) await runRiskHook(() => options.riskHooks?.observeLocation({ assignmentId: assignment.id, orderId: order.id, assignmentStatus: assignment.status, lastLocationAt: assignment.rider.lastLocationAt, freshnessThresholdMs: options.freshnessThresholdMs, evaluatedAt: now }));
   return {
     orderId: order.id, orderNumber: order.orderNumber, status: order.status, terminal,
     quotedEtaMinutes: order.quotedEtaMinutes,

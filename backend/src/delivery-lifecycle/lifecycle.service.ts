@@ -1,3 +1,4 @@
+import { runRiskHook, type RiskHooks } from "../risk/risk.hooks.js";
 import { ApiError } from "../utils/ApiError.js";
 
 interface Result { count: number; }
@@ -12,7 +13,7 @@ export interface LifecycleStore {
   deliveryBatch: { updateMany(args: unknown): Promise<Result>; };
   $transaction<T>(callback: (tx: LifecycleStore) => Promise<T>, options?: unknown): Promise<T>;
 }
-export interface LifecycleOptions { now: () => Date; }
+export interface LifecycleOptions { riskHooks?: RiskHooks; now: () => Date; }
 export type LifecycleAction = "ARRIVE_PHARMACY" | "PICKUP" | "START_DELIVERY" | "DELIVER";
 const projection = { id: true, orderId: true, riderId: true, batchId: true, status: true, pickedUpAt: true, deliveredAt: true, order: { select: { id: true, status: true, fulfillmentMethod: true } } };
 const rules = {
@@ -89,17 +90,19 @@ export async function transitionLifecycle(store: LifecycleStore, userId: string,
 
 export async function failDelivery(store: LifecycleStore, userId: string, assignmentId: string, reason: string, options: LifecycleOptions) {
   const now = getNow(options);
-  return serializable(store, async (tx) => {
+  const outcome = await serializable(store, async (tx) => {
     const { rider, assignment } = await context(tx, userId, assignmentId);
     if (!(["ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"] as string[]).includes(assignment.status)) {
-      if (assignment.status === "FAILED") return safe(assignment, true);
+      if (assignment.status === "FAILED") return { response: safe(assignment, true), failure: null };
       throw new ApiError(409, "Failed-delivery transition is not actionable", "LIFECYCLE_NOT_ACTIONABLE");
     }
     const write = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: assignment.status }, data: { status: "FAILED" } });
     if (write.count !== 1) throw new ApiError(409, "Lifecycle changed concurrently", "LIFECYCLE_CONFLICT");
     if (assignment.batchId) await tx.deliveryStop.updateMany({ where: { batchId: assignment.batchId, assignmentId: assignment.id, status: { in: ["PENDING", "EN_ROUTE", "ARRIVED"] } }, data: { status: "CANCELLED" } });
     await releaseRiderIfFinished(tx, rider.id, assignment, now);
-    await tx.deliveryEvent.create({ data: { orderId: assignment.orderId, assignmentId, riderId: rider.id, eventType: "FAILED_DELIVERY", occurredAt: now, note: reason, metadata: { requiresManualReview: true, orderStatusAtFailure: assignment.order.status } } });
-    return safe({ ...assignment, status: "FAILED" }, true);
+    const event = await tx.deliveryEvent.create({ data: { orderId: assignment.orderId, assignmentId, riderId: rider.id, eventType: "FAILED_DELIVERY", occurredAt: now, note: reason, metadata: { requiresManualReview: true, orderStatusAtFailure: assignment.order.status } } });
+    return { response: safe({ ...assignment, status: "FAILED" }, true), failure: { assignmentId: assignment.id, orderId: assignment.orderId, assignmentStatus: "FAILED", evaluatedAt: now, failureEvent: { id: typeof event === "object" && event !== null && "id" in event && typeof event.id === "string" ? event.id : "", eventType: "FAILED_DELIVERY", occurredAt: now, orderStatusAtFailure: assignment.order.status, requiresManualReview: true } } };
   });
+  if (outcome.failure) await runRiskHook(() => options.riskHooks?.deliveryFailed(outcome.failure!));
+  return outcome.response;
 }

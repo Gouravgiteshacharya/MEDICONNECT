@@ -1,14 +1,18 @@
+import { RiskTestStore } from "./risk-test-store.js";
+import { OperationalRiskService } from "../src/risk/risk.service.js";
+import { createRiskHooks } from "../src/risk/risk.hooks.js";
+import { updateRiderLocation } from "../src/location/location.service.js";
 import type { RequestHandler } from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { UserRole } from "../src/auth/authenticator.js";
 import type { LocationStore } from "../src/location/location.service.js";
 
-const userId = "00000000-0000-0000-0000-000000000001";
-const riderId = "10000000-0000-0000-0000-000000000001";
-const assignmentId = "20000000-0000-0000-0000-000000000001";
-const batchId = "30000000-0000-0000-0000-000000000001";
+const userId = "00000000-0000-4000-8000-000000000001";
+const riderId = "10000000-0000-4000-8000-000000000001";
+const assignmentId = "20000000-0000-4000-8000-000000000001";
+const batchId = "30000000-0000-4000-8000-000000000001";
 const now = new Date("2026-08-30T12:00:00.000Z");
 
 function authentication(users: Record<string, { userId: string; role: UserRole }>): RequestHandler {
@@ -86,7 +90,7 @@ describe("PATCH /api/v1/riders/me/location", () => {
   });
 
   it("rejects owned but unrelated assignment and batch before modifying location", async () => {
-    const unrelatedBatchId = "40000000-0000-0000-0000-000000000001";
+    const unrelatedBatchId = "40000000-0000-4000-8000-000000000001";
     const { store, state } = createStore({ assignmentBatchId: unrelatedBatchId });
     const response = await request(app(store)).patch("/api/v1/riders/me/location").set("Authorization", "Bearer rider")
       .send({ ...validBody, assignmentId, batchId });
@@ -151,5 +155,49 @@ describe("PATCH /api/v1/riders/me/location", () => {
     const response = await request(createApp({ store: createStore().store, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 } }))
       .patch("/api/v1/riders/me/location").send(validBody);
     expect(response.status).toBe(401); expect(response.body.code).toBe("AUTH_REQUIRED");
+  });
+});
+
+
+describe("location update post-commit risk recovery", () => {
+  const riskOrderId = "50000000-0000-4000-8000-000000000001";
+  async function existingStale() {
+    const riskStore = new RiskTestStore(); const service = new OperationalRiskService(riskStore.repository());
+    await createRiskHooks({ riskService: service }).observeLocation({ assignmentId, orderId: riskOrderId, assignmentStatus: "ACCEPTED", lastLocationAt: new Date(now.getTime() - 70_000), evaluatedAt: new Date(now.getTime() - 1), freshnessThresholdMs: 60_000 });
+    return { riskStore, service };
+  }
+  it("reads active assignments only after commit and resolves the old episode", async () => {
+    const { store, state } = createStore(); const { riskStore, service } = await existingStale(); let committed = false;
+    const transaction = store.$transaction.bind(store);
+    store.$transaction = async (work, options) => { const result = await transaction(work, options); committed = true; return result; };
+    const reader = vi.fn(async (id: string) => { expect(committed).toBe(true); expect(id).toBe(riderId); expect(state.rider.lastLocationAt).toEqual(now); return [{ assignmentId, assignmentStatus: "ACCEPTED", orderId: riskOrderId }]; });
+    const application = createApp({ store, authenticate, riskService: service, readActiveRiskAssignments: reader, now: () => now, locationConfig: { sampleIntervalMs: 15_000, freshnessThresholdMs: 60_000 } });
+    const response = await request(application).patch("/api/v1/riders/me/location").set("Authorization", "Bearer rider").send(validBody);
+    const baseline = await request(app(createStore().store)).patch("/api/v1/riders/me/location").set("Authorization", "Bearer rider").send(validBody);
+    expect(response.status).toBe(200); expect(response.body).toEqual(baseline.body); expect(reader).toHaveBeenCalledTimes(1);
+    expect([...riskStore.rows.values()][0]).toMatchObject({ status: "RESOLVED", resolutionReason: "CONDITION_CLEARED", resolvedByAdminId: null, entityType: "DELIVERY_ASSIGNMENT" });
+  });
+  it("passes only committed identity/time to the hook, never coordinates or contacts", async () => {
+    const { store } = createStore(); const callback = vi.fn(async () => {});
+    await updateRiderLocation(store, userId, validBody, { now: () => now, sampleIntervalMs: 15000, freshnessThresholdMs: 60000, riskHooks: { ...createRiskHooks(), locationUpdated: callback } });
+    expect(callback).toHaveBeenCalledWith({ riderId, lastLocationAt: now, evaluatedAt: now, freshnessThresholdMs: 60000 });
+  });
+  it("failed location mutation never performs recovery", async () => {
+    const { store } = createStore(); const callback = vi.fn(); store.deliveryPartner.update = async () => { throw new Error("write failed"); };
+    await expect(updateRiderLocation(store, userId, validBody, { now: () => now, sampleIntervalMs: 15000, riskHooks: { ...createRiskHooks(), locationUpdated: callback } })).rejects.toThrow("write failed"); expect(callback).not.toHaveBeenCalled();
+  });
+  it("commit failure never performs recovery", async () => {
+    const { store } = createStore(); const callback = vi.fn(); store.$transaction = async work => { await work(store); throw new Error("commit failed"); };
+    await expect(updateRiderLocation(store, userId, validBody, { now: () => now, sampleIntervalMs: 15000, riskHooks: { ...createRiskHooks(), locationUpdated: callback } })).rejects.toThrow("commit failed"); expect(callback).not.toHaveBeenCalled();
+  });
+  it("recovery read failure does not fail the location update", async () => {
+    const { store, state } = createStore(); const { service, riskStore } = await existingStale();
+    const result = await updateRiderLocation(store, userId, validBody, { now: () => now, sampleIntervalMs: 15000, freshnessThresholdMs: 60000, riskHooks: createRiskHooks({ riskService: service, readActiveRiskAssignments: async () => { throw new Error("risk lookup unavailable"); } }) });
+    expect(result.historyRecorded).toBe(true); expect(state.rider.lastLocationAt).toEqual(now); expect([...riskStore.rows.values()][0].status).toBe("OPEN");
+  });
+  it("no known active assignment cannot clear the assessment", async () => {
+    const { store } = createStore(); const { service, riskStore } = await existingStale();
+    await updateRiderLocation(store, userId, validBody, { now: () => now, sampleIntervalMs: 15000, freshnessThresholdMs: 60000, riskHooks: createRiskHooks({ riskService: service, readActiveRiskAssignments: async () => [] }) });
+    expect([...riskStore.rows.values()][0].status).toBe("OPEN");
   });
 });
