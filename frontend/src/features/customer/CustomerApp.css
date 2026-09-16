@@ -529,11 +529,11 @@
   }
 
   .customer-main {
-    padding-top: 36px;
+    padding-top: 28px;
 
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px;
-    gap: 18px;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 16px;
 
     background: transparent;
   }
@@ -558,16 +558,25 @@
   }
 
   .customer-greeting h1 {
-    max-width: 620px;
-    font-size: 56px;
+    max-width: 560px;
+    font-size: 50px;
   }
 
   .customer-search {
-    min-height: 86px;
-    border-radius: 24px;
+    min-height: 78px;
+    margin-top: 18px;
+    border-radius: 22px;
   }
 
   .customer-quick-card {
-    min-height: 136px;
+    min-height: 118px;
+  }
+
+  .customer-section-heading h2 {
+    font-size: 19px;
+  }
+
+  .customer-availability-card {
+    margin-top: 10px;
   }
 }

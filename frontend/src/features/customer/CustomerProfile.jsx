@@ -67,6 +67,7 @@ export default function CustomerProfile() {
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingAddress, setSavingAddress] = useState(false)
+  const [locating, setLocating] = useState(false)
   const [busyAddressId, setBusyAddressId] = useState(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -174,6 +175,39 @@ export default function CustomerProfile() {
     } finally {
       setSavingAddress(false)
     }
+  }
+
+  function useCurrentLocation() {
+    setError('')
+    setSuccess('')
+
+    if (!navigator.geolocation) {
+      setError('Location access is not supported by this browser.')
+      return
+    }
+
+    setLocating(true)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setAddressForm((current) => ({
+          ...current,
+          latitude: String(position.coords.latitude),
+          longitude: String(position.coords.longitude),
+        }))
+        setSuccess('Delivery location captured for this address.')
+        setLocating(false)
+      },
+      () => {
+        setError('Allow location access to add a delivery-ready location.')
+        setLocating(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      },
+    )
   }
 
   async function makeDefault(addressId) {
@@ -440,32 +474,23 @@ export default function CustomerProfile() {
                   </label>
                 </div>
 
-                <div className="customer-profile-form-grid">
-                  <label>
-                    <span>Latitude</span>
-                    <input
-                      name="latitude"
-                      type="number"
-                      step="any"
-                      min="-90"
-                      max="90"
-                      value={addressForm.latitude}
-                      onChange={updateAddressField}
-                    />
-                  </label>
+                <div className="customer-profile-location-capture">
+                  <div>
+                    <strong>Delivery location</strong>
+                    <span>
+                      {addressForm.latitude && addressForm.longitude
+                        ? 'Location captured for delivery quotes.'
+                        : 'Use browser location to make this address delivery-ready.'}
+                    </span>
+                  </div>
 
-                  <label>
-                    <span>Longitude</span>
-                    <input
-                      name="longitude"
-                      type="number"
-                      step="any"
-                      min="-180"
-                      max="180"
-                      value={addressForm.longitude}
-                      onChange={updateAddressField}
-                    />
-                  </label>
+                  <button
+                    type="button"
+                    disabled={locating}
+                    onClick={useCurrentLocation}
+                  >
+                    {locating ? 'Getting location...' : 'Use current location'}
+                  </button>
                 </div>
 
                 <label className="customer-profile-checkbox">
