@@ -712,3 +712,130 @@ export async function createCustomerOrder(
 
   throw checkoutConflictError();
 }
+const cancellableOrderStatuses: readonly OrderStatus[] = [
+  OrderStatus.CREATED,
+  OrderStatus.PRESCRIPTION_PENDING,
+  OrderStatus.PRESCRIPTION_APPROVED,
+  OrderStatus.CONFIRMED,
+  OrderStatus.PREPARING,
+];
+
+function orderCancellationNotAllowedError() {
+  return new ApiError(
+    409,
+    "This order can no longer be cancelled.",
+    "ORDER_CANCELLATION_NOT_ALLOWED",
+  );
+}
+
+function orderCancellationConflictError() {
+  return new ApiError(
+    409,
+    "Order cancellation changed during this request. Please try again.",
+    "ORDER_CANCELLATION_CONFLICT",
+  );
+}
+
+type CancellationClock = () => Date;
+
+type CancellationDataSource = Pick<PrismaClient, "order"> & {
+  $transaction<T>(
+    callback: (
+      tx: Pick<Prisma.TransactionClient, "order">,
+    ) => Promise<T>,
+    options: { isolationLevel: "Serializable" },
+  ): Promise<T>;
+};
+
+async function cancelCustomerOrderAttempt(
+  customerId: string,
+  orderId: string,
+  now: Date,
+  dataSource: CancellationDataSource,
+) {
+  return dataSource.$transaction(
+    async (tx) => {
+      const order = await tx.order.findFirst({
+        where: {
+          id: orderId,
+          customerId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!order) {
+        throw orderNotFoundError();
+      }
+
+      if (!cancellableOrderStatuses.includes(order.status)) {
+        throw orderCancellationNotAllowedError();
+      }
+
+      const updated = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          customerId,
+          status: order.status,
+        },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: now,
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw orderCancellationNotAllowedError();
+      }
+
+      const result = await tx.order.findFirst({
+        where: {
+          id: order.id,
+          customerId,
+        },
+        select: customerOrderDetailSelect,
+      });
+
+      if (!result) {
+        throw orderNotFoundError();
+      }
+
+      return result;
+    },
+    { isolationLevel: "Serializable" },
+  );
+}
+
+export async function cancelCustomerOrder(
+  customerId: string,
+  orderId: string,
+  dataSource: CancellationDataSource = prisma,
+  clock: CancellationClock = () => new Date(),
+) {
+  for (
+    let attempt = 1;
+    attempt <= MAX_CHECKOUT_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      return await cancelCustomerOrderAttempt(
+        customerId,
+        orderId,
+        clock(),
+        dataSource,
+      );
+    } catch (error) {
+      if (!isTransactionConflict(error)) {
+        throw error;
+      }
+
+      if (attempt === MAX_CHECKOUT_ATTEMPTS) {
+        throw orderCancellationConflictError();
+      }
+    }
+  }
+
+  throw orderCancellationConflictError();
+}

@@ -1,5 +1,6 @@
 import {
   OrderStatus,
+  PrescriptionStatus,
   Prisma,
   type PrismaClient,
 } from "../../generated/prisma/client.js";
@@ -35,10 +36,15 @@ const customerPrescriptionSelect = {
   reviewedAt: true,
   reviewNotes: true,
   rejectionReason: true,
+  supersedesPrescriptionId: true,
 } satisfies Prisma.PrescriptionSelect;
 
 function orderNotFoundError() {
-  return new ApiError(404, "Order not found.", "ORDER_NOT_FOUND");
+  return new ApiError(
+    404,
+    "Order not found.",
+    "ORDER_NOT_FOUND",
+  );
 }
 
 function prescriptionNotRequiredError() {
@@ -65,10 +71,44 @@ function prescriptionUploadConflictError() {
   );
 }
 
+function prescriptionSupersessionNotAllowedError() {
+  return new ApiError(
+    409,
+    "The selected prescription cannot be superseded.",
+    "PRESCRIPTION_SUPERSESSION_NOT_ALLOWED",
+  );
+}
+
+function prescriptionSupersessionConflictError() {
+  return new ApiError(
+    409,
+    "This prescription has already been superseded.",
+    "PRESCRIPTION_SUPERSESSION_CONFLICT",
+  );
+}
+
 function isTransactionConflict(error: unknown) {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === "P2034"
+  );
+}
+
+function isSupersessionUniqueConflict(error: unknown) {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== "P2002"
+  ) {
+    return false;
+  }
+
+  const target = error.meta?.target;
+
+  return (
+    Array.isArray(target) &&
+    target.some(
+      (field) => field === "supersedesPrescriptionId",
+    )
   );
 }
 
@@ -78,19 +118,29 @@ async function findOwnedOrderForUpload(
   dataSource: Pick<PrismaClient, "order">,
 ) {
   const order = await dataSource.order.findFirst({
-    where: { id: orderId, customerId },
+    where: {
+      id: orderId,
+      customerId,
+    },
     select: {
       id: true,
       status: true,
       items: {
-        where: { requiresPrescription: true },
-        select: { id: true },
+        where: {
+          requiresPrescription: true,
+        },
+        select: {
+          id: true,
+        },
         take: 1,
       },
     },
   });
 
-  if (!order) throw orderNotFoundError();
+  if (!order) {
+    throw orderNotFoundError();
+  }
+
   return order;
 }
 
@@ -100,11 +150,62 @@ async function assertOwnedOrder(
   dataSource: PrescriptionDataSource,
 ) {
   const order = await dataSource.order.findFirst({
-    where: { id: orderId, customerId },
-    select: { id: true },
+    where: {
+      id: orderId,
+      customerId,
+    },
+    select: {
+      id: true,
+    },
   });
 
-  if (!order) throw orderNotFoundError();
+  if (!order) {
+    throw orderNotFoundError();
+  }
+}
+
+async function validateSupersession(
+  orderId: string,
+  supersedesPrescriptionId: string,
+  dataSource: PrescriptionTransactionClient,
+) {
+  const previousPrescription =
+    await dataSource.prescription.findUnique({
+      where: {
+        id: supersedesPrescriptionId,
+      },
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+      },
+    });
+
+  if (
+    !previousPrescription ||
+    previousPrescription.orderId !== orderId ||
+    previousPrescription.status !==
+      PrescriptionStatus.ADDITIONAL_INFO_REQUIRED
+  ) {
+    throw prescriptionSupersessionNotAllowedError();
+  }
+
+  const existingReplacement =
+    await dataSource.prescription.findFirst({
+      where: {
+        supersedesPrescriptionId:
+          previousPrescription.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+  if (existingReplacement) {
+    throw prescriptionSupersessionConflictError();
+  }
+
+  return previousPrescription;
 }
 
 export async function createCustomerPrescription(
@@ -127,9 +228,25 @@ export async function createCustomerPrescription(
             tx,
           );
 
-          if (order.items.length === 0) throw prescriptionNotRequiredError();
-          if (order.status !== OrderStatus.PRESCRIPTION_PENDING) {
+          if (order.items.length === 0) {
+            throw prescriptionNotRequiredError();
+          }
+
+          if (
+            order.status !==
+            OrderStatus.PRESCRIPTION_PENDING
+          ) {
             throw prescriptionUploadNotAllowedError();
+          }
+
+          if (
+            input.supersedesPrescriptionId !== undefined
+          ) {
+            await validateSupersession(
+              order.id,
+              input.supersedesPrescriptionId,
+              tx,
+            );
           }
 
           return tx.prescription.create({
@@ -138,19 +255,43 @@ export async function createCustomerPrescription(
               fileUrl: input.fileUrl,
               ...(input.storagePath === undefined
                 ? {}
-                : { storagePath: input.storagePath }),
+                : {
+                    storagePath: input.storagePath,
+                  }),
               ...(input.originalFilename === undefined
                 ? {}
-                : { originalFilename: input.originalFilename }),
+                : {
+                    originalFilename:
+                      input.originalFilename,
+                  }),
+              ...(input.supersedesPrescriptionId ===
+              undefined
+                ? {}
+                : {
+                    supersedesPrescriptionId:
+                      input.supersedesPrescriptionId,
+                  }),
             },
             select: customerPrescriptionSelect,
           });
         },
-        { isolationLevel: "Serializable" },
+        {
+          isolationLevel: "Serializable",
+        },
       );
     } catch (error) {
-      if (!isTransactionConflict(error)) throw error;
-      if (attempt === MAX_PRESCRIPTION_UPLOAD_ATTEMPTS) {
+      if (isSupersessionUniqueConflict(error)) {
+        throw prescriptionSupersessionConflictError();
+      }
+
+      if (!isTransactionConflict(error)) {
+        throw error;
+      }
+
+      if (
+        attempt ===
+        MAX_PRESCRIPTION_UPLOAD_ATTEMPTS
+      ) {
         throw prescriptionUploadConflictError();
       }
     }
@@ -164,11 +305,20 @@ export async function listCustomerPrescriptions(
   orderId: string,
   dataSource: PrescriptionDataSource = prisma,
 ) {
-  await assertOwnedOrder(customerId, orderId, dataSource);
+  await assertOwnedOrder(
+    customerId,
+    orderId,
+    dataSource,
+  );
 
   return dataSource.prescription.findMany({
-    where: { orderId },
+    where: {
+      orderId,
+    },
     select: customerPrescriptionSelect,
-    orderBy: [{ uploadedAt: "asc" }, { id: "asc" }],
+    orderBy: [
+      { uploadedAt: "asc" },
+      { id: "asc" },
+    ],
   });
 }
