@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   API_BASE,
   getAccessToken,
@@ -35,6 +36,7 @@ function AssignmentCard({ assignment, onAction, busy }) {
 }
 
 function App() {
+  const navigate = useNavigate()
   const [dashboard, setDashboard] = useState(null), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const load = useCallback(async (quiet = false) => { if (!quiet) setLoading(true); try { setDashboard(await api('/riders/me/dashboard')); setError('') } catch (err) { setError(err.message) } finally { setLoading(false) } }, [])
   // Initial API synchronization is intentionally effect-driven; subsequent refreshes use the same stable callback.
@@ -49,7 +51,7 @@ function App() {
   if (!dashboard) return <main className="shell centered"><div className="brand-mark">M</div><h1>Rider access required</h1><p>{error}</p><p className="muted">This dashboard uses the secure token created by MediConnect authentication.</p><button onClick={() => load()}>Try again</button></main>
   const { rider, location, workload, offers, activeAssignments, activeRoute, recentHistory } = dashboard
   return <main className="shell">
-    <header><div><div className="brand"><span className="brand-mark small">M</span><span>MediConnect</span></div><p className="greeting">Good day, {rider.name.split(' ')[0]}</p></div><div className={`availability ${rider.availability.toLowerCase()}`}><span />{label(rider.availability)}</div></header>
+    <header><div><button className="brand brand-button" type="button" onClick={() => navigate('/')}><span className="brand-mark small">M</span><span>MediConnect</span></button><p className="greeting">Good day, {rider.name.split(' ')[0]}</p></div><div className={`availability ${rider.availability.toLowerCase()}`}><span />{label(rider.availability)}</div></header>
     {error && <div className="alert" role="alert">{error}<button aria-label="Dismiss" onClick={() => setError('')}>×</button></div>}
     <section className="status-panel"><div><span className="eyebrow">Availability</span><h1>{rider.availability === 'AVAILABLE' ? 'Ready for deliveries' : rider.availability === 'BUSY' ? 'Delivery in progress' : 'You are not receiving offers'}</h1><p>{label(rider.vehicleType)}{rider.vehicleNumber ? ` · ${rider.vehicleNumber}` : ''}</p></div><div className="toggle-actions"><button className={rider.availability === 'AVAILABLE' ? '' : 'secondary'} disabled={busy || rider.availability === 'BUSY'} onClick={() => availability(rider.availability === 'AVAILABLE' ? 'OFFLINE' : 'AVAILABLE')}>{rider.availability === 'AVAILABLE' ? 'Go offline' : 'Go online'}</button><button className="location-button" disabled={busy} onClick={shareLocation}>Update location</button></div><div className="location-state"><span className={`signal ${location.freshness.toLowerCase()}`} />Location {label(location.freshness)} · {time(location.lastUpdatedAt)}</div></section>
     <section className="metrics"><div><b>{workload.actionableOffers}</b><span>Offers</span></div><div><b>{workload.activeAssignments}</b><span>Active</span></div><div><b>{workload.recentDeliveries}</b><span>Completed</span></div></section>

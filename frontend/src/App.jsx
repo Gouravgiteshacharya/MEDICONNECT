@@ -40,21 +40,22 @@ function App() {
   useEffect(() => {
     if (initializing) return
 
-    if (authenticated) {
-      navigate(getRoleHome(user?.role), { replace: true })
-      return
-    }
-
-    if (requestedAuthMode === 'login' || requestedAuthMode === 'register') {
+    if (
+      !authenticated &&
+      (requestedAuthMode === 'login' || requestedAuthMode === 'register')
+    ) {
       setAuthMode(requestedAuthMode)
       setAuthOpen(true)
+    }
+
+    if (authenticated && requestedAuthMode) {
+      navigate('/', { replace: true })
     }
   }, [
     authenticated,
     initializing,
     navigate,
     requestedAuthMode,
-    user?.role,
   ])
 
   function transitionTo(path) {
@@ -122,7 +123,8 @@ function App() {
         logout={logout}
         openAuth={openAuth}
         openSearch={openSearch}
-        openApp={() => transitionTo('/app')}
+        openApp={() => transitionTo(getRoleHome(user?.role))}
+        openLanding={() => navigate('/')}
         leaving={leaving}
       />
 

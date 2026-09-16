@@ -41,6 +41,13 @@ const demoPharmacies = [
   { name: 'Example Care Pharmacy', distance: '0.58 km', price: '₹30', status: 'In stock', tone: 'good' },
 ]
 
+function getWorkspaceCta(role) {
+  if (role === 'PHARMACY_STAFF') return 'Open pharmacy workspace'
+  if (role === 'DELIVERY_PARTNER') return 'Open rider workspace'
+  if (role === 'ADMIN') return 'Open admin operations'
+  return 'Open customer app'
+}
+
 function LandingPage({
   authenticated,
   user,
@@ -48,6 +55,7 @@ function LandingPage({
   openAuth,
   openSearch,
   openApp,
+  openLanding,
   leaving = false,
 }) {
   const [fulfilmentPreview, setFulfilmentPreview] = useState('delivery')
@@ -189,8 +197,8 @@ function LandingPage({
         <button
           className="mc-brand"
           type="button"
-          aria-label="MediConnect app home"
-          onClick={openApp}
+          aria-label="MediConnect landing page"
+          onClick={openLanding}
         >
           <span className="mc-logo">M</span>
 
@@ -265,7 +273,7 @@ function LandingPage({
               </span>
 
               <button className="mc-login" type="button" onClick={openApp}>
-                Open workspace
+                {getWorkspaceCta(user?.role)}
               </button>
 
               <button className="mc-login" type="button" onClick={logout}>

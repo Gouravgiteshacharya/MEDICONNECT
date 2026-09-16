@@ -123,7 +123,7 @@ export default function PharmacyShell() {
         <button
           type="button"
           className="pharmacy-brand"
-          onClick={() => navigate(pathWithPharmacy('/pharmacy'))}
+          onClick={() => navigate('/')}
         >
           <span>M</span>
           <strong>MediConnect Pharmacy</strong>

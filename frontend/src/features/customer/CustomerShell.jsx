@@ -120,7 +120,7 @@ export default function CustomerShell() {
         <button
           className="customer-shell-brand"
           type="button"
-          onClick={() => navigate('/app')}
+          onClick={() => navigate('/')}
         >
           <span>M</span>
           <strong>MediConnect</strong>

@@ -66,7 +66,7 @@ export default function AdminShell() {
         <button
           type="button"
           className="admin-brand"
-          onClick={() => navigate('/admin')}
+          onClick={() => navigate('/')}
         >
           <span>M</span>
           <strong>MediConnect Operations</strong>
