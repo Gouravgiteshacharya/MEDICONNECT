@@ -78,6 +78,7 @@ function App() {
   }
 
   function openAuth(mode = 'login') {
+    navigate(`/?auth=${mode}`)
     setAuthMode(mode)
     setAuthOpen(true)
   }

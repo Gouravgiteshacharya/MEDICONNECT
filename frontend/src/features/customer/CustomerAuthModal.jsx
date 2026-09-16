@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth } from '../../context/AuthContext'
 import './CustomerAuthModal.css'
 
@@ -83,7 +84,7 @@ export default function CustomerAuthModal({
     }
   }
 
-  return (
+  const modal = (
     <div className="customer-auth-overlay">
       <button
         type="button"
@@ -230,4 +231,6 @@ export default function CustomerAuthModal({
       </section>
     </div>
   )
+
+  return createPortal(modal, document.body)
 }
