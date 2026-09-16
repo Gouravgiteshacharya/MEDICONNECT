@@ -13,7 +13,7 @@ import { loadLocationConfig, type LocationConfig } from "./location/config.js";
 import { createDeliveryQuoteRouter } from "./delivery-quotes/delivery-quote.routes.js";
 import { loadDeliveryQuoteConfig, type DeliveryQuoteConfig } from "./delivery-quotes/delivery-quote.config.js";
 import type { DeliveryQuoteStore } from "./delivery-quotes/delivery-quote.service.js";
-import { HaversineDistanceProvider, type DistanceProvider } from "./delivery-quotes/distance-provider.js";
+import type { DistanceProvider } from "./delivery-quotes/distance-provider.js";
 import { createAssignmentRouter } from "./delivery-assignments/assignment.routes.js";
 import { loadAssignmentConfig, type AssignmentConfig } from "./delivery-assignments/assignment.config.js";
 import type { AssignmentStore } from "./delivery-assignments/assignment.service.js";
@@ -31,8 +31,11 @@ import { loadBatchConfig, type BatchConfig } from "./delivery-batches/batch.conf
 import type { BatchStore } from "./delivery-batches/batch.service.js";
 import { createRouteRouter } from "./delivery-routing/route.routes.js";
 import { loadRouteConfig, type RouteConfig } from "./delivery-routing/route.config.js";
-import { HaversineRouteProvider, type RouteProvider } from "./delivery-routing/route-provider.js";
+import type { RouteProvider } from "./delivery-routing/route-provider.js";
 import type { RouteStore } from "./delivery-routing/route.service.js";
+import { loadGoogleRoutesConfig, type GoogleRoutesConfig } from "./delivery-routing/google-routes.config.js";
+import type { GoogleRoutesFetch } from "./delivery-routing/google-routes-client.js";
+import { createRoutingProviders } from "./delivery-routing/routing-provider.factory.js";
 import { loadMlConfig, type MlConfig } from "./ml/ml.config.js";
 import type { LogisticsModel } from "./ml/logistics-model.js";
 export interface AppDependencies {
@@ -46,25 +49,31 @@ export interface AppDependencies {
   batchConfig?: BatchConfig;
   routeConfig?: RouteConfig;
   routeProvider?: RouteProvider;
+  googleRoutesConfig?: GoogleRoutesConfig;
+  googleRoutesFetch?: GoogleRoutesFetch;
   mlConfig?: MlConfig;
   mlModel?: LogisticsModel | null;
   now?: () => Date;
 }
-export function createApp({
-  store = prisma as unknown as RiderStore,
-  authenticate = platformAuthenticate,
-  locationConfig = loadLocationConfig(),
-  deliveryQuoteConfig = loadDeliveryQuoteConfig(),
-  distanceProvider = new HaversineDistanceProvider(),
-  assignmentConfig = loadAssignmentConfig(),
-  dispatchConfig = loadDispatchConfig(),
-  batchConfig = loadBatchConfig(),
-  routeConfig = loadRouteConfig(),
-  routeProvider = new HaversineRouteProvider(routeConfig.assumedSpeedKmh),
-  mlConfig = loadMlConfig(),
-  mlModel = null,
-  now = () => new Date(),
-}: AppDependencies): Express {
+export function createApp(dependencies: AppDependencies = {}): Express {
+  const store = dependencies.store ?? prisma as unknown as RiderStore;
+  const authenticate = dependencies.authenticate ?? platformAuthenticate;
+  const locationConfig = dependencies.locationConfig ?? loadLocationConfig();
+  const deliveryQuoteConfig = dependencies.deliveryQuoteConfig ?? loadDeliveryQuoteConfig();
+  const assignmentConfig = dependencies.assignmentConfig ?? loadAssignmentConfig();
+  const dispatchConfig = dependencies.dispatchConfig ?? loadDispatchConfig();
+  const batchConfig = dependencies.batchConfig ?? loadBatchConfig();
+  const routeConfig = dependencies.routeConfig ?? loadRouteConfig();
+  const mlConfig = dependencies.mlConfig ?? loadMlConfig();
+  const mlModel = dependencies.mlModel ?? null;
+  const now = dependencies.now ?? (() => new Date());
+  const routingProviders = createRoutingProviders({
+    config: dependencies.googleRoutesConfig ?? loadGoogleRoutesConfig(),
+    assumedSpeedKmh: routeConfig.assumedSpeedKmh,
+    fetchImplementation: dependencies.googleRoutesFetch,
+  });
+  const distanceProvider = dependencies.distanceProvider ?? routingProviders.distanceProvider;
+  const routeProvider = dependencies.routeProvider ?? routingProviders.routeProvider;
   const app = express();
   const logisticsModel = mlConfig.enabled ? mlModel : null;
   app.disable("x-powered-by");

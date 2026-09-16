@@ -1,11 +1,13 @@
 import type { RequestHandler } from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { UserRole } from "../src/auth/authenticator.js";
 import type { DeliveryQuoteStore } from "../src/delivery-quotes/delivery-quote.service.js";
 import type { DistanceProvider } from "../src/delivery-quotes/distance-provider.js";
 import type { LogisticsModel } from "../src/ml/logistics-model.js";
+import { GoogleRoutesClient, type GoogleRoutesFetch } from "../src/delivery-routing/google-routes-client.js";
+import { GoogleRoutesDistanceProvider } from "../src/delivery-routing/google-routes-providers.js";
 
 const customerId = "00000000-0000-0000-0000-000000000001";
 const otherCustomerId = "00000000-0000-0000-0000-000000000002";
@@ -123,6 +125,53 @@ describe("POST /api/v1/delivery-quotes", () => {
   });
   it("uses ML ETA assistance when a valid prediction is available", async () => { const { store, state } = createStore(); const model: LogisticsModel = { predictDispatch: () => ({ predictedCompletionMinutes: 1, modelVersion: "test-v1" }), predictEta: () => ({ predictedCompletionMinutes: 37.2, modelVersion: "test-v1" }) }; const response = await request(createApp({ store, authenticate, deliveryQuoteConfig: config, distanceProvider: { calculate: async () => ({ distanceKm: 3.4567, durationMinutes: 20 }) }, mlModel: model, now: () => now })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody); expect(response.status).toBe(201); expect(response.body.data).toMatchObject({ estimatedDurationMinutes: 38, etaAssistance: { mode: "ML_ASSISTED", modelVersion: "test-v1", deterministicMinutes: 20, predictedMinutes: 38 } }); expect(state.creates[0].data.estimatedDurationMinutes).toBe(38); });
   it("falls back to provider ETA when ML prediction fails", async () => { const { store } = createStore(); const model: LogisticsModel = { predictDispatch: () => { throw new Error("offline"); }, predictEta: () => { throw new Error("offline"); } }; const response = await request(createApp({ store, authenticate, deliveryQuoteConfig: config, distanceProvider: { calculate: async () => ({ distanceKm: 3.4567, durationMinutes: 25 }) }, mlModel: model, now: () => now })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody); expect(response.status).toBe(201); expect(response.body.data).toMatchObject({ estimatedDurationMinutes: 25, etaAssistance: { mode: "DETERMINISTIC_FALLBACK", modelVersion: null, deterministicMinutes: 25, predictedMinutes: null } }); });
+
+  it("uses Google road distance and duration as the deterministic quote baseline", async () => {
+    const { store, state } = createStore();
+    const googleFetch = vi.fn(async () => new Response(JSON.stringify({ routes: [{ distanceMeters: 12_345, duration: "965.1s" }] }), { status: 200 })) as unknown as GoogleRoutesFetch;
+    const distanceProvider = new GoogleRoutesDistanceProvider(new GoogleRoutesClient("test-key", 1_000, googleFetch));
+    const response = await request(app(store, authenticate, distanceProvider)).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody);
+    expect(response.status).toBe(201);
+    expect(response.body.data).toMatchObject({
+      distanceKm: 12.35,
+      distanceFee: "98.76",
+      finalDeliveryFee: "138.76",
+      estimatedDurationMinutes: 17,
+      etaAssistance: { mode: "DETERMINISTIC_FALLBACK", deterministicMinutes: 17, predictedMinutes: null },
+    });
+    expect(state.creates[0].data).toMatchObject({ distanceKm: 12.345, estimatedDurationMinutes: 17 });
+  });
+
+  it("keeps ML assistance layered over the Google route-duration baseline", async () => {
+    const { store } = createStore();
+    const googleFetch = vi.fn(async () => new Response(JSON.stringify({ routes: [{ distanceMeters: 3_500, duration: "900s" }] }), { status: 200 })) as unknown as GoogleRoutesFetch;
+    const distanceProvider = new GoogleRoutesDistanceProvider(new GoogleRoutesClient("test-key", 1_000, googleFetch));
+    const model: LogisticsModel = { predictDispatch: () => ({ predictedCompletionMinutes: 1, modelVersion: "test-v2" }), predictEta: () => ({ predictedCompletionMinutes: 21.2, modelVersion: "test-v2" }) };
+    const response = await request(createApp({ store, authenticate, deliveryQuoteConfig: config, distanceProvider, mlModel: model, now: () => now })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody);
+    expect(response.status).toBe(201);
+    expect(response.body.data).toMatchObject({
+      estimatedDurationMinutes: 22,
+      etaAssistance: { mode: "ML_ASSISTED", modelVersion: "test-v2", deterministicMinutes: 15, predictedMinutes: 22 },
+    });
+  });
+
+  it("falls back to Haversine and assumed-speed ETA when Google fails", async () => {
+    const { store } = createStore();
+    const googleFetch = vi.fn(async () => { throw new Error("network down"); }) as unknown as GoogleRoutesFetch;
+    const response = await request(createApp({
+      store,
+      authenticate,
+      deliveryQuoteConfig: config,
+      googleRoutesConfig: { enabled: true, apiKey: "test-key", timeoutMs: 1_000 },
+      googleRoutesFetch: googleFetch,
+      mlModel: null,
+      now: () => now,
+    })).post("/api/v1/delivery-quotes").set("Authorization", "Bearer customer").send(validBody);
+    expect(response.status).toBe(201);
+    expect(response.body.data.distanceKm).toBeGreaterThan(0);
+    expect(response.body.data.estimatedDurationMinutes).toBe(response.body.data.etaAssistance.deterministicMinutes);
+    expect(response.body.data.etaAssistance.mode).toBe("DETERMINISTIC_FALLBACK");
+  });
 
   it("rejects unauthenticated access", async () => {
     const response = await request(app(createStore().store)).post("/api/v1/delivery-quotes").send(validBody);

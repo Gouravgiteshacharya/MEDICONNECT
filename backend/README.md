@@ -18,12 +18,24 @@ Both values must be finite, non-negative numbers. Location timestamps always com
 Delivery quotes use the transparent formula `base fee + distance fee + demand adjustment`. These defaults are conservative prototype assumptions, not finalized production pricing:
 
 - `DELIVERY_BASE_FEE_RUPEES` defaults to `40.00`.
-- `DELIVERY_FEE_PER_KM_RUPEES` defaults to `8.00` per straight-line kilometre.
+- `DELIVERY_FEE_PER_KM_RUPEES` defaults to `8.00` per routed kilometre when Google Routes is available, or per straight-line kilometre during fallback.
 - `DELIVERY_QUOTE_EXPIRY_MINUTES` defaults to `15`.
 
 Rupee configuration accepts non-negative values with at most two decimal places; quote expiry must be positive. Invalid values prevent application creation/startup. Pricing is calculated in integer paise and persisted as fixed two-decimal strings compatible with Prisma Decimal columns.
 
-Distance currently uses the Haversine fallback between the eligible pharmacy and customer-owned address coordinates. This is a straight-line estimate, not road distance. When the provider supplies no duration, the quoted ETA uses the configured deterministic fallback speed. The injected distance-provider interface allows a later routing provider without changing `POST /api/v1/delivery-quotes`. No `.env.example` exists, so configuration is documented here without modifying the real `.env`.
+When Google Routes is enabled and configured, delivery quotes use its traffic-aware road distance and duration. The quote service continues to own eligibility, pricing, persistence, expiry, and ETA orchestration. When Google is disabled, lacks a key, times out, is rate-limited, returns an error, or returns malformed route data, the provider composition falls back to Haversine distance. If the fallback has no duration, the quoted ETA uses the configured deterministic fallback speed. No `.env.example` exists, so configuration is documented here without modifying the real `.env`.
+
+## Google Routes integration
+
+Google Maps Platform Routes API access is isolated behind the existing `DistanceProvider` and `RouteProvider` interfaces. The server calls `computeRoutes` with `DRIVE`, `TRAFFIC_AWARE`, and the minimal `routes.distanceMeters,routes.duration` field mask. The response is converted to kilometres and conservatively rounded-up minutes inside the provider layer; raw Google responses and errors do not cross that boundary.
+
+- `GOOGLE_ROUTES_ENABLED` defaults to `false` and must be exactly `true` or `false`.
+- `GOOGLE_MAPS_API_KEY` is required to select Google providers when routing is enabled. A missing or blank key keeps the application on deterministic Haversine providers.
+- `GOOGLE_ROUTES_TIMEOUT_MS` defaults to `5000` and accepts an integer from `1` through `60000`.
+
+The API key is server-only: never use it in frontend environment variables, API responses, logs, or committed fixtures. Local development and automated tests do not require Google access. Tests inject a mocked HTTP boundary and never call the live API.
+
+For delivery quotes, Google route duration becomes the deterministic ETA baseline. A valid Intelligence-owned ML prediction may still assist that baseline; disabled, unavailable, invalid, or failing ML returns to Google duration, and a Google failure returns to Haversine plus assumed-speed ETA. No route geometry or polyline is requested, exposed, or persisted in this phase.
 
 ## Dynamic delivery pricing
 
@@ -59,7 +71,7 @@ Rider-owned lifecycle actions are exposed under `/api/v1/delivery-lifecycle/:ass
 
 `POST /api/v1/delivery-batches/:batchId/optimize` is the admin/internal optimization trigger. It exhaustively evaluates the manageable stop permutations in a current batch, preserves pickup-before-drop-off ordering, keeps an in-progress stop first, rejects routes outside quoted ETA plus configured slack, and persists positive unique stop sequences with estimated arrival times. `GET /api/v1/delivery-batches/:batchId/route/me` returns the saved route only to its owning rider; the rider dashboard also exposes the active sequence.
 
-The injected route-provider boundary is called before any write transaction. The default provider uses Haversine distance and `ROUTE_ASSUMED_SPEED_KMH=20`; it is a deterministic fallback, not road routing or traffic-aware navigation. `ROUTE_MAX_LATE_MINUTES` defaults to `5`, and `ROUTE_MAX_STOPS` defaults to `6` with a hard safety limit of eight. A production mapping provider can replace the fallback without changing route contracts. No schema migration is required because `DeliveryStop.sequence` and `estimatedArrivalAt` already exist.
+The injected route-provider boundary is called before any write transaction. When enabled and configured, Google supplies road distance and traffic-aware duration for each directed leg while the MediConnect optimizer remains authoritative over stop ordering and pickup-before-drop-off constraints. Repeated legs are cached only for the lifetime of one optimization request to limit provider calls. Haversine distance with `ROUTE_ASSUMED_SPEED_KMH=20` remains the deterministic fallback. `ROUTE_MAX_LATE_MINUTES` defaults to `5`, and `ROUTE_MAX_STOPS` defaults to `6` with a hard safety limit of eight. No schema migration is required because `DeliveryStop.sequence` and `estimatedArrivalAt` already exist.
 
 ## ML-assisted logistics
 
