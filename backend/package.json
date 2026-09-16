@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prisma:generate": "prisma generate",
-    "seed:discovery": "tsx src/dev/seedDiscovery.ts"
+    "seed:discovery": "tsx src/dev/seedDiscovery.ts",
+    "provision:staging-accounts": "tsx src/dev/provisionStagingAccounts.ts"
   },
   "keywords": [],
   "author": "",

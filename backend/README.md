@@ -6,6 +6,55 @@ No shared authentication implementation exists in this repository. `src/auth/aut
 
 Use `npm run prisma:generate`, `npm run build`, and `npm test` for validation.
 
+## Staging privileged test accounts
+
+Privileged role accounts are not available through public registration. The public
+`POST /api/v1/auth/register` flow remains customer-only.
+
+For staging/dev QA only, a guarded provisioning script can create or reconcile
+one account for each privileged role: `ADMIN`, `PHARMACY_STAFF`, and
+`DELIVERY_PARTNER`. The script refuses to run unless all safety requirements are
+met:
+
+- `ALLOW_STAGING_PROVISION=true`
+- `NODE_ENV` must not be `production`
+- required account credentials must be supplied through environment variables
+
+Required variables:
+
+```text
+STAGING_ADMIN_EMAIL
+STAGING_ADMIN_PASSWORD
+STAGING_PHARMACY_EMAIL
+STAGING_PHARMACY_PASSWORD
+STAGING_RIDER_EMAIL
+STAGING_RIDER_PASSWORD
+STAGING_PHARMACY_ID
+STAGING_RIDER_VEHICLE_TYPE
+```
+
+Optional display-name variables:
+
+```text
+STAGING_ADMIN_NAME
+STAGING_PHARMACY_NAME
+STAGING_RIDER_NAME
+```
+
+`STAGING_PHARMACY_ID` must point to an existing active pharmacy. Pharmacy staff
+membership is provisioned with `PharmacyStaffRole.OWNER`. Rider profiles are
+created with `availability=OFFLINE`; `STAGING_RIDER_VEHICLE_TYPE` must be a real
+schema `VehicleType` value such as `BIKE`, `SCOOTER`, `CAR`, `BICYCLE`, or
+`WALKER`.
+
+Run only against a confirmed staging/dev database:
+
+```bash
+npm run provision:staging-accounts
+```
+
+Do not commit real credentials, database URLs, or generated secrets.
+
 ## Rider location configuration
 
 - `RIDER_LOCATION_SAMPLE_INTERVAL_SECONDS` controls the minimum interval between persisted `LocationUpdate` history samples. It defaults to `15` seconds. Every accepted request still updates the rider's current coordinates and `lastLocationAt`.
