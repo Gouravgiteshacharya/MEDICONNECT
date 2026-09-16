@@ -71,8 +71,8 @@ export default function CustomerAuthModal({
         password: '',
       })
 
-      onAuthenticated?.(user)
       onClose()
+      onAuthenticated?.(user, { mode })
     } catch (requestError) {
       setError(
         requestError?.message ||
@@ -109,7 +109,7 @@ export default function CustomerAuthModal({
             <span>MEDICONNECT</span>
             <h2>
               {mode === 'login'
-                ? 'Continue to your cart.'
+                ? 'Sign in to your workspace.'
                 : 'Create your account.'}
             </h2>
           </div>
@@ -126,7 +126,7 @@ export default function CustomerAuthModal({
 
         <p className="customer-auth-copy">
           {mode === 'login'
-            ? 'Sign in to add medicines and continue your order.'
+            ? 'Use one MediConnect login for customer, pharmacy, rider, or operations access.'
             : 'Create an account to order from nearby pharmacies.'}
         </p>
 

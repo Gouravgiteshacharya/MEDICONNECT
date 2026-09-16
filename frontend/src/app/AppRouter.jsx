@@ -1,4 +1,10 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
 
 import LandingExperience from '../App'
 import AdminBlockedPage from '../features/admin/AdminBlockedPage'
@@ -32,16 +38,63 @@ import PharmacyPrescriptionReview from '../features/pharmacy/PharmacyPrescriptio
 import PharmacyPrescriptions from '../features/pharmacy/PharmacyPrescriptions'
 import PharmacyProfile from '../features/pharmacy/PharmacyProfile'
 import PharmacyShell from '../features/pharmacy/PharmacyShell'
-import { AuthProvider } from '../context/AuthContext'
+import { AuthProvider, useAuth } from '../context/AuthContext'
 import RiderApp from '../features/rider/RiderApp'
+import {
+  getRoleHome,
+  isRoleAllowed,
+  USER_ROLES,
+} from './roleRouting'
 
-export default function AppRouter() {
+function AuthLoadingState() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
+    <main className="route-auth-loading" aria-busy="true">
+      <span>M</span>
+      <strong>Opening MediConnect...</strong>
+    </main>
+  )
+}
+
+function ProtectedRoute({ allowedRoles, children }) {
+  const { authenticated, initializing, user } = useAuth()
+  const location = useLocation()
+
+  if (initializing) {
+    return <AuthLoadingState />
+  }
+
+  if (!authenticated) {
+    const next = `${location.pathname}${location.search}`
+    return (
+      <Navigate
+        to={`/?auth=login&next=${encodeURIComponent(next)}`}
+        replace
+      />
+    )
+  }
+
+  if (!isRoleAllowed(user?.role, allowedRoles)) {
+    return <Navigate to={getRoleHome(user?.role)} replace />
+  }
+
+  return children
+}
+
+function AnimatedRoutes() {
+  const location = useLocation()
+
+  return (
+    <div className="route-transition-shell" key={location.pathname}>
+      <Routes location={location}>
           <Route path="/" element={<LandingExperience />} />
-          <Route path="/app" element={<CustomerShell />}>
+          <Route
+            path="/app"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                <CustomerShell />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<CustomerApp />} />
             <Route path="search" element={<CustomerSearch />} />
             <Route path="results" element={<CustomerPharmacyResults />} />
@@ -64,7 +117,14 @@ export default function AppRouter() {
             />
             <Route path="profile" element={<CustomerProfile />} />
           </Route>
-          <Route path="/pharmacy" element={<PharmacyShell />}>
+          <Route
+            path="/pharmacy"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.PHARMACY_STAFF]}>
+                <PharmacyShell />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<PharmacyDashboard />} />
             <Route path="inventory" element={<PharmacyInventory />} />
             <Route path="medicines" element={<PharmacyCatalogue />} />
@@ -77,7 +137,14 @@ export default function AppRouter() {
             />
             <Route path="profile" element={<PharmacyProfile />} />
           </Route>
-          <Route path="/admin" element={<AdminShell />}>
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]}>
+                <AdminShell />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<AdminOverview />} />
             <Route
               path="pharmacies"
@@ -113,8 +180,24 @@ export default function AppRouter() {
               element={<AdminBlockedPage type="metrics" />}
             />
           </Route>
-          <Route path="/rider" element={<RiderApp />} />
+          <Route
+            path="/rider"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.DELIVERY_PARTNER]}>
+                <RiderApp />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
+    </div>
+  )
+}
+
+export default function AppRouter() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AnimatedRoutes />
       </AuthProvider>
     </BrowserRouter>
   )

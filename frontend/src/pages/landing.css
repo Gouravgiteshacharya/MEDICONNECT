@@ -28,6 +28,12 @@
     radial-gradient(circle at 8% 2%, rgba(207, 220, 255, 0.32), transparent 26%),
     var(--mc-bg);
   color: var(--mc-ink);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.mc-landing-leaving {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .mc-landing button {
@@ -294,6 +300,33 @@
   border-radius: 999px;
   padding: 6px 10px;
   cursor: pointer;
+}
+
+.mc-role-entry {
+  margin-top: 18px;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.mc-role-entry button {
+  padding: 7px 11px;
+
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.mc-role-entry button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
 }
 
 .mc-hero-demo {
@@ -10007,4 +10040,3 @@
     margin-top: 18px !important;
   }
 }
-

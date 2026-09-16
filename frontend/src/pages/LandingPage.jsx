@@ -48,6 +48,7 @@ function LandingPage({
   openAuth,
   openSearch,
   openApp,
+  leaving = false,
 }) {
   const [fulfilmentPreview, setFulfilmentPreview] = useState('delivery')
   const [audience, setAudience] = useState('customers')
@@ -179,7 +180,11 @@ function LandingPage({
 
 
   return (
-    <div className={`mc-landing audience-${audience}`}>
+    <div
+      className={`mc-landing audience-${audience} ${
+        leaving ? 'mc-landing-leaving' : ''
+      }`}
+    >
       <header className="mc-nav">
         <button
           className="mc-brand"
@@ -259,6 +264,10 @@ function LandingPage({
                 Hi, {user?.name?.split(' ')[0]}
               </span>
 
+              <button className="mc-login" type="button" onClick={openApp}>
+                Open workspace
+              </button>
+
               <button className="mc-login" type="button" onClick={logout}>
                 Log out
               </button>
@@ -326,6 +335,25 @@ function LandingPage({
                 </button>
               ))}
             </div>
+
+            {!authenticated && (
+              <div className="mc-role-entry" aria-label="Workspace sign in">
+                {[
+                  'Customer login',
+                  'Pharmacy staff login',
+                  'Rider login',
+                  'Admin login',
+                ].map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => openAuth('login')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="mc-mobile-hero-preview">

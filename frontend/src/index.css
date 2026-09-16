@@ -29,3 +29,68 @@ input {
 #root {
   min-height: 100vh;
 }
+
+.route-transition-shell {
+  min-height: 100vh;
+  animation: route-fade-in 220ms ease both;
+}
+
+.route-auth-loading {
+  min-height: 100dvh;
+  margin: 0;
+  padding: 24px;
+
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+
+  background: #f3f5f8;
+  color: #1f2c5c;
+}
+
+.route-auth-loading span {
+  width: 50px;
+  height: 50px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 16px;
+
+  background: #29396f;
+  color: #fff;
+
+  font-weight: 900;
+}
+
+.route-auth-loading strong {
+  font-size: 13px;
+}
+
+@keyframes route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
