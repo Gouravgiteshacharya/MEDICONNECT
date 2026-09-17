@@ -1,4 +1,5 @@
 import type { Prisma } from "../../generated/prisma/client.js";
+import type { AdminOrderListQuery } from "../validators/admin.schemas.js";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { classifyInventoryFreshness, INVENTORY_FRESHNESS_THRESHOLD_MS } from "../utils/inventoryFreshness.js";
@@ -79,4 +80,64 @@ export async function listAdminInventory(query: AdminInventoryListQuery) {
     })),
     nextCursor,
   };
+}
+
+const orderSummarySelect = {
+  id: true, orderNumber: true, pharmacyId: true, status: true, fulfillmentMethod: true,
+  medicineSubtotal: true, deliveryFee: true, totalAmount: true,
+  placedAt: true, confirmedAt: true, completedAt: true, cancelledAt: true,
+  pharmacy: { select: { id: true, name: true } },
+} satisfies Prisma.OrderSelect;
+const orderDetailSelect = {
+  ...orderSummarySelect,
+  createdAt: true, updatedAt: true,
+  customer: { select: { id: true, name: true, email: true, phone: true } },
+  items: {
+    select: {
+      id: true, medicineId: true, medicineNameSnapshot: true, brandNameSnapshot: true,
+      manufacturerSnapshot: true, requiresPrescription: true, quantity: true,
+      unitPrice: true, lineTotal: true,
+    },
+    orderBy: { id: "asc" },
+  },
+  prescriptions: {
+    select: {
+      id: true, status: true, uploadedAt: true, reviewedAt: true,
+      reviewNotes: true, rejectionReason: true, supersedesPrescriptionId: true,
+      supersededByPrescription: { select: { id: true } },
+    },
+    orderBy: [{ uploadedAt: "asc" }, { id: "asc" }],
+  },
+} satisfies Prisma.OrderSelect;
+
+export async function listAdminOrders(query: AdminOrderListQuery) {
+  const { limit, cursor, requiresPrescription, prescriptionStatus, ...filters } = query;
+  const records = await prisma.order.findMany({
+    where: {
+      ...filters,
+      ...(requiresPrescription === undefined ? {} : {
+        items: requiresPrescription
+          ? { some: { requiresPrescription: true } }
+          : { none: { requiresPrescription: true } },
+      }),
+      ...(prescriptionStatus === undefined ? {} : {
+        prescriptions: { some: { status: prescriptionStatus, supersededByPrescription: null } },
+      }),
+    },
+    select: { ...orderSummarySelect, _count: { select: { items: true } } },
+    orderBy: [{ placedAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    ...(cursor === undefined ? {} : { cursor: { id: cursor }, skip: 1 }),
+  });
+  const { page, nextCursor } = pageOf(records, limit);
+  return {
+    orders: page.map(({ _count, ...order }) => ({ ...order, itemCount: _count.items })),
+    nextCursor,
+  };
+}
+
+export async function getAdminOrder(orderId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, select: orderDetailSelect });
+  if (!order) throw new ApiError(404, "Order not found.", "ORDER_NOT_FOUND");
+  return order;
 }
