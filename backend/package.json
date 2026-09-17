@@ -11,7 +11,11 @@
     "test": "vitest run",
     "prisma:generate": "prisma generate",
     "seed:discovery": "tsx src/dev/seedDiscovery.ts",
-    "provision:staging-accounts": "tsx src/dev/provisionStagingAccounts.ts"
+    "provision:staging-accounts": "tsx src/dev/provisionStagingAccounts.ts",
+    "demo:generate": "node --import tsx src/dev/demo-data/generateDemoData.ts",
+    "demo:validate": "node --import tsx src/dev/demo-data/validateDemoData.ts",
+    "demo:seed": "node --import tsx src/dev/demo-data/seedDemoData.ts",
+    "test:demo-data": "vitest run tests/demo-data.test.ts"
   },
   "keywords": [],
   "author": "",
