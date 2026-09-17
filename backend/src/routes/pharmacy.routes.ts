@@ -2,6 +2,7 @@ import { UserRole } from "../../generated/prisma/client.js";
 import { Router } from "express";
 
 import {
+  getMyPharmacies,
   getOperationalProfile,
   getPublicProfile,
   updateOperationalProfile,
@@ -42,6 +43,13 @@ import {
 } from "../validators/pharmacyWorkflow.schemas.js";
 
 export const pharmacyRoutes = Router();
+
+pharmacyRoutes.get(
+  "/me",
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  getMyPharmacies,
+);
 
 const inventoryAccess = [
   authenticate,
