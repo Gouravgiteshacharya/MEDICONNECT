@@ -78,3 +78,19 @@ The injected route-provider boundary is called before any write transaction. Whe
 Milestone 12 adds an injectable prediction boundary to ETA estimation and eligible-rider ranking. Delivery owns the feature contract, orchestration, output guardrails, and deterministic fallback; Intelligence & Experience owns model training, implementation, evaluation, and inference. No trained model or training code is bundled in Delivery. Until an Intelligence-owned predictor is injected, deterministic eligibility and ranking remain authoritative. Invalid predictions, disabled inference, or model exceptions immediately use deterministic dispatch ranking and the routing-provider ETA. Dispatch responses report `ML_ASSISTED` or `DETERMINISTIC_FALLBACK`; audited dispatch attempts store accepted predicted completion time as suitability and retain the deterministic score as route compatibility. Quote responses report the ETA source, model version, baseline, and prediction.
 
 `ML_LOGISTICS_ENABLED` defaults to `true`. `ML_MAX_PREDICTION_MINUTES` defaults to `240` and rejects implausible output. `ML_FALLBACK_SPEED_KMH` defaults to `20` and supplies an explainable baseline when the Haversine distance provider has no duration. `ML_TIMEZONE_OFFSET_MINUTES` defaults to `330` (India Standard Time) for the peak-hour feature. The local inference boundary is synchronous and performs no network I/O.
+
+### Browser origins (CORS)
+
+Set `CORS_ALLOWED_ORIGINS` to a comma-separated list of exact browser origins,
+for example `https://app.example.com,https://admin.example.com` (no trailing
+slash or path). Whitespace and empty entries are ignored. Wildcards are not
+supported. Restart the backend after changing configuration.
+
+In production, only configured origins receive CORS permission. A missing or
+empty list grants no browser origins permission and does not prevent startup.
+Requests without an Origin header continue normally. Credentials remain disabled.
+
+Outside production, HTTP/HTTPS origins on `localhost` or `127.0.0.1` (including
+local development ports such as 5173) are also allowed. Other external origins
+must be explicitly configured. CORS controls browser response access; it does
+not replace endpoint authentication or authorization.
