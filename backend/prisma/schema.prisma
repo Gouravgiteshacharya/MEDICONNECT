@@ -365,6 +365,7 @@ model DeliveryAssignment {
   deliveryEvents   DeliveryEvent[]
   stops            DeliveryStop[]
   locationUpdates  LocationUpdate[]
+  observation      DeliveryObservation?
 
   @@index([orderId, status])
   @@index([riderId, status])
@@ -826,4 +827,50 @@ enum OperationalRiskResolutionPolicy {
   AUTO_RESOLVABLE
   MANUAL_RESOLUTION
   HISTORICAL_EVENT_ONLY
+}
+
+// Prospective operational assurance. SQL migration supplies enforcement/functions.
+model ObservationEpoch {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contractVersion String
+  activatedAt     DateTime @db.Timestamp(3)
+  attestationId   String @db.Uuid
+  closedAt        DateTime? @db.Timestamp(3)
+  observations    DeliveryObservation[]
+  invalidations   ObservationInvalidation[]
+}
+
+model DeliveryObservation {
+  id                 String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assignmentId       String @unique @db.Uuid
+  orderId            String @db.Uuid
+  epochId            String @db.Uuid
+  startedAt          DateTime @db.Timestamp(3)
+  horizonAt          DateTime @db.Timestamp(3)
+  lastSerializedAt   DateTime @db.Timestamp(3)
+  writerTransaction  BigInt
+  writerAction       String
+  revision           Int @default(0)
+  acceptanceEventId  String? @db.Uuid
+  terminalEventId    String? @db.Uuid
+  terminalKind       String?
+  terminalAt         DateTime? @db.Timestamp(3)
+  coveredThrough     DateTime? @db.Timestamp(3)
+  certifiedAt        DateTime? @db.Timestamp(3)
+  assignment         DeliveryAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  epoch              ObservationEpoch @relation(fields: [epochId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([epochId], map: "DeliveryObservation_epochId")
+  @@index([orderId], map: "DeliveryObservation_orderId")
+}
+
+model ObservationInvalidation {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  epochId       String @db.Uuid
+  recordedAt    DateTime @db.Timestamp(3)
+  reason        String
+  attestationId String @db.Uuid
+  epoch         ObservationEpoch @relation(fields: [epochId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([epochId, attestationId])
 }

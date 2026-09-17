@@ -1,10 +1,11 @@
 import { runRiskHook, type RiskHooks } from "../risk/risk.hooks.js";
+import { observationTime, type ObservationTransaction } from "../observation-assurance/observation.store.js";
 import { ApiError } from "../utils/ApiError.js";
 
 interface Result { count: number; }
 interface Rider { id: string; userId: string; isActive: boolean; user: { isActive: boolean }; }
 interface Assignment { id: string; orderId: string; riderId: string; batchId: string | null; status: string; pickedUpAt: Date | null; deliveredAt: Date | null; order: { id: string; status: string; fulfillmentMethod: string }; }
-export interface LifecycleStore {
+export interface LifecycleStore extends ObservationTransaction {
   deliveryPartner: { findUnique(args: unknown): Promise<Rider | null>; updateMany(args: unknown): Promise<Result>; };
   deliveryAssignment: { findFirst(args: unknown): Promise<Assignment | null>; updateMany(args: unknown): Promise<Result>; count(args: unknown): Promise<number>; };
   order: { updateMany(args: unknown): Promise<Result>; };
@@ -60,8 +61,9 @@ async function releaseRiderIfFinished(tx: LifecycleStore, riderId: string, assig
 }
 
 export async function transitionLifecycle(store: LifecycleStore, userId: string, assignmentId: string, action: LifecycleAction, options: LifecycleOptions) {
-  const now = getNow(options);
+  const legacyNow = getNow(options);
   return serializable(store, async (tx) => {
+    let now = legacyNow;
     const { rider, assignment } = await context(tx, userId, assignmentId);
     if (action === "ARRIVE_PHARMACY") {
       if (assignment.status !== "ACCEPTED" || assignment.order.status !== "RIDER_ASSIGNED") throw new ApiError(409, "Arrival is not actionable", "LIFECYCLE_NOT_ACTIONABLE");
@@ -72,6 +74,7 @@ export async function transitionLifecycle(store: LifecycleStore, userId: string,
     const rule = rules[action];
     if (assignment.status === rule.toAssignment && assignment.order.status === rule.toOrder) return safe(assignment);
     if (assignment.status !== rule.fromAssignment || assignment.order.status !== rule.fromOrder) throw new ApiError(409, "Lifecycle transition is not actionable", "LIFECYCLE_NOT_ACTIONABLE");
+    if (action === "DELIVER") now = await observationTime(tx, assignment.id, "DELIVER", legacyNow);
     const assignmentData: Record<string, unknown> = { status: rule.toAssignment };
     if ("timestamp" in rule) assignmentData[rule.timestamp] = now;
     const orderData: Record<string, unknown> = { status: rule.toOrder };
@@ -79,9 +82,9 @@ export async function transitionLifecycle(store: LifecycleStore, userId: string,
     const aw = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: rule.fromAssignment }, data: assignmentData });
     const ow = await tx.order.updateMany({ where: { id: assignment.orderId, status: rule.fromOrder, fulfillmentMethod: "DELIVERY" }, data: orderData });
     if (aw.count !== 1 || ow.count !== 1) throw new ApiError(409, "Lifecycle changed concurrently", "LIFECYCLE_CONFLICT");
-    await updateBatchStop(tx, assignment, action, now);
+    await updateBatchStop(tx, assignment, action, legacyNow);
     if (action === "DELIVER") {
-      await releaseRiderIfFinished(tx, rider.id, assignment, now);
+      await releaseRiderIfFinished(tx, rider.id, assignment, legacyNow);
     }
     await tx.deliveryEvent.create({ data: { orderId: assignment.orderId, assignmentId, riderId: rider.id, eventType: rule.eventType, occurredAt: now } });
     return safe({ ...assignment, status: rule.toAssignment, pickedUpAt: action === "PICKUP" ? now : assignment.pickedUpAt, deliveredAt: action === "DELIVER" ? now : assignment.deliveredAt, order: { ...assignment.order, status: rule.toOrder } });
@@ -89,17 +92,18 @@ export async function transitionLifecycle(store: LifecycleStore, userId: string,
 }
 
 export async function failDelivery(store: LifecycleStore, userId: string, assignmentId: string, reason: string, options: LifecycleOptions) {
-  const now = getNow(options);
+  const legacyNow = getNow(options);
   const outcome = await serializable(store, async (tx) => {
     const { rider, assignment } = await context(tx, userId, assignmentId);
     if (!(["ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"] as string[]).includes(assignment.status)) {
       if (assignment.status === "FAILED") return { response: safe(assignment, true), failure: null };
       throw new ApiError(409, "Failed-delivery transition is not actionable", "LIFECYCLE_NOT_ACTIONABLE");
     }
+    const now = await observationTime(tx, assignment.id, "FAIL", legacyNow);
     const write = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: assignment.status }, data: { status: "FAILED" } });
     if (write.count !== 1) throw new ApiError(409, "Lifecycle changed concurrently", "LIFECYCLE_CONFLICT");
     if (assignment.batchId) await tx.deliveryStop.updateMany({ where: { batchId: assignment.batchId, assignmentId: assignment.id, status: { in: ["PENDING", "EN_ROUTE", "ARRIVED"] } }, data: { status: "CANCELLED" } });
-    await releaseRiderIfFinished(tx, rider.id, assignment, now);
+    await releaseRiderIfFinished(tx, rider.id, assignment, legacyNow);
     const event = await tx.deliveryEvent.create({ data: { orderId: assignment.orderId, assignmentId, riderId: rider.id, eventType: "FAILED_DELIVERY", occurredAt: now, note: reason, metadata: { requiresManualReview: true, orderStatusAtFailure: assignment.order.status } } });
     return { response: safe({ ...assignment, status: "FAILED" }, true), failure: { assignmentId: assignment.id, orderId: assignment.orderId, assignmentStatus: "FAILED", evaluatedAt: now, failureEvent: { id: typeof event === "object" && event !== null && "id" in event && typeof event.id === "string" ? event.id : "", eventType: "FAILED_DELIVERY", occurredAt: now, orderStatusAtFailure: assignment.order.status, requiresManualReview: true } } };
   });

@@ -156,3 +156,64 @@ ADMIN-only queue/detail and lifecycle APIs with safe evidence projections. Phase
 13E adds explicitly invoked, bounded reconciliation for missed detections and
 stale-assessment recovery. No scheduler, support tickets or ML are enabled. See
 [operational risk documentation](docs/operational-risk.md).
+
+## Phase 14A.3: prospective delivery observation assurance
+
+Apply `20260916000000_observation_assurance` before deploying the changed writers.
+This additive migration does not activate an epoch or backfill any record. It was
+not applied during implementation. Existing HTTP response shapes remain unchanged.
+
+Activation is a separate deployment operation, not startup/config inference:
+
+1. Verify the migration and concurrency/permission behavior in an isolated
+   PostgreSQL deployment before production activation. Unit tests use injected
+   stores; they do not execute PostgreSQL locks or triggers.
+2. Drain old writer transactions and deploy all participating writers. Use a
+   restricted runtime role, separate from the migration/function owner. It must
+   not own business tables, inherit the owner, be superuser/BYPASSRLS, have CREATE
+   on public, TRUNCATE on business tables, or DML/TRUNCATE on assurance tables.
+   Remove any default grants that violate these restrictions. Restrict access to
+   SECURITY DEFINER function ownership and disallow untrusted schema creation.
+3. Verify trusted database UTC clock, retention, privileged repair auditing and
+   every writer role/build; retain an external deployment attestation with a UUID.
+   The activation function validates basic permissions for the explicitly named
+   runtime role; the attestation must cover any additional writer roles.
+4. From the controlled deployment role, explicitly invoke
+   `observation_activate(attestation_uuid, runtime_role_name)` in a transaction.
+   Both arguments are required. Database time sampled at this explicit operation
+   becomes activatedAt. Reusing the attestation returns the same epoch, including
+   an already closed epoch; a new rollout requires a new attestation. Migration,
+   Git and process-start timestamps never activate anything.
+
+Completion is explicit, one assignment per transaction: call the internal
+`completeObservation(tx, assignmentId)` adapter within a SERIALIZABLE transaction,
+or the deployment/internal SQL function `observation_complete(assignment_uuid,
+'delivery-observation-v1')`. Retry an aborted serialization transaction as a whole.
+There is no scheduler or new HTTP endpoint. Result is UNSUPPORTED, INVALIDATED,
+PENDING or COMPLETE, never an ML label. Each call locks the episode and derives
+its stored horizon; caller time cannot certify it. A backlog stays uncertified.
+
+If writer guarantees, clock trust or retention fail, explicitly call
+`observation_invalidate(epoch_uuid, reason_code, attestation_uuid)` from the
+controlled deployment role. Reasons: CLOCK_UNTRUSTED, WRITER_GUARANTEE_LOST,
+RETENTION_LOST, OPERATIONAL_REPAIR. This conservatively invalidates the ENTIRE epoch
+and closes enrollment; no business events are changed/deleted. Invalidation uses
+the exclusive capability gate, while writers/completion hold the shared gate.
+Recorded time is audit time, not an inferred start of a historical fault. Consumers
+must always consult invalidations, including for previously completed records.
+A clock fault aborts the attempted transaction; invalidate in a separate explicit
+transaction before continuing uncertified operations. No automatic time clamping.
+
+Do not grant activation/invalidation execution to runtime/public roles. PUBLIC
+execution is revoked for those functions. Keep the function owner trusted and
+non-login where operationally possible. Owners/superusers remain privileged and
+must follow the audit/invalidation procedure; no schema can constrain an unaudited
+superuser. Covered event history remains immutable, including after invalidation;
+any privileged retention/repair procedure requires separate operational review.
+
+The only covered terminal writers are failDelivery and DELIVER. There is no
+supported post-accept cancellation/reassignment service. Such mutations cannot
+silently remain assured: database guards reject them until explicit invalidation.
+Do not introduce a censoring product workflow via these functions. See the Phase
+14A.3 section of [the assurance record](docs/operational-risk-ml-feasibility.md)
+for timestamp scope, legacy behavior, test limits and outstanding production gates.

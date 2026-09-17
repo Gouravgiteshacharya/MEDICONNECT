@@ -1,4 +1,5 @@
 import { runRiskHook, type RiskHooks } from "../risk/risk.hooks.js";
+import { observationTime, type ObservationTransaction } from "../observation-assurance/observation.store.js";
 import type { AssignmentTimeoutFacts } from "../risk/risk.rules.js";
 import { ApiError } from "../utils/ApiError.js";
 import { classifyLocationFreshness } from "../location/freshness.js";
@@ -17,7 +18,7 @@ interface Assignment {
 }
 interface WriteResult { count: number; }
 
-export interface AssignmentStore {
+export interface AssignmentStore extends ObservationTransaction {
   deliveryPartner: {
     findUnique(args: unknown): Promise<Rider | null>;
     updateMany(args: unknown): Promise<WriteResult>;
@@ -149,20 +150,23 @@ export async function acceptAssignmentOffer(store: AssignmentStore, userId: stri
     if (assignment.order.fulfillmentMethod !== "DELIVERY" || assignment.order.status !== "READY_FOR_PICKUP") throw new ApiError(409, "Order is not eligible for assignment", "ORDER_NOT_ELIGIBLE");
     const competing = await tx.deliveryAssignment.findFirst({ where: { orderId: assignment.orderId, id: { not: assignment.id }, status: { in: ["ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY"] } }, select: { id: true } });
     if (competing) return { kind: "conflict" as const };
-    const assignmentWrite = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "ACCEPTED", acceptedAt: now } });
+    // Keep offer eligibility on its existing invocation clock. Only the accepted
+    // fact receives the prospective serialized clock; retries reacquire/resample.
+    const acceptedAt = await observationTime(tx, assignment.id, "ACCEPT", now);
+    const assignmentWrite = await tx.deliveryAssignment.updateMany({ where: { id: assignment.id, riderId: rider.id, status: "OFFERED" }, data: { status: "ACCEPTED", acceptedAt } });
     const orderWrite = await tx.order.updateMany({ where: { id: assignment.orderId, status: "READY_FOR_PICKUP", fulfillmentMethod: "DELIVERY" }, data: { status: "RIDER_ASSIGNED" } });
     const riderWrite = batchedBusyAcceptance ? { count: 1 } : await tx.deliveryPartner.updateMany({ where: { id: rider.id, availability: "AVAILABLE", isActive: true, user: { isActive: true } }, data: { availability: "BUSY" } });
     if (assignmentWrite.count !== 1 || orderWrite.count !== 1 || riderWrite.count !== 1) throw new ApiError(409, "Assignment acceptance conflicted with another update", "ASSIGNMENT_ACCEPTANCE_CONFLICT");
     await tx.deliveryEvent.createMany({ data: [
-      { orderId: assignment.orderId, assignmentId: assignment.id, riderId: rider.id, eventType: "RIDER_ASSIGNED", occurredAt: now },
-      { orderId: assignment.orderId, assignmentId: assignment.id, riderId: rider.id, eventType: "RIDER_ACCEPTED", occurredAt: now },
+      { orderId: assignment.orderId, assignmentId: assignment.id, riderId: rider.id, eventType: "RIDER_ASSIGNED", occurredAt: acceptedAt },
+      { orderId: assignment.orderId, assignmentId: assignment.id, riderId: rider.id, eventType: "RIDER_ACCEPTED", occurredAt: acceptedAt },
     ] });
     await tx.dispatchAttempt?.updateMany({ where: { assignmentId: assignment.id, status: "OFFERED" }, data: { status: "ACCEPTED" } });
     if (assignment.batchId) {
       const batchWrite = await tx.deliveryBatch?.updateMany({ where: { id: assignment.batchId, riderId: rider.id, status: "PLANNED" }, data: { status: "ACTIVE", startedAt: now } });
       if (batchWrite && batchWrite.count !== 1) throw new ApiError(409, "Batch changed concurrently", "ASSIGNMENT_ACCEPTANCE_CONFLICT");
     }
-    return { kind: "accepted" as const, assignment: { ...assignment, status: "ACCEPTED", acceptedAt: now, order: { ...assignment.order, status: "RIDER_ASSIGNED" } } };
+    return { kind: "accepted" as const, assignment: { ...assignment, status: "ACCEPTED", acceptedAt, order: { ...assignment.order, status: "RIDER_ASSIGNED" } } };
   });
   if (outcome.kind === "expired") {
     if (outcome.timeout) await runRiskHook(() => options.riskHooks?.assignmentTimedOut(outcome.timeout!));
