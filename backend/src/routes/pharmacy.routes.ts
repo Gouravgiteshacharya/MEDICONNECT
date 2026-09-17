@@ -14,6 +14,8 @@ import {
   updateInventoryItem,
 } from "../controllers/inventory.controller.js";
 import { getDashboard } from "../controllers/pharmacyDashboard.controller.js";
+import { getOrder, listOrders } from "../controllers/pharmacyOrder.controller.js";
+import { pharmacyOrderListQuerySchema } from "../validators/pharmacyOrder.schemas.js";
 import {
   completeSelfPickup,
   decideOrder,
@@ -55,6 +57,22 @@ const inventoryAccess = [
   authenticate,
   authorizeRoles(UserRole.PHARMACY_STAFF),
 ] as const;
+
+pharmacyRoutes.get(
+  "/:pharmacyId/orders",
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest({ params: pharmacyParamsSchema, query: pharmacyOrderListQuerySchema }),
+  listOrders,
+);
+
+pharmacyRoutes.get(
+  "/:pharmacyId/orders/:orderId",
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest({ params: orderDecisionParamsSchema }),
+  getOrder,
+);
 
 pharmacyRoutes.patch(
   "/:pharmacyId/prescriptions/:prescriptionId/review",
