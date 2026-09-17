@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getOperationsSummary } from "../controllers/admin.controller.js";
 import { getOrder, listOrders } from "../controllers/admin.controller.js";
 import { adminOrderListSchema } from "../validators/admin.schemas.js";
 import { orderParamsSchema } from "../validators/order.schemas.js";
@@ -17,3 +18,4 @@ adminRoutes.get("/pharmacies/:pharmacyId", validateRequest({ params: pharmacyPar
 adminRoutes.get("/inventory", validateRequest({ query: adminInventoryListSchema }), listInventory);
 adminRoutes.get("/orders", validateRequest({ query: adminOrderListSchema }), listOrders);
 adminRoutes.get("/orders/:orderId", validateRequest({ params: orderParamsSchema }), getOrder);
+adminRoutes.get("/operations/summary", getOperationsSummary);

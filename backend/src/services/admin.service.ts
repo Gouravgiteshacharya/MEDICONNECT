@@ -1,4 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client.js";
+import { OrderStatus, PharmacyPartnerStatus, PrescriptionStatus } from "../../generated/prisma/client.js";
+import { LIVE_ASSIGNMENT_STATUSES } from "../delivery-assignments/assignment.service.js";
 import type { AdminOrderListQuery } from "../validators/admin.schemas.js";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -140,4 +142,25 @@ export async function getAdminOrder(orderId: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, select: orderDetailSelect });
   if (!order) throw new ApiError(404, "Order not found.", "ORDER_NOT_FOUND");
   return order;
+}
+
+export async function getAdminOperationsSummary() {
+  const cutoff = new Date(Date.now() - INVENTORY_FRESHNESS_THRESHOLD_MS);
+  const [activePharmacies, openOrders, pendingPrescriptionReviews, staleInventory, activeDeliveries] = await Promise.all([
+    prisma.pharmacy.count({ where: {
+      isActive: true, isVerified: true, partnerStatus: PharmacyPartnerStatus.ACTIVE,
+    } }),
+    prisma.order.count({ where: { status: { notIn: [
+      OrderStatus.PRESCRIPTION_REJECTED, OrderStatus.REJECTED_BY_PHARMACY,
+      OrderStatus.CANCELLED, OrderStatus.DELIVERED, OrderStatus.PICKED_UP_BY_CUSTOMER,
+    ] } } }),
+    prisma.prescription.count({ where: {
+      status: PrescriptionStatus.PENDING_REVIEW,
+      supersededByPrescription: null,
+      order: { status: OrderStatus.PRESCRIPTION_PENDING },
+    } }),
+    prisma.pharmacyInventory.count({ where: { lastUpdated: { lt: cutoff } } }),
+    prisma.deliveryAssignment.count({ where: { status: { in: [...LIVE_ASSIGNMENT_STATUSES] } } }),
+  ]);
+  return { activePharmacies, openOrders, pendingPrescriptionReviews, staleInventory, activeDeliveries };
 }
