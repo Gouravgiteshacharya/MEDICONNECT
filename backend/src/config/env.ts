@@ -13,6 +13,7 @@ const envSchema = z.object({
     .trim()
     .min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_EXPIRES_IN: z.coerce.number().int().positive().default(3600),
+  CORS_ALLOWED_ORIGINS: z.string().default(""),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -34,6 +35,7 @@ export const env = {
   directUrl: parsedEnv.data.DIRECT_URL,
   jwtSecret: parsedEnv.data.JWT_SECRET,
   jwtExpiresIn: parsedEnv.data.JWT_EXPIRES_IN,
+  corsAllowedOrigins: parsedEnv.data.CORS_ALLOWED_ORIGINS,
 } as const;
 
 export const isProduction = env.nodeEnv === "production";
