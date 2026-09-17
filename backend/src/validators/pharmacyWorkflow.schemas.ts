@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { PrescriptionStatus } from "../../generated/prisma/client.js";
+import {
+  OrderStatus,
+  PrescriptionStatus,
+} from "../../generated/prisma/client.js";
 
 import { uuidSchema } from "./common.schemas.js";
 
@@ -47,7 +50,23 @@ export const decideOrderSchema = z.discriminatedUnion("decision", [
   z.object({ decision: z.literal("REJECT") }).strict(),
 ]);
 
+export const updateOrderPreparationSchema = z
+  .object({
+    status: z.enum([
+      OrderStatus.PREPARING,
+      OrderStatus.READY_FOR_PICKUP,
+    ]),
+  })
+  .strict();
+
 export type ReviewPrescriptionInput = z.infer<
   typeof reviewPrescriptionSchema
 >;
-export type DecideOrderInput = z.infer<typeof decideOrderSchema>;
+
+export type DecideOrderInput = z.infer<
+  typeof decideOrderSchema
+>;
+
+export type UpdateOrderPreparationInput = z.infer<
+  typeof updateOrderPreparationSchema
+>;

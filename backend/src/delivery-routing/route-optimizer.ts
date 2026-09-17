@@ -39,6 +39,16 @@ export async function optimizeStops(input: {
   maxLateMinutes: number;
   provider: RouteProvider;
 }): Promise<OptimizedRoute> {
+  const legCache = new Map<string, Promise<{ distanceKm: number; durationMinutes: number }>>();
+  const estimateLeg = (origin: Coordinates, destination: Coordinates) => {
+    const key = `${origin.latitude},${origin.longitude}:${destination.latitude},${destination.longitude}`;
+    let estimate = legCache.get(key);
+    if (!estimate) {
+      estimate = input.provider.estimateLeg(origin, destination);
+      legCache.set(key, estimate);
+    }
+    return estimate;
+  };
   const locked = input.stops.filter((stop) => stop.status === "EN_ROUTE" || stop.status === "ARRIVED");
   if (locked.length > 1) throw new ApiError(409, "Multiple route stops are already in progress", "ROUTE_STATE_CONFLICT");
   const candidates = permutations(input.stops, input.completedPickups).filter((sequence) => !locked.length || sequence[0].id === locked[0].id);
@@ -49,7 +59,7 @@ export async function optimizeStops(input: {
     const projected: OptimizedStop[] = [];
     for (let index = 0; index < sequence.length; index += 1) {
       let leg;
-      try { leg = await input.provider.estimateLeg(origin, sequence[index]); }
+      try { leg = await estimateLeg(origin, sequence[index]); }
       catch { throw new ApiError(502, "Route provider failed", "ROUTE_PROVIDER_FAILED"); }
       if (!validLeg(leg)) throw new ApiError(502, "Route provider returned an invalid estimate", "ROUTE_PROVIDER_INVALID_RESPONSE");
       elapsed += leg.durationMinutes; distance += leg.distanceKm;

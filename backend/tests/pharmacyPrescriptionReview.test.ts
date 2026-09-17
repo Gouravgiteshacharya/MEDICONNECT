@@ -1,5 +1,12 @@
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 
 import {
   OrderStatus,
@@ -31,6 +38,7 @@ vi.mock("../src/lib/prisma.js", () => ({
 }));
 
 const { prisma } = await import("../src/lib/prisma.js");
+
 const prismaMock = prisma as unknown as {
   user: { findUnique: Mock };
   pharmacyStaff: { findFirst: Mock };
@@ -44,20 +52,38 @@ const prismaMock = prisma as unknown as {
   $transaction: Mock;
 };
 
-const userId = "11111111-1111-4111-8111-111111111111";
-const pharmacyId = "22222222-2222-4222-8222-222222222222";
-const otherPharmacyId = "33333333-3333-4333-8333-333333333333";
-const staffId = "44444444-4444-4444-8444-444444444444";
-const prescriptionId = "55555555-5555-4555-8555-555555555555";
-const orderId = "66666666-6666-4666-8666-666666666666";
-const reviewedAt = new Date("2026-08-31T12:00:00.000Z");
+const userId =
+  "11111111-1111-4111-8111-111111111111";
+const pharmacyId =
+  "22222222-2222-4222-8222-222222222222";
+const staffId =
+  "44444444-4444-4444-8444-444444444444";
+const prescriptionId =
+  "55555555-5555-4555-8555-555555555555";
+const orderId =
+  "66666666-6666-4666-8666-666666666666";
+const reviewedAt =
+  new Date("2026-08-31T12:00:00.000Z");
 
-function authHeader(role: UserRole = UserRole.PHARMACY_STAFF) {
-  prismaMock.user.findUnique.mockResolvedValueOnce({ id: userId, role, isActive: true });
-  return `Bearer ${signAuthToken({ userId, role })}`;
+function authHeader(
+  role: UserRole = UserRole.PHARMACY_STAFF,
+) {
+  prismaMock.user.findUnique.mockResolvedValueOnce({
+    id: userId,
+    role,
+    isActive: true,
+  });
+
+  return `Bearer ${signAuthToken({
+    userId,
+    role,
+  })}`;
 }
 
-function membership(role: PharmacyStaffRole = PharmacyStaffRole.PHARMACIST) {
+function membership(
+  role: PharmacyStaffRole =
+    PharmacyStaffRole.PHARMACIST,
+) {
   prismaMock.pharmacyStaff.findFirst.mockResolvedValue({
     id: staffId,
     userId,
@@ -66,362 +92,1209 @@ function membership(role: PharmacyStaffRole = PharmacyStaffRole.PHARMACIST) {
   });
 }
 
-function currentPrescription(overrides: Record<string, unknown> = {}) {
+function currentPrescription(
+  overrides: Record<string, unknown> = {},
+) {
   return {
     id: prescriptionId,
     orderId,
     status: PrescriptionStatus.PENDING_REVIEW,
-    order: { status: OrderStatus.PRESCRIPTION_PENDING },
+    supersededByPrescription: null,
+    order: {
+      status: OrderStatus.PRESCRIPTION_PENDING,
+    },
     ...overrides,
   };
 }
 
-function reviewedPrescription(overrides: Record<string, unknown> = {}) {
+function reviewedPrescription(
+  overrides: Record<string, unknown> = {},
+) {
   return {
     id: prescriptionId,
     orderId,
-    fileUrl: "https://files.example.test/rx.pdf",
+    fileUrl:
+      "https://files.example.test/rx.pdf",
     originalFilename: "rx.pdf",
     status: PrescriptionStatus.APPROVED,
-    uploadedAt: new Date("2026-08-31T10:00:00.000Z"),
+    uploadedAt:
+      new Date("2026-08-31T10:00:00.000Z"),
     reviewedAt,
     reviewerStaffId: staffId,
     reviewNotes: null,
     rejectionReason: null,
+    supersedesPrescriptionId: null,
     ...overrides,
   };
 }
 
+function activeStatus(
+  status: PrescriptionStatus,
+) {
+  return {
+    status,
+    supersededByPrescription: null,
+  };
+}
+
 function mockReviewSuccess(
-  statuses: PrescriptionStatus[] = [PrescriptionStatus.APPROVED],
+  statuses: PrescriptionStatus[] = [
+    PrescriptionStatus.APPROVED,
+  ],
 ) {
   membership();
-  prismaMock.prescription.findFirst.mockResolvedValue(currentPrescription());
-  prismaMock.prescription.updateMany.mockResolvedValue({ count: 1 });
-  prismaMock.prescription.findMany.mockResolvedValue(
-    statuses.map((status) => ({ status })),
+
+  prismaMock.prescription.findFirst.mockResolvedValue(
+    currentPrescription(),
   );
-  prismaMock.order.updateMany.mockResolvedValue({ count: 1 });
-  prismaMock.prescription.findUnique.mockResolvedValue(reviewedPrescription());
+
+  prismaMock.prescription.updateMany.mockResolvedValue({
+    count: 1,
+  });
+
+  prismaMock.prescription.findMany.mockResolvedValue(
+    statuses.map(activeStatus),
+  );
+
+  prismaMock.order.updateMany.mockResolvedValue({
+    count: 1,
+  });
+
+  prismaMock.prescription.findUnique.mockResolvedValue(
+    reviewedPrescription(),
+  );
 }
 
 function knownError(code: string) {
-  return new Prisma.PrismaClientKnownRequestError(code, {
+  return new Prisma.PrismaClientKnownRequestError(
     code,
-    clientVersion: "test",
-  });
+    {
+      code,
+      clientVersion: "test",
+    },
+  );
 }
 
-function expectError(response: { status: number; body: unknown }, status: number, code: string) {
+function expectError(
+  response: {
+    status: number;
+    body: unknown;
+  },
+  status: number,
+  code: string,
+) {
   expect(response.status).toBe(status);
-  expect(response.body).toEqual(expect.objectContaining({ code }));
+
+  expect(response.body).toEqual(
+    expect.objectContaining({
+      code,
+    }),
+  );
 }
 
 describe("pharmacy prescription review API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prismaMock.$transaction.mockImplementation(async (callback) => callback(prisma));
+
+    prismaMock.$transaction.mockImplementation(
+      async (callback) => callback(prisma),
+    );
   });
 
   it("rejects unauthenticated and customer requests", async () => {
-    const path = `/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`;
-    expect((await request(app).patch(path).send({ status: "APPROVED" })).status).toBe(401);
+    const path =
+      `/api/v1/pharmacies/${pharmacyId}` +
+      `/prescriptions/${prescriptionId}/review`;
+
+    expect(
+      (
+        await request(app)
+          .patch(path)
+          .send({
+            status: "APPROVED",
+          })
+      ).status,
+    ).toBe(401);
+
     const customer = await request(app)
       .patch(path)
-      .set("Authorization", authHeader(UserRole.CUSTOMER))
-      .send({ status: "APPROVED" });
+      .set(
+        "Authorization",
+        authHeader(UserRole.CUSTOMER),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
     expect(customer.status).toBe(403);
-    expect(prismaMock.pharmacyStaff.findFirst).not.toHaveBeenCalled();
+
+    expect(
+      prismaMock.pharmacyStaff.findFirst,
+    ).not.toHaveBeenCalled();
   });
 
   it.each([
     PharmacyStaffRole.OWNER,
     PharmacyStaffRole.MANAGER,
     PharmacyStaffRole.STAFF,
-  ])("forbids %s from prescription decisions", async (role) => {
-    membership(role);
-    const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
-    expectError(response, 403, "FORBIDDEN");
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
-    expect(prismaMock.prescription.findFirst).not.toHaveBeenCalled();
-  });
+  ])(
+    "forbids %s from prescription decisions",
+    async (role) => {
+      membership(role);
+
+      const response = await request(app)
+        .patch(
+          `/api/v1/pharmacies/${pharmacyId}` +
+            `/prescriptions/${prescriptionId}/review`,
+        )
+        .set(
+          "Authorization",
+          authHeader(),
+        )
+        .send({
+          status: "APPROVED",
+        });
+
+      expectError(
+        response,
+        403,
+        "FORBIDDEN",
+      );
+
+      expect(
+        prismaMock.$transaction,
+      ).toHaveBeenCalledTimes(1);
+
+      expect(
+        prismaMock.prescription.findFirst,
+      ).not.toHaveBeenCalled();
+    },
+  );
 
   it("forbids missing or inactive membership", async () => {
-    prismaMock.pharmacyStaff.findFirst.mockResolvedValue(null);
-    const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
-    expectError(response, 403, "FORBIDDEN");
-    expect(prismaMock.pharmacyStaff.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId, pharmacyId, isActive: true } }),
+    prismaMock.pharmacyStaff.findFirst.mockResolvedValue(
+      null,
     );
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+
+    const response = await request(app)
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      403,
+      "FORBIDDEN",
+    );
+
+    expect(
+      prismaMock.pharmacyStaff.findFirst,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId,
+          pharmacyId,
+          isActive: true,
+        },
+      }),
+    );
+
+    expect(
+      prismaMock.$transaction,
+    ).toHaveBeenCalledTimes(1);
   });
 
   it.each([
-    ["invalid pharmacy UUID", "bad", prescriptionId, { status: "APPROVED" }],
-    ["invalid prescription UUID", pharmacyId, "bad", { status: "APPROVED" }],
-    ["invalid status", pharmacyId, prescriptionId, { status: "PENDING_REVIEW" }],
-    ["unknown field", pharmacyId, prescriptionId, { status: "APPROVED", orderId }],
-    ["missing rejection reason", pharmacyId, prescriptionId, { status: "REJECTED" }],
-    ["missing additional-info notes", pharmacyId, prescriptionId, { status: "ADDITIONAL_INFO_REQUIRED" }],
-    ["spoofed reviewer", pharmacyId, prescriptionId, { status: "APPROVED", reviewerStaffId: staffId }],
-  ])("rejects %s", async (_name, pharmacy, prescription, body) => {
-    const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacy}/prescriptions/${prescription}/review`)
-      .set("Authorization", authHeader())
-      .send(body);
-    expectError(response, 400, "VALIDATION_ERROR");
-    expect(prismaMock.$transaction).not.toHaveBeenCalled();
-  });
+    [
+      "invalid pharmacy UUID",
+      "bad",
+      prescriptionId,
+      { status: "APPROVED" },
+    ],
+    [
+      "invalid prescription UUID",
+      pharmacyId,
+      "bad",
+      { status: "APPROVED" },
+    ],
+    [
+      "invalid status",
+      pharmacyId,
+      prescriptionId,
+      { status: "PENDING_REVIEW" },
+    ],
+    [
+      "unknown field",
+      pharmacyId,
+      prescriptionId,
+      {
+        status: "APPROVED",
+        orderId,
+      },
+    ],
+    [
+      "missing rejection reason",
+      pharmacyId,
+      prescriptionId,
+      {
+        status: "REJECTED",
+      },
+    ],
+    [
+      "missing additional-info notes",
+      pharmacyId,
+      prescriptionId,
+      {
+        status: "ADDITIONAL_INFO_REQUIRED",
+      },
+    ],
+    [
+      "spoofed reviewer",
+      pharmacyId,
+      prescriptionId,
+      {
+        status: "APPROVED",
+        reviewerStaffId: staffId,
+      },
+    ],
+  ])(
+    "rejects %s",
+    async (
+      _name,
+      pharmacy,
+      prescription,
+      body,
+    ) => {
+      const response = await request(app)
+        .patch(
+          `/api/v1/pharmacies/${pharmacy}` +
+            `/prescriptions/${prescription}/review`,
+        )
+        .set(
+          "Authorization",
+          authHeader(),
+        )
+        .send(body);
+
+      expectError(
+        response,
+        400,
+        "VALIDATION_ERROR",
+      );
+
+      expect(
+        prismaMock.$transaction,
+      ).not.toHaveBeenCalled();
+    },
+  );
 
   it("hides a cross-pharmacy prescription", async () => {
     membership();
-    prismaMock.prescription.findFirst.mockResolvedValue(null);
+
+    prismaMock.prescription.findFirst.mockResolvedValue(
+      null,
+    );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
-    expectError(response, 404, "PRESCRIPTION_NOT_FOUND");
-    expect(prismaMock.prescription.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: prescriptionId, order: { pharmacyId } } }),
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      404,
+      "PRESCRIPTION_NOT_FOUND",
+    );
+
+    expect(
+      prismaMock.prescription.findFirst,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: prescriptionId,
+          order: {
+            pharmacyId,
+          },
+        },
+      }),
     );
   });
 
   it("allows an exact-pharmacy pharmacist and sets server review identity", async () => {
     mockReviewSuccess();
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED", reviewNotes: " Valid prescription " });
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+        reviewNotes: " Valid prescription ",
+      });
+
     expect(response.status).toBe(200);
-    expect(response.body.prescription.status).toBe(PrescriptionStatus.APPROVED);
-    expect(prismaMock.prescription.updateMany).toHaveBeenCalledWith(
+
+    expect(
+      response.body.prescription.status,
+    ).toBe(
+      PrescriptionStatus.APPROVED,
+    );
+
+    expect(
+      prismaMock.prescription.updateMany,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           reviewerStaffId: staffId,
-          reviewNotes: "Valid prescription",
+          reviewNotes:
+            "Valid prescription",
           rejectionReason: null,
         }),
       }),
     );
-    expect(prismaMock.$transaction.mock.calls[0][1]).toEqual({ isolationLevel: "Serializable" });
+
+    expect(
+      prismaMock.prescription.updateMany
+        .mock.calls[0][0].where,
+    ).toEqual(
+      expect.objectContaining({
+        supersededByPrescription: null,
+      }),
+    );
+
+    expect(
+      prismaMock.$transaction.mock.calls[0][1],
+    ).toEqual({
+      isolationLevel: "Serializable",
+    });
   });
 
-  it("allows re-review after additional information was requested", async () => {
+  it("allows re-review after additional information was requested when the prescription has not been superseded", async () => {
     mockReviewSuccess();
+
     prismaMock.prescription.findFirst.mockResolvedValue(
-      currentPrescription({ status: PrescriptionStatus.ADDITIONAL_INFO_REQUIRED }),
+      currentPrescription({
+        status:
+          PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
+        supersededByPrescription: null,
+      }),
     );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
     expect(response.status).toBe(200);
-    expect(prismaMock.prescription.updateMany).toHaveBeenCalledTimes(1);
+
+    expect(
+      prismaMock.prescription.updateMany,
+    ).toHaveBeenCalledTimes(1);
   });
 
-  it("stores a rejection reason and aggregates any rejection", async () => {
-    mockReviewSuccess([PrescriptionStatus.APPROVED, PrescriptionStatus.REJECTED]);
-    prismaMock.prescription.findUnique.mockResolvedValue(
-      reviewedPrescription({ status: PrescriptionStatus.REJECTED, rejectionReason: "Unreadable" }),
+  it("blocks review of a superseded prescription", async () => {
+    membership();
+
+    prismaMock.prescription.findFirst.mockResolvedValue(
+      currentPrescription({
+        status:
+          PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
+        supersededByPrescription: {
+          id: "77777777-7777-4777-8777-777777777777",
+        },
+      }),
     );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "REJECTED", rejectionReason: " Unreadable " });
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      409,
+      "PRESCRIPTION_REVIEW_NOT_ALLOWED",
+    );
+
+    expect(
+      prismaMock.prescription.updateMany,
+    ).not.toHaveBeenCalled();
+
+    expect(
+      prismaMock.order.updateMany,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("stores a rejection reason and aggregates any active rejection", async () => {
+    mockReviewSuccess([
+      PrescriptionStatus.APPROVED,
+      PrescriptionStatus.REJECTED,
+    ]);
+
+    prismaMock.prescription.findUnique.mockResolvedValue(
+      reviewedPrescription({
+        status:
+          PrescriptionStatus.REJECTED,
+        rejectionReason: "Unreadable",
+      }),
+    );
+
+    const response = await request(app)
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "REJECTED",
+        rejectionReason: " Unreadable ",
+      });
+
     expect(response.status).toBe(200);
-    expect(prismaMock.prescription.updateMany.mock.calls[0][0].data.rejectionReason).toBe("Unreadable");
-    expect(prismaMock.order.updateMany.mock.calls[0][0].data.status).toBe(OrderStatus.PRESCRIPTION_REJECTED);
+
+    expect(
+      prismaMock.prescription.updateMany
+        .mock.calls[0][0]
+        .data.rejectionReason,
+    ).toBe("Unreadable");
+
+    expect(
+      prismaMock.order.updateMany
+        .mock.calls[0][0]
+        .data.status,
+    ).toBe(
+      OrderStatus.PRESCRIPTION_REJECTED,
+    );
   });
 
   it.each([
-    ["additional info", [PrescriptionStatus.ADDITIONAL_INFO_REQUIRED], OrderStatus.PRESCRIPTION_PENDING],
-    ["approved plus pending", [PrescriptionStatus.APPROVED, PrescriptionStatus.PENDING_REVIEW], OrderStatus.PRESCRIPTION_PENDING],
-    ["all approved", [PrescriptionStatus.APPROVED, PrescriptionStatus.APPROVED], OrderStatus.PRESCRIPTION_APPROVED],
-  ] as const)("aggregates %s correctly", async (_name, statuses, expectedStatus) => {
-    mockReviewSuccess([...statuses]);
-    const body = statuses[0] === PrescriptionStatus.ADDITIONAL_INFO_REQUIRED
-      ? { status: "ADDITIONAL_INFO_REQUIRED", reviewNotes: "Please upload a clearer image" }
-      : { status: "APPROVED" };
+    [
+      "additional info",
+      [
+        PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
+      ],
+      OrderStatus.PRESCRIPTION_PENDING,
+    ],
+    [
+      "approved plus pending",
+      [
+        PrescriptionStatus.APPROVED,
+        PrescriptionStatus.PENDING_REVIEW,
+      ],
+      OrderStatus.PRESCRIPTION_PENDING,
+    ],
+    [
+      "all approved",
+      [
+        PrescriptionStatus.APPROVED,
+        PrescriptionStatus.APPROVED,
+      ],
+      OrderStatus.PRESCRIPTION_APPROVED,
+    ],
+  ] as const)(
+    "aggregates %s correctly",
+    async (
+      _name,
+      statuses,
+      expectedStatus,
+    ) => {
+      mockReviewSuccess([...statuses]);
+
+      const body =
+        statuses[0] ===
+        PrescriptionStatus.ADDITIONAL_INFO_REQUIRED
+          ? {
+              status:
+                "ADDITIONAL_INFO_REQUIRED",
+              reviewNotes:
+                "Please upload a clearer image",
+            }
+          : {
+              status: "APPROVED",
+            };
+
+      const response = await request(app)
+        .patch(
+          `/api/v1/pharmacies/${pharmacyId}` +
+            `/prescriptions/${prescriptionId}/review`,
+        )
+        .set(
+          "Authorization",
+          authHeader(),
+        )
+        .send(body);
+
+      expect(response.status).toBe(200);
+
+      expect(
+        prismaMock.order.updateMany
+          .mock.calls[0][0]
+          .data.status,
+      ).toBe(expectedStatus);
+    },
+  );
+
+  it("ignores a superseded ADDITIONAL_INFO_REQUIRED prescription when aggregating the replacement approval", async () => {
+    membership();
+
+    prismaMock.prescription.findFirst.mockResolvedValue(
+      currentPrescription(),
+    );
+
+    prismaMock.prescription.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    prismaMock.prescription.findMany.mockResolvedValue([
+      {
+        status:
+          PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
+        supersededByPrescription: {
+          id: prescriptionId,
+        },
+      },
+      {
+        status:
+          PrescriptionStatus.APPROVED,
+        supersededByPrescription: null,
+      },
+    ]);
+
+    prismaMock.order.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    prismaMock.prescription.findUnique.mockResolvedValue(
+      reviewedPrescription({
+        supersedesPrescriptionId:
+          "77777777-7777-4777-8777-777777777777",
+      }),
+    );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send(body);
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
     expect(response.status).toBe(200);
-    expect(prismaMock.order.updateMany.mock.calls[0][0].data.status).toBe(expectedStatus);
+
+    expect(
+      prismaMock.order.updateMany
+        .mock.calls[0][0]
+        .data.status,
+    ).toBe(
+      OrderStatus.PRESCRIPTION_APPROVED,
+    );
+
+    expect(
+      prismaMock.prescription.findMany,
+    ).toHaveBeenCalledWith({
+      where: {
+        orderId,
+      },
+      select: {
+        status: true,
+        supersededByPrescription: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
   });
 
-  it.each([PrescriptionStatus.APPROVED, PrescriptionStatus.REJECTED])(
+  it("still lets an active pending replacement keep the order prescription-pending", async () => {
+    membership();
+
+    prismaMock.prescription.findFirst.mockResolvedValue(
+      currentPrescription(),
+    );
+
+    prismaMock.prescription.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    prismaMock.prescription.findMany.mockResolvedValue([
+      {
+        status:
+          PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
+        supersededByPrescription: {
+          id: "77777777-7777-4777-8777-777777777777",
+        },
+      },
+      {
+        status:
+          PrescriptionStatus.PENDING_REVIEW,
+        supersededByPrescription: null,
+      },
+    ]);
+
+    prismaMock.order.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
+    prismaMock.prescription.findUnique.mockResolvedValue(
+      reviewedPrescription(),
+    );
+
+    const response = await request(app)
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expect(response.status).toBe(200);
+
+    expect(
+      prismaMock.order.updateMany
+        .mock.calls[0][0]
+        .data.status,
+    ).toBe(
+      OrderStatus.PRESCRIPTION_PENDING,
+    );
+  });
+
+  it.each([
+    PrescriptionStatus.APPROVED,
+    PrescriptionStatus.REJECTED,
+  ])(
     "does not overwrite finalized %s",
     async (status) => {
       membership();
-      prismaMock.prescription.findFirst.mockResolvedValue(currentPrescription({ status }));
+
+      prismaMock.prescription.findFirst.mockResolvedValue(
+        currentPrescription({
+          status,
+        }),
+      );
+
       const response = await request(app)
-        .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-        .set("Authorization", authHeader())
-        .send({ status: "APPROVED" });
-      expectError(response, 409, "PRESCRIPTION_ALREADY_FINALIZED");
-      expect(prismaMock.prescription.updateMany).not.toHaveBeenCalled();
+        .patch(
+          `/api/v1/pharmacies/${pharmacyId}` +
+            `/prescriptions/${prescriptionId}/review`,
+        )
+        .set(
+          "Authorization",
+          authHeader(),
+        )
+        .send({
+          status: "APPROVED",
+        });
+
+      expectError(
+        response,
+        409,
+        "PRESCRIPTION_ALREADY_FINALIZED",
+      );
+
+      expect(
+        prismaMock.prescription.updateMany,
+      ).not.toHaveBeenCalled();
     },
   );
 
   it("blocks review after the order leaves prescription pending", async () => {
     membership();
+
     prismaMock.prescription.findFirst.mockResolvedValue(
-      currentPrescription({ order: { status: OrderStatus.CONFIRMED } }),
+      currentPrescription({
+        order: {
+          status:
+            OrderStatus.CONFIRMED,
+        },
+      }),
     );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
-    expectError(response, 409, "PRESCRIPTION_REVIEW_NOT_ALLOWED");
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      409,
+      "PRESCRIPTION_REVIEW_NOT_ALLOWED",
+    );
   });
 
   it("classifies a conditional-update finalization race", async () => {
     mockReviewSuccess();
-    prismaMock.prescription.updateMany.mockResolvedValue({ count: 0 });
+
+    prismaMock.prescription.updateMany.mockResolvedValue({
+      count: 0,
+    });
+
     prismaMock.prescription.findFirst
-      .mockResolvedValueOnce(currentPrescription())
-      .mockResolvedValueOnce(currentPrescription({ status: PrescriptionStatus.REJECTED }));
+      .mockResolvedValueOnce(
+        currentPrescription(),
+      )
+      .mockResolvedValueOnce(
+        currentPrescription({
+          status:
+            PrescriptionStatus.REJECTED,
+        }),
+      );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
-    expectError(response, 409, "PRESCRIPTION_ALREADY_FINALIZED");
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      409,
+      "PRESCRIPTION_ALREADY_FINALIZED",
+    );
+  });
+
+  it("classifies a conditional-update supersession race", async () => {
+    mockReviewSuccess();
+
+    prismaMock.prescription.updateMany.mockResolvedValue({
+      count: 0,
+    });
+
+    prismaMock.prescription.findFirst
+      .mockResolvedValueOnce(
+        currentPrescription(),
+      )
+      .mockResolvedValueOnce(
+        currentPrescription({
+          supersededByPrescription: {
+            id: "77777777-7777-4777-8777-777777777777",
+          },
+        }),
+      );
+
+    const response = await request(app)
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      409,
+      "PRESCRIPTION_REVIEW_NOT_ALLOWED",
+    );
+
+    expect(
+      prismaMock.order.updateMany,
+    ).not.toHaveBeenCalled();
   });
 
   it("retries exact P2034 and re-reads state", async () => {
     mockReviewSuccess();
+
     prismaMock.prescription.findFirst
-      .mockRejectedValueOnce(knownError("P2034"))
-      .mockResolvedValueOnce(currentPrescription());
+      .mockRejectedValueOnce(
+        knownError("P2034"),
+      )
+      .mockResolvedValueOnce(
+        currentPrescription(),
+      );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
     expect(response.status).toBe(200);
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
-    expect(prismaMock.pharmacyStaff.findFirst).toHaveBeenCalledTimes(2);
-    expect(prismaMock.prescription.findFirst).toHaveBeenCalledTimes(2);
+
+    expect(
+      prismaMock.$transaction,
+    ).toHaveBeenCalledTimes(2);
+
+    expect(
+      prismaMock.pharmacyStaff.findFirst,
+    ).toHaveBeenCalledTimes(2);
+
+    expect(
+      prismaMock.prescription.findFirst,
+    ).toHaveBeenCalledTimes(2);
   });
 
   it.each([
-    ["missing", null],
+    [
+      "missing",
+      null,
+    ],
     [
       "wrong-role",
       {
         id: staffId,
         userId,
         pharmacyId,
-        role: PharmacyStaffRole.STAFF,
+        role:
+          PharmacyStaffRole.STAFF,
       },
     ],
-  ])("fails safely when membership becomes %s before retry", async (_name, retryMembership) => {
-    prismaMock.pharmacyStaff.findFirst
-      .mockResolvedValueOnce({
-        id: staffId,
-        userId,
-        pharmacyId,
-        role: PharmacyStaffRole.PHARMACIST,
-      })
-      .mockResolvedValueOnce(retryMembership);
-    prismaMock.prescription.findFirst.mockRejectedValueOnce(knownError("P2034"));
+  ])(
+    "fails safely when membership becomes %s before retry",
+    async (
+      _name,
+      retryMembership,
+    ) => {
+      prismaMock.pharmacyStaff.findFirst
+        .mockResolvedValueOnce({
+          id: staffId,
+          userId,
+          pharmacyId,
+          role:
+            PharmacyStaffRole.PHARMACIST,
+        })
+        .mockResolvedValueOnce(
+          retryMembership,
+        );
 
-    const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
+      prismaMock.prescription.findFirst
+        .mockRejectedValueOnce(
+          knownError("P2034"),
+        );
 
-    expectError(response, 403, "FORBIDDEN");
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
-    expect(prismaMock.pharmacyStaff.findFirst).toHaveBeenCalledTimes(2);
-    expect(prismaMock.prescription.updateMany).not.toHaveBeenCalled();
-  });
+      const response = await request(app)
+        .patch(
+          `/api/v1/pharmacies/${pharmacyId}` +
+            `/prescriptions/${prescriptionId}/review`,
+        )
+        .set(
+          "Authorization",
+          authHeader(),
+        )
+        .send({
+          status: "APPROVED",
+        });
+
+      expectError(
+        response,
+        403,
+        "FORBIDDEN",
+      );
+
+      expect(
+        prismaMock.$transaction,
+      ).toHaveBeenCalledTimes(2);
+
+      expect(
+        prismaMock.pharmacyStaff.findFirst,
+      ).toHaveBeenCalledTimes(2);
+
+      expect(
+        prismaMock.prescription.updateMany,
+      ).not.toHaveBeenCalled();
+    },
+  );
 
   it("uses reviewer identity from the successful retry membership", async () => {
-    const retryStaffId = "77777777-7777-4777-8777-777777777777";
+    const retryStaffId =
+      "77777777-7777-4777-8777-777777777777";
+
     prismaMock.pharmacyStaff.findFirst
       .mockResolvedValueOnce({
         id: staffId,
         userId,
         pharmacyId,
-        role: PharmacyStaffRole.PHARMACIST,
+        role:
+          PharmacyStaffRole.PHARMACIST,
       })
       .mockResolvedValueOnce({
         id: retryStaffId,
         userId,
         pharmacyId,
-        role: PharmacyStaffRole.PHARMACIST,
+        role:
+          PharmacyStaffRole.PHARMACIST,
       });
+
     prismaMock.prescription.findFirst
-      .mockRejectedValueOnce(knownError("P2034"))
-      .mockResolvedValueOnce(currentPrescription());
-    prismaMock.prescription.updateMany.mockResolvedValue({ count: 1 });
+      .mockRejectedValueOnce(
+        knownError("P2034"),
+      )
+      .mockResolvedValueOnce(
+        currentPrescription(),
+      );
+
+    prismaMock.prescription.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
     prismaMock.prescription.findMany.mockResolvedValue([
-      { status: PrescriptionStatus.APPROVED },
+      activeStatus(
+        PrescriptionStatus.APPROVED,
+      ),
     ]);
-    prismaMock.order.updateMany.mockResolvedValue({ count: 1 });
+
+    prismaMock.order.updateMany.mockResolvedValue({
+      count: 1,
+    });
+
     prismaMock.prescription.findUnique.mockResolvedValue(
-      reviewedPrescription({ reviewerStaffId: retryStaffId }),
+      reviewedPrescription({
+        reviewerStaffId:
+          retryStaffId,
+      }),
     );
 
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
 
     expect(response.status).toBe(200);
-    expect(prismaMock.prescription.updateMany.mock.calls[0][0].data.reviewerStaffId).toBe(
-      retryStaffId,
-    );
+
+    expect(
+      prismaMock.prescription.updateMany
+        .mock.calls[0][0]
+        .data.reviewerStaffId,
+    ).toBe(retryStaffId);
   });
 
   it("stops when order state changes during retry", async () => {
     membership();
+
     prismaMock.prescription.findFirst
-      .mockRejectedValueOnce(knownError("P2034"))
-      .mockResolvedValueOnce(currentPrescription({ order: { status: OrderStatus.CONFIRMED } }));
+      .mockRejectedValueOnce(
+        knownError("P2034"),
+      )
+      .mockResolvedValueOnce(
+        currentPrescription({
+          order: {
+            status:
+              OrderStatus.CONFIRMED,
+          },
+        }),
+      );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
-    expectError(response, 409, "PRESCRIPTION_REVIEW_NOT_ALLOWED");
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
-    expect(prismaMock.prescription.updateMany).not.toHaveBeenCalled();
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      409,
+      "PRESCRIPTION_REVIEW_NOT_ALLOWED",
+    );
+
+    expect(
+      prismaMock.$transaction,
+    ).toHaveBeenCalledTimes(2);
+
+    expect(
+      prismaMock.prescription.updateMany,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("stops when the prescription becomes superseded during retry", async () => {
+    membership();
+
+    prismaMock.prescription.findFirst
+      .mockRejectedValueOnce(
+        knownError("P2034"),
+      )
+      .mockResolvedValueOnce(
+        currentPrescription({
+          supersededByPrescription: {
+            id: "77777777-7777-4777-8777-777777777777",
+          },
+        }),
+      );
+
+    const response = await request(app)
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      409,
+      "PRESCRIPTION_REVIEW_NOT_ALLOWED",
+    );
+
+    expect(
+      prismaMock.$transaction,
+    ).toHaveBeenCalledTimes(2);
+
+    expect(
+      prismaMock.prescription.updateMany,
+    ).not.toHaveBeenCalled();
   });
 
   it("returns conflict after exactly three P2034 attempts", async () => {
     membership();
-    prismaMock.prescription.findFirst.mockRejectedValue(knownError("P2034"));
+
+    prismaMock.prescription.findFirst.mockRejectedValue(
+      knownError("P2034"),
+    );
+
     const response = await request(app)
-      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
-      .set("Authorization", authHeader())
-      .send({ status: "APPROVED" });
-    expectError(response, 409, "PRESCRIPTION_REVIEW_CONFLICT");
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(MAX_PHARMACY_WORKFLOW_ATTEMPTS);
+      .patch(
+        `/api/v1/pharmacies/${pharmacyId}` +
+          `/prescriptions/${prescriptionId}/review`,
+      )
+      .set(
+        "Authorization",
+        authHeader(),
+      )
+      .send({
+        status: "APPROVED",
+      });
+
+    expectError(
+      response,
+      409,
+      "PRESCRIPTION_REVIEW_CONFLICT",
+    );
+
+    expect(
+      prismaMock.$transaction,
+    ).toHaveBeenCalledTimes(
+      MAX_PHARMACY_WORKFLOW_ATTEMPTS,
+    );
   });
 
   it("does not retry unrelated errors", async () => {
-    const failure = new Error("database unavailable");
-    const membershipReader = vi.fn().mockResolvedValue({
-      id: staffId, userId, pharmacyId, role: PharmacyStaffRole.PHARMACIST,
-    });
-    prismaMock.$transaction.mockRejectedValue(failure);
+    const failure =
+      new Error("database unavailable");
+
+    const membershipReader =
+      vi.fn().mockResolvedValue({
+        id: staffId,
+        userId,
+        pharmacyId,
+        role:
+          PharmacyStaffRole.PHARMACIST,
+      });
+
+    prismaMock.$transaction.mockRejectedValue(
+      failure,
+    );
+
     await expect(
       reviewPharmacyPrescription(
         userId,
         pharmacyId,
         prescriptionId,
-        { status: PrescriptionStatus.APPROVED },
+        {
+          status:
+            PrescriptionStatus.APPROVED,
+        },
         prisma as never,
         membershipReader,
       ),
     ).rejects.toBe(failure);
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+
+    expect(
+      prismaMock.$transaction,
+    ).toHaveBeenCalledTimes(1);
   });
 });
