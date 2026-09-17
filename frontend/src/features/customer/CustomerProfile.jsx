@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -48,6 +49,7 @@ function toAddressInput(form) {
 }
 
 export default function CustomerProfile() {
+  const navigate = useNavigate()
   const {
     authenticated,
     initializing,
@@ -257,7 +259,13 @@ export default function CustomerProfile() {
         </div>
 
         {authenticated && (
-          <button type="button" onClick={logout}>
+          <button
+            type="button"
+            onClick={() => {
+              logout()
+              navigate('/', { replace: true })
+            }}
+          >
             Log out
           </button>
         )}

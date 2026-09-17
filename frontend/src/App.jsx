@@ -32,9 +32,12 @@ function App() {
   } = useAuth()
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState('login')
+  const [authAudience, setAuthAudience] = useState('customer')
   const [leaving, setLeaving] = useState(false)
 
   const requestedAuthMode = searchParams.get('auth')
+  const requestedAuthAudience =
+    searchParams.get('audience') === 'staff' ? 'staff' : 'customer'
   const nextPath = getSafeNextPath(searchParams.get('next'))
 
   useEffect(() => {
@@ -45,18 +48,27 @@ function App() {
       (requestedAuthMode === 'login' || requestedAuthMode === 'register')
     ) {
       setAuthMode(requestedAuthMode)
+      setAuthAudience(requestedAuthAudience)
       setAuthOpen(true)
     }
 
     if (authenticated && requestedAuthMode) {
-      navigate('/', { replace: true })
+      navigate(getRoleHome(user?.role), { replace: true })
     }
   }, [
     authenticated,
     initializing,
     navigate,
     requestedAuthMode,
+    requestedAuthAudience,
+    user?.role,
   ])
+
+  useEffect(() => {
+    if (!initializing && authenticated && !requestedAuthMode) {
+      navigate(getRoleHome(user?.role), { replace: true })
+    }
+  }, [authenticated, initializing, navigate, requestedAuthMode, user?.role])
 
   function transitionTo(path) {
     const prefersReducedMotion = window.matchMedia?.(
@@ -78,9 +90,11 @@ function App() {
     transitionTo(`/app/search${params}`)
   }
 
-  function openAuth(mode = 'login') {
-    navigate(`/?auth=${mode}`)
+  function openAuth(mode = 'login', audience = 'customer') {
+    const audienceParam = audience === 'staff' ? '&audience=staff' : ''
+    navigate(`/?auth=${mode}${audienceParam}`)
     setAuthMode(mode)
+    setAuthAudience(audience)
     setAuthOpen(true)
   }
 
@@ -106,7 +120,7 @@ function App() {
     navigate(getRoleHome(nextUser?.role), { replace: true })
   }
 
-  if (initializing) {
+  if (initializing || authenticated) {
     return (
       <main className="route-auth-loading" aria-busy="true">
         <span>M</span>
@@ -131,6 +145,7 @@ function App() {
       <CustomerAuthModal
         open={authOpen}
         initialMode={authMode}
+        audience={authAudience}
         onClose={closeAuth}
         onAuthenticated={handleAuthenticated}
       />

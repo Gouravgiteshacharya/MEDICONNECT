@@ -98,10 +98,12 @@ export default function PharmacyShell() {
       <main className="pharmacy-access">
         <form className="pharmacy-access-card" onSubmit={selectPharmacy}>
           <span>M</span>
-          <h1>Select pharmacy workspace.</h1>
+          <small className="pharmacy-access-temporary">Temporary QA setup</small>
+          <h1>Connect your pharmacy workspace.</h1>
           <p>
-            The backend currently requires a pharmacy ID in pharmacy route URLs.
-            Membership is still validated by the API before data is returned.
+            Automatic membership selection is being connected. For now, use the
+            pharmacy ID supplied for this QA workspace. The API still validates
+            your active membership before returning data.
           </p>
           <label>
             <span>Pharmacy ID</span>
@@ -148,17 +150,20 @@ export default function PharmacyShell() {
           ))}
         </nav>
 
-        <form className="pharmacy-switcher" onSubmit={selectPharmacy}>
-          <label>
-            <span>Workspace pharmacy ID</span>
-            <input
-              name="pharmacyId"
-              defaultValue={pharmacyId}
-              autoComplete="off"
-            />
-          </label>
-          <button type="submit">Switch</button>
-        </form>
+        <details className="pharmacy-switcher">
+          <summary>Temporary workspace setup</summary>
+          <form onSubmit={selectPharmacy}>
+            <label>
+              <span>Pharmacy ID</span>
+              <input
+                name="pharmacyId"
+                defaultValue={pharmacyId}
+                autoComplete="off"
+              />
+            </label>
+            <button type="submit">Switch</button>
+          </form>
+        </details>
       </aside>
 
       <div className="pharmacy-content">

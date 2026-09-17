@@ -6,6 +6,7 @@ import './CustomerAuthModal.css'
 export default function CustomerAuthModal({
   open,
   initialMode = 'login',
+  audience = 'customer',
   onClose,
   onAuthenticated,
 }) {
@@ -24,10 +25,10 @@ export default function CustomerAuthModal({
 
   useEffect(() => {
     if (open) {
-      setMode(initialMode)
+      setMode(audience === 'staff' ? 'login' : initialMode)
       setError('')
     }
-  }, [initialMode, open])
+  }, [audience, initialMode, open])
 
   if (!open) return null
 
@@ -98,7 +99,9 @@ export default function CustomerAuthModal({
         role="dialog"
         aria-modal="true"
         aria-label={
-          mode === 'login'
+          audience === 'staff'
+            ? 'Staff and partner sign in'
+            : mode === 'login'
             ? 'Sign in to MediConnect'
             : 'Create MediConnect account'
         }
@@ -109,8 +112,10 @@ export default function CustomerAuthModal({
           <div>
             <span>MEDICONNECT</span>
             <h2>
-              {mode === 'login'
-                ? 'Sign in to your workspace.'
+              {audience === 'staff'
+                ? 'Staff & partner sign in.'
+                : mode === 'login'
+                ? 'Welcome back.'
                 : 'Create your account.'}
             </h2>
           </div>
@@ -126,8 +131,10 @@ export default function CustomerAuthModal({
         </header>
 
         <p className="customer-auth-copy">
-          {mode === 'login'
-            ? 'Use one MediConnect login for customer, pharmacy, rider, or operations access.'
+          {audience === 'staff'
+            ? 'For pharmacy staff, delivery partners, and MediConnect operations. Your account role opens the correct workspace.'
+            : mode === 'login'
+            ? 'Sign in to search, order, and manage your medicines.'
             : 'Create an account to order from nearby pharmacies.'}
         </p>
 
@@ -205,7 +212,7 @@ export default function CustomerAuthModal({
           </button>
         </form>
 
-        <div className="customer-auth-switch">
+        {audience !== 'staff' && <div className="customer-auth-switch">
           <span>
             {mode === 'login'
               ? 'New to MediConnect?'
@@ -227,7 +234,7 @@ export default function CustomerAuthModal({
               ? 'Create account'
               : 'Sign in'}
           </button>
-        </div>
+        </div>}
       </section>
     </div>
   )

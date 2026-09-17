@@ -282,6 +282,14 @@ function LandingPage({
             </>
           ) : (
             <>
+              <button
+                className="mc-staff-login"
+                type="button"
+                onClick={() => openAuth('login', 'staff')}
+              >
+                Staff & Partner Login
+              </button>
+
               <button className="mc-login" type="button" onClick={() => openAuth('login')}>
                 Log in
               </button>
@@ -346,20 +354,13 @@ function LandingPage({
 
             {!authenticated && (
               <div className="mc-role-entry" aria-label="Workspace sign in">
-                {[
-                  'Customer login',
-                  'Pharmacy staff login',
-                  'Rider login',
-                  'Admin login',
-                ].map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => openAuth('login')}
-                  >
-                    {label}
-                  </button>
-                ))}
+                <span>Work with MediConnect?</span>
+                <button
+                  type="button"
+                  onClick={() => openAuth('login', 'staff')}
+                >
+                  Staff & Partner Login
+                </button>
               </div>
             )}
           </div>

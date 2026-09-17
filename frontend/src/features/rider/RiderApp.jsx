@@ -1,64 +1,475 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  API_BASE,
-  getAccessToken,
-} from '../../services/apiClient'
+
+import { useAuth } from '../../context/AuthContext'
+import { API_BASE, getAccessToken } from '../../services/apiClient'
 import './RiderApp.css'
 
-const token = getAccessToken
-async function api(path, options = {}) {
-  if (!token()) throw new Error('Secure rider sign-in is not connected yet.')
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}`, ...options.headers } })
+async function riderRequest(path, options = {}) {
+  const token = getAccessToken()
+  if (!token) throw new Error('Your rider session has expired. Please sign in again.')
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    },
+  })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(body.error ?? 'Something went wrong. Please try again.')
   return body.data
 }
-const time = (value) => value ? new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit' }).format(new Date(value)) : 'Not available'
-const label = (value) => value?.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
 
-function AssignmentCard({ assignment, onAction, busy }) {
+function formatTime(value) {
+  if (!value) return 'Not available'
+  return new Intl.DateTimeFormat('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function formatLabel(value = '') {
+  return value
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
+}
+
+function navigationUrl(latitude, longitude) {
+  if (latitude == null || longitude == null) return ''
+  return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+}
+
+function AssignmentCard({ assignment, arrived, busy, onLifecycle, onReportFailure }) {
   const { order } = assignment
-  const destination = [order.deliveryAddressLabelSnapshot, order.deliveryAddressLine1Snapshot, order.deliveryLandmarkSnapshot].filter(Boolean).join(' · ')
-  const navigate = (lat, lng) => lat != null && lng != null ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` : null
-  return <article className="card assignment-card">
-    <div className="card-top"><div><span className="eyebrow">{assignment.batchId ? 'Batched delivery' : 'Active delivery'}</span><h2>{order.orderNumber}</h2></div><span className="status blue">{label(assignment.status)}</span></div>
-    <div className="route-line"><span className="route-dot pickup">P</span><div><b>{order.pharmacy.name}</b><p>{order.pharmacy.addressLine1}</p></div>{navigate(order.pharmacy.latitude, order.pharmacy.longitude) && <a className="text-link" href={navigate(order.pharmacy.latitude, order.pharmacy.longitude)} target="_blank" rel="noreferrer">Navigate</a>}</div>
-    <div className="route-stem" />
-    <div className="route-line"><span className="route-dot drop">D</span><div><b>Customer destination</b><p>{destination || 'Address available after assignment'}</p></div>{navigate(order.deliveryLatitudeSnapshot, order.deliveryLongitudeSnapshot) && <a className="text-link" href={navigate(order.deliveryLatitudeSnapshot, order.deliveryLongitudeSnapshot)} target="_blank" rel="noreferrer">Navigate</a>}</div>
-    <div className="meta-row"><span>{order.deliveryDistanceKm ? `${order.deliveryDistanceKm.toFixed(1)} km` : 'Distance unavailable'}</span><span>{order.quotedEtaMinutes ? `${order.quotedEtaMinutes} min quoted` : 'ETA unavailable'}</span></div>
-    <div className="action-grid">
-      {assignment.status === 'ACCEPTED' && <><button className="secondary" disabled={busy} onClick={() => onAction(assignment.id, 'arrive-pharmacy')}>Arrived at pharmacy</button><button disabled={busy} onClick={() => onAction(assignment.id, 'pickup')}>Confirm pickup</button></>}
-      {assignment.status === 'PICKED_UP' && <button disabled={busy} onClick={() => onAction(assignment.id, 'start-delivery')}>Start delivery</button>}
-      {assignment.status === 'OUT_FOR_DELIVERY' && <><button className="danger" disabled={busy} onClick={() => onAction(assignment.id, 'fail', { reason: 'Delivery could not be completed' })}>Report issue</button><button disabled={busy} onClick={() => onAction(assignment.id, 'deliver')}>Mark delivered</button></>}
-    </div>
-  </article>
+  const pharmacyRoute = navigationUrl(order.pharmacy.latitude, order.pharmacy.longitude)
+  const customerRoute = navigationUrl(
+    order.deliveryLatitudeSnapshot,
+    order.deliveryLongitudeSnapshot,
+  )
+  const destination = [
+    order.deliveryAddressLabelSnapshot,
+    order.deliveryAddressLine1Snapshot,
+    order.deliveryLandmarkSnapshot,
+  ].filter(Boolean).join(' · ')
+
+  let primaryAction = null
+  if (assignment.status === 'ACCEPTED') {
+    primaryAction = arrived
+      ? { label: 'Confirm pickup', action: 'pickup' }
+      : { label: 'I have arrived', action: 'arrive-pharmacy' }
+  } else if (assignment.status === 'PICKED_UP') {
+    primaryAction = { label: 'Start delivery', action: 'start-delivery' }
+  } else if (assignment.status === 'OUT_FOR_DELIVERY') {
+    primaryAction = { label: 'Mark delivered', action: 'deliver' }
+  }
+
+  const navigationLink = assignment.status === 'ACCEPTED' ? pharmacyRoute : customerRoute
+  const navigationLabel = assignment.status === 'ACCEPTED'
+    ? 'Navigate to pharmacy'
+    : 'Navigate to customer'
+
+  return (
+    <article className="rider-task-card">
+      <div className="rider-task-head">
+        <div>
+          <span className="rider-eyebrow">
+            {assignment.batchId ? 'Batched delivery' : 'Current delivery'}
+          </span>
+          <h2>{order.orderNumber}</h2>
+        </div>
+        <span className="rider-status-chip">{formatLabel(assignment.status)}</span>
+      </div>
+
+      <div className="rider-stop-list">
+        <div className="rider-stop">
+          <span className="rider-stop-mark pickup">P</span>
+          <div>
+            <small>Pickup</small>
+            <strong>{order.pharmacy.name}</strong>
+            <p>{order.pharmacy.addressLine1 || 'Pharmacy address unavailable'}</p>
+          </div>
+        </div>
+        <div className="rider-stop-connector" />
+        <div className="rider-stop">
+          <span className="rider-stop-mark drop">D</span>
+          <div>
+            <small>Drop</small>
+            <strong>{order.deliveryAddressLabelSnapshot || 'Customer address'}</strong>
+            <p>{destination || 'Delivery address unavailable'}</p>
+          </div>
+        </div>
+      </div>
+
+      {(order.deliveryDistanceKm || order.quotedEtaMinutes) && (
+        <div className="rider-route-facts">
+          {order.deliveryDistanceKm && <span>{order.deliveryDistanceKm.toFixed(1)} km</span>}
+          {order.quotedEtaMinutes && <span>{order.quotedEtaMinutes} min quoted ETA</span>}
+        </div>
+      )}
+
+      <div className="rider-task-actions">
+        {navigationLink && (
+          <a href={navigationLink} target="_blank" rel="noreferrer">
+            {navigationLabel}
+          </a>
+        )}
+        {primaryAction && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onLifecycle(assignment.id, primaryAction.action)}
+          >
+            {primaryAction.label}
+          </button>
+        )}
+      </div>
+
+      {assignment.status === 'OUT_FOR_DELIVERY' && (
+        <button
+          className="rider-report-action"
+          type="button"
+          disabled={busy}
+          onClick={() => onReportFailure(assignment.id)}
+        >
+          Report a delivery problem
+        </button>
+      )}
+    </article>
+  )
 }
 
-function App() {
+export default function RiderApp() {
   const navigate = useNavigate()
-  const [dashboard, setDashboard] = useState(null), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState('')
-  const load = useCallback(async (quiet = false) => { if (!quiet) setLoading(true); try { setDashboard(await api('/riders/me/dashboard')); setError('') } catch (err) { setError(err.message) } finally { setLoading(false) } }, [])
-  // Initial API synchronization is intentionally effect-driven; subsequent refreshes use the same stable callback.
-  // oxlint-disable-next-line react/set-state-in-effect
-  useEffect(() => { load(true); const id = setInterval(() => token() && load(true), 15000); return () => clearInterval(id) }, [load])
-  async function run(work) { setBusy(true); try { await work(); await load(true); setError('') } catch (err) { setError(err.message) } finally { setBusy(false) } }
-  const availability = (value) => run(() => api('/riders/me/availability', { method: 'PATCH', body: JSON.stringify({ availability: value }) }))
-  const shareLocation = () => navigator.geolocation ? navigator.geolocation.getCurrentPosition(({ coords }) => run(() => api('/riders/me/location', { method: 'PATCH', body: JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude, accuracyMeters: coords.accuracy }) })), (err) => setError(err.message), { enableHighAccuracy: true, timeout: 10000 }) : setError('Location is not supported by this browser.')
-  const offer = (id, action) => run(() => api(`/delivery-assignments/${id}/${action}`, { method: 'POST', body: '{}' }))
-  const lifecycle = (id, action, body) => run(() => api(`/delivery-lifecycle/${id}/${action}`, { method: 'POST', body: JSON.stringify(body ?? {}) }))
-  if (loading && !dashboard) return <main className="shell centered"><div className="loader" /><p>Preparing your delivery workspace…</p></main>
-  if (!dashboard) return <main className="shell centered"><div className="brand-mark">M</div><h1>Rider access required</h1><p>{error}</p><p className="muted">This dashboard uses the secure token created by MediConnect authentication.</p><button onClick={() => load()}>Try again</button></main>
-  const { rider, location, workload, offers, activeAssignments, activeRoute, recentHistory } = dashboard
-  return <main className="shell">
-    <header><div><button className="brand brand-button" type="button" onClick={() => navigate('/')}><span className="brand-mark small">M</span><span>MediConnect</span></button><p className="greeting">Good day, {rider.name.split(' ')[0]}</p></div><div className={`availability ${rider.availability.toLowerCase()}`}><span />{label(rider.availability)}</div></header>
-    {error && <div className="alert" role="alert">{error}<button aria-label="Dismiss" onClick={() => setError('')}>×</button></div>}
-    <section className="status-panel"><div><span className="eyebrow">Availability</span><h1>{rider.availability === 'AVAILABLE' ? 'Ready for deliveries' : rider.availability === 'BUSY' ? 'Delivery in progress' : 'You are not receiving offers'}</h1><p>{label(rider.vehicleType)}{rider.vehicleNumber ? ` · ${rider.vehicleNumber}` : ''}</p></div><div className="toggle-actions"><button className={rider.availability === 'AVAILABLE' ? '' : 'secondary'} disabled={busy || rider.availability === 'BUSY'} onClick={() => availability(rider.availability === 'AVAILABLE' ? 'OFFLINE' : 'AVAILABLE')}>{rider.availability === 'AVAILABLE' ? 'Go offline' : 'Go online'}</button><button className="location-button" disabled={busy} onClick={shareLocation}>Update location</button></div><div className="location-state"><span className={`signal ${location.freshness.toLowerCase()}`} />Location {label(location.freshness)} · {time(location.lastUpdatedAt)}</div></section>
-    <section className="metrics"><div><b>{workload.actionableOffers}</b><span>Offers</span></div><div><b>{workload.activeAssignments}</b><span>Active</span></div><div><b>{workload.recentDeliveries}</b><span>Completed</span></div></section>
-    {offers.length > 0 && <section><div className="section-heading"><div><span className="eyebrow">New requests</span><h2>Delivery offers</h2></div><button className="icon-button" onClick={() => load()}>↻</button></div>{offers.map((item) => <article className="card offer-card" key={item.id}><div><span className="status amber">{item.batchId ? 'Batch offer' : 'Offer'}</span><h2>{item.order.orderNumber}</h2><p><b>{item.order.pharmacy.name}</b> → {item.order.deliveryAddressLabelSnapshot || 'Customer destination'}</p><small>{item.batchId ? 'Compatible with your current route · ' : ''}Expires at {time(item.expiresAt)}</small></div><div className="action-grid"><button className="secondary" disabled={busy} onClick={() => offer(item.id, 'decline')}>Decline</button><button disabled={busy} onClick={() => offer(item.id, 'accept')}>Accept</button></div></article>)}</section>}
-    <section><div className="section-heading"><div><span className="eyebrow">Your route</span><h2>Current deliveries</h2></div></div>{activeRoute?.stops?.length > 0 && <article className="card"><div className="card-top"><div><span className="eyebrow">Optimized batch route</span><h2>{activeRoute.stops.length} stops</h2></div><span className="status blue">{label(activeRoute.status)}</span></div>{activeRoute.stops.map((stop) => <div className="route-line" key={stop.id}><span className={`route-dot ${stop.stopType === 'PHARMACY_PICKUP' ? 'pickup' : 'drop'}`}>{stop.sequence}</span><div><b>{stop.addressLabel || label(stop.stopType)}</b><p>{stop.orderNumber} · ETA {time(stop.estimatedArrivalAt)}</p></div><a className="text-link" href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`} target="_blank" rel="noreferrer">Navigate</a></div>)}</article>}{activeAssignments.length ? activeAssignments.map((item) => <AssignmentCard key={item.id} assignment={item} onAction={lifecycle} busy={busy} />) : <div className="empty"><span>✓</span><h3>No active delivery</h3><p>Go online and keep your location fresh to receive offers.</p></div>}</section>
-    <section><div className="section-heading"><div><span className="eyebrow">Recent activity</span><h2>Delivery history</h2></div></div><div className="history card">{recentHistory.length ? recentHistory.map((item) => <div className="history-row" key={item.id}><span className={`history-icon ${item.status.toLowerCase()}`}>✓</span><div><b>{item.order.orderNumber}</b><p>{item.order.pharmacy.name}</p></div><div className="history-status"><b>{label(item.status)}</b><small>{time(item.deliveredAt ?? item.assignedAt)}</small></div></div>) : <p className="muted">No recent deliveries yet.</p>}</div></section>
-    <footer>Location updates are shared only during delivery operations.</footer>
-  </main>
+  const { logout } = useAuth()
+  const [dashboard, setDashboard] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [arrivedAssignmentIds, setArrivedAssignmentIds] = useState(() => new Set())
+
+  const loadDashboard = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
+    try {
+      setDashboard(await riderRequest('/riders/me/dashboard'))
+      setError('')
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDashboard(true)
+    const intervalId = window.setInterval(() => {
+      if (getAccessToken()) loadDashboard(true)
+    }, 15000)
+    return () => window.clearInterval(intervalId)
+  }, [loadDashboard])
+
+  async function run(work) {
+    setBusy(true)
+    try {
+      const result = await work()
+      await loadDashboard(true)
+      setError('')
+      return result
+    } catch (requestError) {
+      setError(requestError.message)
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function setAvailability(availability) {
+    return run(() => riderRequest('/riders/me/availability', {
+      method: 'PATCH',
+      body: JSON.stringify({ availability }),
+    }))
+  }
+
+  function shareLocation() {
+    if (!navigator.geolocation) {
+      setError('Location sharing is not supported by this browser.')
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => run(() => riderRequest('/riders/me/location', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracyMeters: coords.accuracy,
+        }),
+      })),
+      (locationError) => setError(locationError.message),
+      { enableHighAccuracy: true, timeout: 10000 },
+    )
+  }
+
+  function respondToOffer(assignmentId, action) {
+    return run(() => riderRequest(`/delivery-assignments/${assignmentId}/${action}`, {
+      method: 'POST',
+      body: '{}',
+    }))
+  }
+
+  async function runLifecycle(assignmentId, action, body) {
+    const result = await run(() => riderRequest(
+      `/delivery-lifecycle/${assignmentId}/${action}`,
+      { method: 'POST', body: JSON.stringify(body ?? {}) },
+    ))
+
+    if (result && action === 'arrive-pharmacy') {
+      setArrivedAssignmentIds((current) => new Set(current).add(assignmentId))
+    }
+  }
+
+  function reportFailure(assignmentId) {
+    const reason = window.prompt('Briefly describe the delivery problem.')?.trim()
+    if (reason) runLifecycle(assignmentId, 'fail', { reason })
+  }
+
+  function handleLogout() {
+    logout()
+    navigate('/', { replace: true })
+  }
+
+  if (loading && !dashboard) {
+    return (
+      <main className="rider-shell rider-centered" aria-busy="true">
+        <div className="rider-loader" />
+        <p>Preparing your delivery workspace...</p>
+      </main>
+    )
+  }
+
+  if (!dashboard) {
+    return (
+      <main className="rider-shell rider-centered">
+        <div className="rider-brand-mark">M</div>
+        <h1>Rider workspace unavailable</h1>
+        <p>{error}</p>
+        <button type="button" onClick={() => loadDashboard()}>Try again</button>
+      </main>
+    )
+  }
+
+  const {
+    rider,
+    location,
+    workload,
+    offers,
+    activeAssignments,
+    activeRoute,
+    recentHistory,
+  } = dashboard
+  const isAvailable = rider.availability === 'AVAILABLE'
+  const isBusy = rider.availability === 'BUSY'
+
+  return (
+    <main className="rider-shell">
+      <header className="rider-header">
+        <button className="rider-brand" type="button" onClick={() => navigate('/')}>
+          <span className="rider-brand-mark small">M</span>
+          <span>MediConnect</span>
+        </button>
+        <button className="rider-logout" type="button" onClick={handleLogout}>Log out</button>
+      </header>
+
+      {error && (
+        <div className="rider-alert" role="alert">
+          <span>{error}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => setError('')}>×</button>
+        </div>
+      )}
+
+      <section className="rider-status-panel">
+        <div className="rider-status-topline">
+          <div>
+            <span className="rider-eyebrow">Rider status</span>
+            <h1>{rider.name}</h1>
+          </div>
+          <span className={`rider-availability ${rider.availability.toLowerCase()}`}>
+            <i />{formatLabel(rider.availability)}
+          </span>
+        </div>
+        <p>
+          {isAvailable
+            ? 'You are ready to receive delivery offers.'
+            : isBusy
+              ? 'Your active delivery is in progress.'
+              : 'Go online when you are ready to receive deliveries.'}
+        </p>
+        <div className="rider-status-actions">
+          <button
+            type="button"
+            disabled={busy || isBusy}
+            onClick={() => setAvailability(isAvailable ? 'OFFLINE' : 'AVAILABLE')}
+          >
+            {isAvailable ? 'Go offline' : 'Go online'}
+          </button>
+          <button className="secondary" type="button" disabled={busy} onClick={shareLocation}>
+            Share current location
+          </button>
+        </div>
+        <div className="rider-location-state">
+          <i className={location.freshness.toLowerCase()} />
+          <span>
+            {location.sharing ? 'Location shared' : 'Location not shared'} ·{' '}
+            {formatLabel(location.freshness)}
+            {location.lastUpdatedAt ? ` at ${formatTime(location.lastUpdatedAt)}` : ''}
+          </span>
+        </div>
+      </section>
+
+      <section className="rider-current-work">
+        <div className="rider-section-heading">
+          <div>
+            <span className="rider-eyebrow">Right now</span>
+            <h2>{activeAssignments.length ? 'Current delivery' : 'Ready for work'}</h2>
+          </div>
+          <button
+            className="rider-refresh"
+            type="button"
+            disabled={busy}
+            onClick={() => loadDashboard()}
+          >
+            Refresh
+          </button>
+        </div>
+
+        {activeRoute?.stops?.length > 0 && (
+          <article className="rider-route-card">
+            <div>
+              <span className="rider-eyebrow">Active route</span>
+              <strong>{activeRoute.stops.length} remaining stops</strong>
+            </div>
+            <ol>
+              {activeRoute.stops.map((stop) => (
+                <li key={stop.id}>
+                  <span>{stop.sequence}</span>
+                  <div>
+                    <strong>{stop.addressLabel || formatLabel(stop.stopType)}</strong>
+                    <small>
+                      {stop.orderNumber || 'Delivery'}
+                      {stop.estimatedArrivalAt ? ` · ETA ${formatTime(stop.estimatedArrivalAt)}` : ''}
+                    </small>
+                  </div>
+                  <a href={navigationUrl(stop.latitude, stop.longitude)} target="_blank" rel="noreferrer">
+                    Navigate
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </article>
+        )}
+
+        {activeAssignments.length ? activeAssignments.map((assignment) => (
+          <AssignmentCard
+            key={assignment.id}
+            assignment={assignment}
+            arrived={arrivedAssignmentIds.has(assignment.id)}
+            busy={busy}
+            onLifecycle={runLifecycle}
+            onReportFailure={reportFailure}
+          />
+        )) : (
+          <div className={`rider-empty ${isAvailable ? 'online' : ''}`}>
+            <span>{isAvailable ? 'ON' : 'OFF'}</span>
+            <h3>{isAvailable ? "You're online" : "You're offline"}</h3>
+            <p>
+              {isAvailable
+                ? 'Waiting for the next delivery offer.'
+                : 'Go online to receive delivery offers.'}
+            </p>
+            {!isAvailable && !isBusy && (
+              <button type="button" disabled={busy} onClick={() => setAvailability('AVAILABLE')}>
+                Go online
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+
+      {offers.length > 0 && (
+        <section className="rider-offers">
+          <div className="rider-section-heading">
+            <div>
+              <span className="rider-eyebrow">New requests</span>
+              <h2>Delivery offers</h2>
+            </div>
+            <span className="rider-count">{workload.actionableOffers}</span>
+          </div>
+          {offers.map((offer) => (
+            <article className="rider-offer-card" key={offer.id}>
+              <div>
+                <span className="rider-eyebrow">
+                  {offer.batchId ? 'Batch offer' : 'Delivery offer'}
+                </span>
+                <h3>{offer.order.orderNumber}</h3>
+                <p>
+                  <strong>{offer.order.pharmacy.name}</strong> to{' '}
+                  {offer.order.deliveryAddressLabelSnapshot || 'customer address'}
+                </p>
+                <small>Expires at {formatTime(offer.expiresAt)}</small>
+              </div>
+              <div className="rider-offer-actions">
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => respondToOffer(offer.id, 'decline')}
+                >
+                  Decline
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => respondToOffer(offer.id, 'accept')}
+                >
+                  Accept
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      {recentHistory.length > 0 && (
+        <section className="rider-history">
+          <div className="rider-section-heading">
+            <div>
+              <span className="rider-eyebrow">Recent</span>
+              <h2>Delivery activity</h2>
+            </div>
+          </div>
+          <div className="rider-history-card">
+            {recentHistory.map((item) => (
+              <div className="rider-history-row" key={item.id}>
+                <span>{item.status === 'DELIVERED' ? '✓' : '!'}</span>
+                <div>
+                  <strong>{item.order.orderNumber}</strong>
+                  <small>{item.order.pharmacy.name}</small>
+                </div>
+                <div>
+                  <strong>{formatLabel(item.status)}</strong>
+                  <small>{formatTime(item.deliveredAt ?? item.assignedAt)}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <footer className="rider-footer">
+        Location updates are shared only during delivery operations.
+      </footer>
+    </main>
+  )
 }
-export default App

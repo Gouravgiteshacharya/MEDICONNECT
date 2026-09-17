@@ -65,9 +65,18 @@ function ProtectedRoute({ allowedRoles, children }) {
 
   if (!authenticated) {
     const next = `${location.pathname}${location.search}`
+    const audience =
+      location.pathname === '/pharmacy' ||
+      location.pathname.startsWith('/pharmacy/') ||
+      location.pathname === '/rider' ||
+      location.pathname.startsWith('/rider/') ||
+      location.pathname === '/admin' ||
+      location.pathname.startsWith('/admin/')
+        ? '&audience=staff'
+        : ''
     return (
       <Navigate
-        to={`/?auth=login&next=${encodeURIComponent(next)}`}
+        to={`/?auth=login${audience}&next=${encodeURIComponent(next)}`}
         replace
       />
     )
