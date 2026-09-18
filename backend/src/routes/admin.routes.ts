@@ -1,0 +1,21 @@
+import { Router } from "express";
+import { getOperationsSummary } from "../controllers/admin.controller.js";
+import { getOrder, listOrders } from "../controllers/admin.controller.js";
+import { adminOrderListSchema } from "../validators/admin.schemas.js";
+import { orderParamsSchema } from "../validators/order.schemas.js";
+import { UserRole } from "../../generated/prisma/client.js";
+import { getPharmacy, listInventory, listPharmacies } from "../controllers/admin.controller.js";
+import { authenticate } from "../middleware/authenticate.js";
+import { authorizeRoles } from "../middleware/authorizeRoles.js";
+import { validateRequest } from "../middleware/validateRequest.js";
+import { adminInventoryListSchema, adminPharmacyListSchema } from "../validators/admin.schemas.js";
+import { pharmacyParamsSchema } from "../validators/pharmacy.schemas.js";
+
+export const adminRoutes = Router();
+const requireAdmin = [authenticate, authorizeRoles(UserRole.ADMIN)] as const;
+adminRoutes.get("/pharmacies", ...requireAdmin, validateRequest({ query: adminPharmacyListSchema }), listPharmacies);
+adminRoutes.get("/pharmacies/:pharmacyId", ...requireAdmin, validateRequest({ params: pharmacyParamsSchema }), getPharmacy);
+adminRoutes.get("/inventory", ...requireAdmin, validateRequest({ query: adminInventoryListSchema }), listInventory);
+adminRoutes.get("/orders", ...requireAdmin, validateRequest({ query: adminOrderListSchema }), listOrders);
+adminRoutes.get("/orders/:orderId", ...requireAdmin, validateRequest({ params: orderParamsSchema }), getOrder);
+adminRoutes.get("/operations/summary", ...requireAdmin, getOperationsSummary);

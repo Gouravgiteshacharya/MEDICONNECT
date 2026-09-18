@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { listActivePharmacyMemberships } from "../services/pharmacyMembership.service.js";
 
 import {
   getOperationalPharmacyProfile,
@@ -12,6 +13,11 @@ function authenticatedUserId(req: Request) {
 
 function requestedPharmacyId(req: Request) {
   return req.params.pharmacyId as string;
+}
+
+export async function getMyPharmacies(req: Request, res: Response) {
+  const memberships = await listActivePharmacyMemberships(authenticatedUserId(req));
+  res.status(200).json({ memberships });
 }
 
 export async function getPublicProfile(req: Request, res: Response) {

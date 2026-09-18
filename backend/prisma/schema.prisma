@@ -290,22 +290,25 @@ model OrderItem {
 }
 
 model Prescription {
-  id               String             @id @default(uuid()) @db.Uuid
-  orderId          String             @db.Uuid
-  fileUrl          String
-  storagePath      String?
-  originalFilename String?
-  status           PrescriptionStatus @default(PENDING_REVIEW)
-  uploadedAt       DateTime           @default(now())
-  reviewedAt       DateTime?
-  reviewerStaffId  String?            @db.Uuid
-  reviewNotes      String?
-  rejectionReason  String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  id                       String             @id @default(uuid()) @db.Uuid
+  orderId                  String             @db.Uuid
+  fileUrl                  String
+  storagePath              String?
+  originalFilename         String?
+  status                   PrescriptionStatus @default(PENDING_REVIEW)
+  uploadedAt               DateTime           @default(now())
+  reviewedAt               DateTime?
+  reviewerStaffId          String?            @db.Uuid
+  reviewNotes              String?
+  rejectionReason          String?
+  supersedesPrescriptionId String?            @unique @db.Uuid
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
-  order         Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  reviewerStaff PharmacyStaff? @relation("PrescriptionReviewer", fields: [reviewerStaffId], references: [id], onDelete: Restrict)
+  order                    Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  reviewerStaff            PharmacyStaff? @relation("PrescriptionReviewer", fields: [reviewerStaffId], references: [id], onDelete: Restrict)
+  supersedesPrescription   Prescription?  @relation("PrescriptionSupersession", fields: [supersedesPrescriptionId], references: [id], onDelete: Restrict)
+  supersededByPrescription Prescription?  @relation("PrescriptionSupersession")
 
   @@index([orderId])
   @@index([status])

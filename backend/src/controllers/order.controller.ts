@@ -2,6 +2,7 @@ import type { EtaShadowDependencies } from "../ml/eta-runtime.js";
 import type { Request, Response } from "express";
 
 import {
+  cancelCustomerOrder,
   createCustomerOrder,
   getCustomerOrder,
   listCustomerOrders,
@@ -13,13 +14,20 @@ function getAuthenticatedCustomerId(req: Request) {
   const customerId = req.user?.id;
 
   if (!customerId) {
-    throw new ApiError(401, "Authentication required.", "AUTH_REQUIRED");
+    throw new ApiError(
+      401,
+      "Authentication required.",
+      "AUTH_REQUIRED",
+    );
   }
 
   return customerId;
 }
 
-export function createOrderController({ etaRuntime, onEtaShadowResult = () => {} }: EtaShadowDependencies = {}) {
+export function createOrderController({
+  etaRuntime,
+  onEtaShadowResult = () => {},
+}: EtaShadowDependencies = {}) {
   return async function createOrder(req: Request, res: Response) {
     const order = await createCustomerOrder(
       getAuthenticatedCustomerId(req),
@@ -34,21 +42,40 @@ export function createOrderController({ etaRuntime, onEtaShadowResult = () => {}
           placedAt: new Date(order.placedAt.getTime()),
           items: order.items.map(() => null),
         });
+
         // Whitelist telemetry fields even when a runtime is injected by a caller.
-        const observation = result.status === "predicted"
-          ? { status: result.status, predictionPoint: result.predictionPoint, predictedMinutes: result.predictedMinutes, modelVersion: result.modelVersion, dataProvenance: result.dataProvenance }
-          : result.status === "unavailable"
-            ? { status: result.status, reason: result.reason }
-            : { status: "disabled" as const };
+        const observation =
+          result.status === "predicted"
+            ? {
+                status: result.status,
+                predictionPoint: result.predictionPoint,
+                predictedMinutes: result.predictedMinutes,
+                modelVersion: result.modelVersion,
+                dataProvenance: result.dataProvenance,
+              }
+            : result.status === "unavailable"
+              ? {
+                  status: result.status,
+                  reason: result.reason,
+                }
+              : { status: "disabled" as const };
+
         await onEtaShadowResult(observation);
-      } catch { /* Optional shadow work must never fail successful checkout. */ }
+      } catch {
+        // Optional shadow work must never fail successful checkout.
+      }
     }
+
     res.status(201).json({ order });
   };
 }
+
 export const createOrder = createOrderController();
 
-export async function listOrders(req: Request, res: Response) {
+export async function listOrders(
+  req: Request,
+  res: Response,
+) {
   const result = await listCustomerOrders(
     getAuthenticatedCustomerId(req),
     req.query as unknown as OrderHistoryQuery,
@@ -57,8 +84,23 @@ export async function listOrders(req: Request, res: Response) {
   res.status(200).json(result);
 }
 
-export async function getOrder(req: Request, res: Response) {
+export async function getOrder(
+  req: Request,
+  res: Response,
+) {
   const order = await getCustomerOrder(
+    getAuthenticatedCustomerId(req),
+    req.params.orderId as string,
+  );
+
+  res.status(200).json({ order });
+}
+
+export async function cancelOrder(
+  req: Request,
+  res: Response,
+) {
+  const order = await cancelCustomerOrder(
     getAuthenticatedCustomerId(req),
     req.params.orderId as string,
   );

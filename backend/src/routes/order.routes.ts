@@ -3,6 +3,7 @@ import { Router } from "express";
 import { UserRole } from "../../generated/prisma/client.js";
 
 import {
+  cancelOrder,
   createOrderController,
   getOrder,
   listOrders,
@@ -27,24 +28,42 @@ import {
 export function createOrderRoutes(dependencies: EtaShadowDependencies = {}) {
   const orderRoutes = Router();
 
-  orderRoutes.use(authenticate, authorizeRoles(UserRole.CUSTOMER));
-  orderRoutes.post("/", validateRequest(createOrderSchema), createOrderController(dependencies));
+  orderRoutes.use(
+    authenticate,
+    authorizeRoles(UserRole.CUSTOMER),
+  );
+
+  orderRoutes.post(
+    "/",
+    validateRequest(createOrderSchema),
+    createOrderController(dependencies),
+  );
+
   orderRoutes.get(
     "/",
     validateRequest({ query: orderHistoryQuerySchema }),
     listOrders,
   );
+
   orderRoutes.post(
     "/:orderId/prescriptions",
     validateRequest({ params: prescriptionOrderParamsSchema }),
     validateRequest(createPrescriptionSchema),
     createPrescription,
   );
+
   orderRoutes.get(
     "/:orderId/prescriptions",
     validateRequest({ params: prescriptionOrderParamsSchema }),
     listPrescriptions,
   );
+
+  orderRoutes.patch(
+    "/:orderId/cancel",
+    validateRequest({ params: orderParamsSchema }),
+    cancelOrder,
+  );
+
   orderRoutes.get(
     "/:orderId",
     validateRequest({ params: orderParamsSchema }),
@@ -53,4 +72,5 @@ export function createOrderRoutes(dependencies: EtaShadowDependencies = {}) {
 
   return orderRoutes;
 }
+
 export const orderRoutes = createOrderRoutes();

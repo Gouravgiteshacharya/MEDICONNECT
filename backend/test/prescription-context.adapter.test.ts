@@ -10,7 +10,7 @@ const context = createTrustedAssistantContext({ userId: customerId, roles: ["CUS
 const uploadedAt = new Date("2026-09-01T10:00:00.000Z");
 
 function prescription(status: PrescriptionStatus = PrescriptionStatus.PENDING_REVIEW) {
-  return { id: prescriptionId, orderId: "order-private", fileUrl: "private-url", originalFilename: "private.pdf", status, uploadedAt, reviewedAt: status === PrescriptionStatus.PENDING_REVIEW ? null : uploadedAt, reviewNotes: "Recorded note", rejectionReason: status === PrescriptionStatus.REJECTED ? "Image unclear" : null };
+  return { id: prescriptionId, orderId: "order-private", fileUrl: "private-url", originalFilename: "private.pdf", status, uploadedAt, reviewedAt: status === PrescriptionStatus.PENDING_REVIEW ? null : uploadedAt, reviewNotes: "Recorded note", rejectionReason: status === PrescriptionStatus.REJECTED ? "Image unclear" : null, supersedesPrescriptionId: null };
 }
 
 function dependency(operation: PrescriptionContextDependencies["getCustomerPrescription"]): PrescriptionContextDependencies {
