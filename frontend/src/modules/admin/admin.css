@@ -1,0 +1,9 @@
+.operations { max-width: 900px; margin: 24px auto; padding: 28px; background: #fff; border: 1px solid #d9e3e6; border-radius: 16px; overflow-wrap: anywhere; }
+.operations h1 { margin-top: 0; }
+.operations form { display: grid; gap: 12px; max-width: 420px; }
+.operations input { min-width: 0; width: 100%; padding: 12px; border: 1px solid #607b89; border-radius: 8px; }
+.operations button { min-height: 44px; padding: 10px 16px; border: 0; border-radius: 8px; color: white; background: #0d455e; cursor: pointer; }
+.operations button:disabled { opacity: .65; cursor: wait; }
+.operations :focus-visible { outline: 3px solid #287560; outline-offset: 4px; }
+.operations__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+@media (max-width: 560px) { .operations { margin: 12px; padding: 20px; } .operations__header { align-items: stretch; flex-direction: column; } }

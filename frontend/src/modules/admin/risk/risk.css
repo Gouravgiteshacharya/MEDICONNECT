@@ -1,0 +1,15 @@
+.risk-filters, .risk-pagination { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 20px 0; }
+.risk-filters label { display: grid; gap: 6px; flex: 1; min-width: 180px; }
+.risk-filters select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #607b89; border-radius: 8px; background: white; }
+.risk-list { list-style: none; padding: 0; display: grid; gap: 16px; }
+.risk-list > li { padding: 16px; border: 1px solid #d9e3e6; border-radius: 10px; }
+.risk-list h3 { margin: 0; }
+.risk-code { overflow-wrap: anywhere; font-size: .9rem; }
+.risk-actions button { margin: 8px 8px 8px 0; }
+.risk-confirmation { border: 1px solid #607b89; border-radius: 8px; padding: 16px; }
+.risk-confirmation label { display: grid; gap: 8px; }
+.risk-confirmation select { width: 100%; min-width: 0; padding: 12px; }
+.risk-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.risk-facts dt { font-weight: 700; }
+.risk-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .risk-facts { grid-template-columns: 1fr; } .risk-filters { align-items: stretch; flex-direction: column; } .risk-pagination span { flex-basis: 100%; order: -1; } }
