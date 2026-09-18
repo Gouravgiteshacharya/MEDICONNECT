@@ -18,6 +18,18 @@ const INVENTORY_CHUNK_SIZE = 50_000
 const namePrefixes = ['Maa Tarini', 'Savitri', 'Sai Krupa', 'Maa Mangala', 'Jagannath', 'Shree Ganesh', 'Arogya', 'Jeevan', 'Annapurna', 'Nilachala', 'Subham', 'Swasthya', 'Janaseva', 'Suraksha', 'Niramaya', 'Ashirwad', 'Sanjeevani', 'Seva', 'Dhanvantari', 'Utkal', 'Pragati', 'Sahara', 'Suman', 'Aditya', 'Navjeevan']
 const nameRoots = ['Care', 'Health', 'Wellness', 'Arogya', 'Life', 'Community', 'Family', 'Town', 'City', 'People', 'Mitra', 'Relief', 'Hope', 'Goodwill', 'Neighbourhood', 'Everyday', 'Trust', 'Healing', 'Swasth', 'Sanjeevan']
 const nameSuffixes = ['Medical Store', 'Medicine House', 'Medical Hall', 'Pharmacy', 'Medicals', 'Health Point', 'Medicine Centre', 'Care Pharmacy', 'Drug House', 'Community Pharmacy']
+export const keonjharLocalityLabels = [
+  'Near Atopur Road',
+  'Mining Road area',
+  'Near College Road',
+  'Medical Road area',
+  'Near Gandhi Chowk',
+  'Jagamohanpur area',
+  'Madhapur area',
+  'New Market area',
+  'Station Road area',
+  'Keonjhar town-centre area',
+] as const
 const majorChainPattern = /\b(apollo|medplus|netmeds|pharmeasy|tata\s*1mg|wellness\s*forever|guardian)\b/i
 
 class JsonlWriter {
@@ -103,6 +115,9 @@ export function buildPharmacies(locations: DemoLocation[], seed = DEFAULT_DEMO_S
       const longitude = location.longitude + (distanceKm * Math.sin(angle)) / (111.32 * Math.cos(location.latitude * Math.PI / 180))
       const city = location.keonjharTown ? 'Keonjhar' : location.city
       const name = pharmacyName(index, city)
+      const addressLine1 = location.keonjharTown
+        ? keonjharLocalityLabels[localIndex]
+        : `Ward ${1 + (index % 30)}, ${city} Town Centre`
       if (majorChainPattern.test(name)) throw new Error(`Generated prohibited chain-like name: ${name}`)
       pharmacies.push({
         id: deterministicUuid('pharmacy', `${seed}:${index}`),
@@ -111,8 +126,10 @@ export function buildPharmacies(locations: DemoLocation[], seed = DEFAULT_DEMO_S
         phone: String(7_000_000_000 + index),
         email: `demo-pharmacy-${String(index + 1).padStart(5, '0')}@example.invalid`,
         licenseNumber: `DEMO-MC-${seed}-${String(index + 1).padStart(5, '0')}`,
-        addressLine1: `Ward ${1 + (index % 30)}, ${city} Town Centre`,
-        addressLine2: `Near Community Market, ${location.district} district`,
+        addressLine1,
+        addressLine2: location.keonjharTown
+          ? 'Keonjhar, Kendujhar district'
+          : `Near Community Market, ${location.district} district`,
         city, district: location.district, state: location.state, postalCode: location.postalCode,
         latitude: Number(latitude.toFixed(6)), longitude: Number(longitude.toFixed(6)),
         isVerified: false, isActive: true, partnerStatus: 'ACTIVE',
