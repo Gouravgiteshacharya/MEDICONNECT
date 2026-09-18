@@ -1,4 +1,5 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { CustomerDestinationProvider } from './CustomerDestinationContext'
 import './CustomerShell.css'
 
 function HomeIcon() {
@@ -115,6 +116,7 @@ export default function CustomerShell() {
   ]
 
   return (
+    <CustomerDestinationProvider>
     <div className="customer-shell">
       <aside className="customer-shell-sidebar" aria-label="Customer workspace">
         <button
@@ -159,5 +161,6 @@ export default function CustomerShell() {
         ))}
       </nav>
     </div>
+    </CustomerDestinationProvider>
   )
 }

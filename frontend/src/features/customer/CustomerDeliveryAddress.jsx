@@ -12,6 +12,7 @@ import {
   listAddresses,
 } from './addressService'
 import CustomerAuthModal from './CustomerAuthModal'
+import { destinationFromAddress, useCustomerDestination } from './CustomerDestinationContext'
 import './CustomerDeliveryAddress.css'
 
 const emptyForm = {
@@ -79,6 +80,7 @@ function addressInput(form) {
 export default function CustomerDeliveryAddress() {
   const navigate = useNavigate()
   const { authenticated, initializing } = useAuth()
+  const { destination, setDestination } = useCustomerDestination()
 
   const [cart, setCart] = useState(null)
   const [addresses, setAddresses] = useState([])
@@ -199,6 +201,7 @@ export default function CustomerDeliveryAddress() {
 
     try {
       await setDeliveryFulfillment(address.id)
+      setDestination(destinationFromAddress(address))
       const quote = await createDeliveryQuote({
         pharmacyId: cart.pharmacyId,
         deliveryAddressId: address.id,
@@ -275,7 +278,7 @@ export default function CustomerDeliveryAddress() {
             {addresses.length > 0 && (
               <section className="customer-delivery-list">
                 {addresses.map((address) => (
-                  <article key={address.id}>
+                  <article key={address.id} className={destination?.addressId === address.id ? 'selected' : ''}>
                     <div>
                       <strong>
                         {address.label}
@@ -306,7 +309,11 @@ export default function CustomerDeliveryAddress() {
                       }
                       onClick={() => chooseAddress(address)}
                     >
-                      {selectingId === address.id ? 'Checking...' : 'Use'}
+                      {selectingId === address.id
+                        ? 'Checking...'
+                        : destination?.addressId === address.id
+                          ? 'Selected · continue'
+                          : 'Use'}
                     </button>
                   </article>
                 ))}
@@ -409,36 +416,6 @@ export default function CustomerDeliveryAddress() {
                       onChange={updateField}
                       autoComplete="address-level1"
                       required
-                    />
-                  </label>
-                </div>
-
-                <div className="customer-delivery-form-grid">
-                  <label>
-                    <span>Latitude</span>
-                    <input
-                      name="latitude"
-                      type="number"
-                      step="any"
-                      min="-90"
-                      max="90"
-                      value={form.latitude}
-                      onChange={updateField}
-                      readOnly
-                    />
-                  </label>
-
-                  <label>
-                    <span>Longitude</span>
-                    <input
-                      name="longitude"
-                      type="number"
-                      step="any"
-                      min="-180"
-                      max="180"
-                      value={form.longitude}
-                      onChange={updateField}
-                      readOnly
                     />
                   </label>
                 </div>

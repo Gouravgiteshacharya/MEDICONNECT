@@ -137,6 +137,11 @@
   gap: 12px;
 }
 
+.customer-delivery-list article.selected {
+  border-color: #6476b4;
+  box-shadow: 0 0 0 2px rgba(80, 101, 170, .1);
+}
+
 .customer-delivery-list strong {
   display: flex;
   flex-wrap: wrap;

@@ -30,6 +30,44 @@
   backdrop-filter: blur(18px);
 }
 
+.customer-results-header > div:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.customer-results-header .customer-destination-trigger.compact > span:first-child,
+.customer-results-header .customer-destination-trigger.compact em,
+.customer-results-header .customer-destination-trigger.compact b {
+  display: none;
+}
+
+.customer-results-header .customer-destination-trigger.compact strong {
+  max-width: 115px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer-results-geography {
+  margin-top: 18px;
+  padding: 13px 15px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #e2e6ef;
+  border-radius: 15px;
+  background: #f7f8fc;
+}
+
+.customer-results-geography small {
+  color: #6876a4;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .12em;
+}
+
+.customer-results-geography strong { font-size: 13px; }
+.customer-results-geography span { color: #778095; font-size: 10px; }
+
 .customer-results-back {
   width: 38px;
   height: 38px;

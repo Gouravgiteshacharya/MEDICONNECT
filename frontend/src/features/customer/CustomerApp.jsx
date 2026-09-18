@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import CustomerDestinationSelector from './CustomerDestinationSelector'
 import './CustomerApp.css'
 
 function SearchIcon() {
@@ -7,15 +8,6 @@ function SearchIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="11" cy="11" r="7" />
       <path d="m16.2 16.2 4 4" />
-    </svg>
-  )
-}
-
-function LocationIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 21s6-5.3 6-11a6 6 0 1 0-12 0c0 5.7 6 11 6 11Z" />
-      <circle cx="12" cy="10" r="2" />
     </svg>
   )
 }
@@ -37,18 +29,7 @@ export default function CustomerApp() {
   return (
     <div className="customer-app">
       <header className="customer-topbar">
-        <button className="customer-location" type="button">
-          <span className="customer-location-icon">
-            <LocationIcon />
-          </span>
-
-          <span>
-            <small>Delivering to</small>
-            <strong>Choose your location</strong>
-          </span>
-
-          <span className="customer-chevron">⌄</span>
-        </button>
+        <CustomerDestinationSelector />
 
         <div className="customer-top-actions">
           <button type="button" aria-label="Notifications">
@@ -144,7 +125,7 @@ export default function CustomerApp() {
 
               <div>
                 <i />
-                3 pharmacies nearby
+                Search local pharmacy stock
               </div>
             </div>
 

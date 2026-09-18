@@ -5,6 +5,8 @@ import {
   getMedicine,
   getMedicineAvailability,
 } from '../discovery/discoveryService'
+import CustomerDestinationSelector from './CustomerDestinationSelector'
+import { useCustomerDestination } from './CustomerDestinationContext'
 
 import './CustomerPharmacyResults.css'
 
@@ -94,12 +96,10 @@ export default function CustomerPharmacyResults() {
   const [searchParams] = useSearchParams()
 
   const medicineId = searchParams.get('medicineId')
+  const { destination } = useCustomerDestination()
 
   const [medicine, setMedicine] = useState(null)
   const [availability, setAvailability] = useState([])
-
-  const [location, setLocation] = useState(null)
-  const [locationStatus, setLocationStatus] = useState('idle')
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -139,7 +139,7 @@ export default function CustomerPharmacyResults() {
   }, [medicineId])
 
   useEffect(() => {
-    if (!medicineId || !location) return
+    if (!medicineId || !destination) return
 
     let active = true
 
@@ -150,7 +150,7 @@ export default function CustomerPharmacyResults() {
       try {
         const result = await getMedicineAvailability(
           medicineId,
-          location,
+          destination,
           {
             radiusKm: 5,
             page: 1,
@@ -188,7 +188,7 @@ export default function CustomerPharmacyResults() {
     return () => {
       active = false
     }
-  }, [medicineId, location])
+  }, [medicineId, destination])
 
   const sortedPharmacies = useMemo(() => {
     const items = [...availability]
@@ -212,50 +212,6 @@ export default function CustomerPharmacyResults() {
     return items
   }, [availability, sortBy])
 
-  function useDemoLocation() {
-    setError('')
-    setLocationStatus('ready')
-
-    setLocation({
-      latitude: 19.3150,
-      longitude: 84.7935,
-    })
-  }
-
-  function requestLocation() {
-    setError('')
-
-    if (!navigator.geolocation) {
-      setLocationStatus('error')
-      setError('Location is not supported by this browser.')
-      return
-    }
-
-    setLocationStatus('requesting')
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        })
-
-        setLocationStatus('ready')
-      },
-      () => {
-        setLocationStatus('error')
-        setError(
-          'We could not access your location. Allow location access and try again.',
-        )
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
-      },
-    )
-  }
-
   return (
     <div className="customer-results-page">
       <header className="customer-results-header">
@@ -272,6 +228,7 @@ export default function CustomerPharmacyResults() {
           <small>NEARBY AVAILABILITY</small>
           <strong>{medicine?.name || 'Medicine'}</strong>
         </div>
+        <CustomerDestinationSelector compact />
       </header>
 
       <main className="customer-results-main">
@@ -295,7 +252,7 @@ export default function CustomerPharmacyResults() {
               </span>
             )}
 
-            {location && (
+            {destination && (
               <span>
                 <i />
                 {availability.length}{' '}
@@ -307,42 +264,31 @@ export default function CustomerPharmacyResults() {
           </div>
         </section>
 
-        {medicineId && !location && (
+        {medicineId && !destination && (
           <section className="customer-location-gate">
             <div className="customer-location-gate-mark">⌖</div>
 
-            <h2>Check pharmacies near you</h2>
+            <h2>Choose where to search</h2>
 
             <p>
-              MediConnect uses your location to calculate nearby pharmacy
-              availability and distance.
+              Select your current location or a delivery-ready saved address.
+              Pharmacy discovery uses that destination, even when it is in a
+              different city from you.
             </p>
 
-            <div className="customer-location-actions">
-              <button
-                type="button"
-                disabled={locationStatus === 'requesting'}
-                onClick={requestLocation}
-              >
-                {locationStatus === 'requesting'
-                  ? 'Getting location...'
-                  : 'Use current location'}
-              </button>
-
-              {import.meta.env.DEV && (
-                <button
-                  type="button"
-                  className="customer-demo-location-button"
-                  onClick={useDemoLocation}
-                >
-                  Use demo location
-                </button>
-              )}
-            </div>
+            <CustomerDestinationSelector />
           </section>
         )}
 
-        {location && (
+        {destination && (
+          <section className="customer-results-geography">
+            <small>AVAILABLE NEAR</small>
+            <strong>{destination.label}{destination.city ? ` — ${destination.city}` : ''}</strong>
+            <span>{destination.readableAddress}</span>
+          </section>
+        )}
+
+        {destination && (
           <section className="customer-results-controls">
             {['Recommended', 'Nearest', 'Lowest price'].map(
               (option) => (
@@ -364,15 +310,10 @@ export default function CustomerPharmacyResults() {
             <strong>Something needs attention</strong>
             <span>{error}</span>
 
-            {locationStatus === 'error' && (
-              <button type="button" onClick={requestLocation}>
-                Try location again
-              </button>
-            )}
           </section>
         )}
 
-        {location && loading && (
+        {destination && loading && (
           <section className="customer-results-message">
             <strong>Checking nearby pharmacies...</strong>
             <span>
@@ -381,7 +322,7 @@ export default function CustomerPharmacyResults() {
           </section>
         )}
 
-        {location && !loading && !error && (
+        {destination && !loading && !error && (
           <section className="customer-pharmacy-list">
             {sortedPharmacies.length === 0 && (
               <div className="customer-results-message">
@@ -418,6 +359,7 @@ export default function CustomerPharmacyResults() {
                         ? ` away · ${item.pharmacy.city}`
                         : ' away'}
                     </p>
+                    <p>{[item.pharmacy.addressLine1, item.pharmacy.addressLine2].filter(Boolean).join(', ')}</p>
                   </div>
 
                   <strong className="customer-pharmacy-price">
