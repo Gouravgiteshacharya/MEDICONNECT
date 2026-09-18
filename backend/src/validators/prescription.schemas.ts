@@ -14,6 +14,12 @@ export const createPrescriptionSchema = z
   })
   .strict();
 
+export const prescriptionIdempotencyKeySchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/);
+
 export const prescriptionParamsSchema = z
   .object({ prescriptionId: uuidSchema })
   .strict();

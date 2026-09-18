@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
+
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import { OrderStatus, PrescriptionStatus, UserRole } from "../generated/prisma/client.js";
+import { OrderStatus, PrescriptionStatus, Prisma, UserRole } from "../generated/prisma/client.js";
 import { app } from "../src/app.js";
 import { signAuthToken } from "../src/utils/jwt.js";
 
@@ -78,11 +80,40 @@ function prescription(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function uploadRequest(filename = "prescription.pdf", content = pdf, type = "application/pdf") {
+function uploadRequest(
+  filename = "prescription.pdf",
+  content = pdf,
+  type = "application/pdf",
+  idempotencyKey = "upload-key-1",
+) {
   return request(app)
     .post(`/api/v1/orders/${orderId}/prescriptions`)
     .set("Authorization", authenticateAs())
+    .set("Idempotency-Key", idempotencyKey)
     .attach("file", content, { filename, contentType: type });
+}
+
+function knownError(code: string, target?: unknown) {
+  return new Prisma.PrismaClientKnownRequestError(code, {
+    code,
+    clientVersion: "test",
+    ...(target === undefined ? {} : { meta: { target } }),
+  });
+}
+
+function requestHash(
+  content = pdf,
+  type = "application/pdf",
+  supersedesPrescriptionId?: string,
+) {
+  return createHash("sha256")
+    .update("mime\0")
+    .update(type)
+    .update("\0supersedes\0")
+    .update(supersedesPrescriptionId ?? "null")
+    .update("\0bytes\0")
+    .update(content)
+    .digest("hex");
 }
 
 function expectError(response: { status: number; body: unknown }, status: number, code: string) {
@@ -92,7 +123,7 @@ function expectError(response: { status: number; body: unknown }, status: number
 
 describe("secure customer prescription workflow", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     prismaMock.$transaction.mockImplementation(async (callback) => callback(prisma));
     prismaMock.order.findFirst.mockResolvedValue(uploadableOrder());
     prismaMock.prescription.create.mockResolvedValue(prescription());
@@ -128,6 +159,8 @@ describe("secure customer prescription workflow", () => {
     expect(data.storagePath).toBe(stored.key);
     expect(data.originalFilename).toBe("unsafe-prescription.pdf");
     expect(data.fileUrl).toBe(`/api/v1/prescriptions/${data.id}/document-access`);
+    expect(data.uploadIdempotencyKey).toBe("upload-key-1");
+    expect(data.uploadRequestHash).toMatch(/^[a-f0-9]{64}$/);
     expect(data).not.toHaveProperty("reviewerStaffId");
     expect(data).not.toHaveProperty("reviewedAt");
     expect(prismaMock.$transaction.mock.calls[0][1]).toEqual({ isolationLevel: "Serializable" });
@@ -135,9 +168,69 @@ describe("secure customer prescription workflow", () => {
 
   it("generates distinct storage keys for separate uploads", async () => {
     expect((await uploadRequest()).status).toBe(201);
-    expect((await uploadRequest("second.pdf")).status).toBe(201);
+    expect((await uploadRequest("second.pdf", pdf, "application/pdf", "upload-key-2")).status).toBe(201);
     const [first, second] = storageMocks.upload.mock.calls.map((call) => call[0].key);
     expect(first).not.toBe(second);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["malformed", "spaces are not allowed"],
+    ["oversized", "x".repeat(129)],
+  ])("rejects %s Idempotency-Key", async (_name, key) => {
+    let pending = request(app)
+      .post(`/api/v1/orders/${orderId}/prescriptions`)
+      .set("Authorization", authenticateAs());
+    if (key !== undefined) pending = pending.set("Idempotency-Key", key);
+    const response = await pending.attach("file", pdf, {
+      filename: "rx.pdf",
+      contentType: "application/pdf",
+    });
+    expectError(response, 400, "VALIDATION_ERROR");
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+  });
+
+  it("returns a matching replay without uploading or creating again", async () => {
+    const existing = prescription();
+    prismaMock.order.findFirst.mockResolvedValue(
+      uploadableOrder({ status: OrderStatus.CONFIRMED }),
+    );
+    prismaMock.prescription.findFirst.mockResolvedValue({
+      ...existing,
+      uploadRequestHash: requestHash(),
+    });
+    const response = await uploadRequest();
+    expect(response.status).toBe(201);
+    expect(response.body.prescription).toEqual(expect.objectContaining({ id: prescriptionId }));
+    expect(response.body.prescription).not.toHaveProperty("uploadRequestHash");
+    expect(response.body.prescription).not.toHaveProperty("storagePath");
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+    expect(prismaMock.prescription.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["file bytes", Buffer.from("%PDF-1.7\ndifferent"), "application/pdf", undefined],
+    ["MIME context", png, "image/png", undefined],
+    ["supersession intent", pdf, "application/pdf", previousPrescriptionId],
+  ])("rejects idempotency-key reuse with different %s", async (
+    _name,
+    content,
+    type,
+    supersedesPrescriptionId,
+  ) => {
+    prismaMock.prescription.findFirst.mockResolvedValue({
+      ...prescription(),
+      uploadRequestHash: requestHash(),
+    });
+    let pending = uploadRequest("prescription.pdf", content, type);
+    if (supersedesPrescriptionId) {
+      pending = pending.field("supersedesPrescriptionId", supersedesPrescriptionId);
+    }
+    const response = await pending;
+    expectError(response, 409, "PRESCRIPTION_IDEMPOTENCY_CONFLICT");
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+    expect(prismaMock.prescription.create).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -202,6 +295,115 @@ describe("secure customer prescription workflow", () => {
     const response = await uploadRequest();
     expect(response.status).toBe(500);
     expect(storageMocks.delete).toHaveBeenCalledWith(storageMocks.upload.mock.calls[0][0].key);
+  });
+
+  it("recovers an exact concurrent idempotency unique conflict and deletes the losing object", async () => {
+    prismaMock.prescription.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        ...prescription(),
+        uploadRequestHash: requestHash(),
+      });
+    prismaMock.prescription.create.mockRejectedValue(
+      knownError("P2002", ["orderId", "uploadIdempotencyKey"]),
+    );
+
+    const response = await uploadRequest();
+
+    expect(response.status).toBe(201);
+    expect(response.body.prescription.id).toBe(prescriptionId);
+    expect(storageMocks.upload).toHaveBeenCalledTimes(1);
+    expect(storageMocks.delete).toHaveBeenCalledWith(
+      storageMocks.upload.mock.calls[0][0].key,
+    );
+  });
+
+  it("returns conflict for a concurrent different payload using the same key", async () => {
+    prismaMock.prescription.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        ...prescription(),
+        uploadRequestHash: requestHash(Buffer.from("%PDF-1.7\nwinner")),
+      });
+    prismaMock.prescription.create.mockRejectedValue(
+      knownError("P2002", ["orderId", "uploadIdempotencyKey"]),
+    );
+
+    const response = await uploadRequest();
+
+    expectError(response, 409, "PRESCRIPTION_IDEMPOTENCY_CONFLICT");
+    expect(storageMocks.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not swallow unrelated P2002 errors", async () => {
+    prismaMock.prescription.create.mockRejectedValue(
+      knownError("P2002", ["orderId"]),
+    );
+    const response = await uploadRequest();
+    expect(response.status).toBe(500);
+    expect(storageMocks.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves exact supersession unique-conflict behavior", async () => {
+    prismaMock.prescription.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    prismaMock.prescription.findUnique.mockResolvedValue({
+      id: previousPrescriptionId,
+      orderId,
+      status: PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
+    });
+    prismaMock.prescription.create.mockRejectedValue(
+      knownError("P2002", ["supersedesPrescriptionId"]),
+    );
+
+    const response = await uploadRequest()
+      .field("supersedesPrescriptionId", previousPrescriptionId);
+    expectError(response, 409, "PRESCRIPTION_SUPERSESSION_CONFLICT");
+    expect(storageMocks.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows the same key independently on a different order", async () => {
+    const otherOrderId = "66666666-6666-4666-8666-666666666666";
+    prismaMock.order.findFirst.mockResolvedValue(uploadableOrder({ id: otherOrderId }));
+    prismaMock.prescription.create.mockResolvedValue(
+      prescription({ orderId: otherOrderId }),
+    );
+
+    const response = await request(app)
+      .post(`/api/v1/orders/${otherOrderId}/prescriptions`)
+      .set("Authorization", authenticateAs())
+      .set("Idempotency-Key", "upload-key-1")
+      .attach("file", pdf, { filename: "rx.pdf", contentType: "application/pdf" });
+
+    expect(response.status).toBe(201);
+    expect(prismaMock.prescription.findFirst.mock.calls[0][0].where).toEqual({
+      orderId: otherOrderId,
+      uploadIdempotencyKey: "upload-key-1",
+    });
+  });
+
+  it("does not expose an idempotent upload across customer ownership", async () => {
+    prismaMock.order.findFirst.mockResolvedValue(null);
+    prismaMock.prescription.findFirst.mockResolvedValue({
+      ...prescription(),
+      uploadRequestHash: requestHash(),
+    });
+
+    const response = await uploadRequest();
+    expectError(response, 404, "ORDER_NOT_FOUND");
+    expect(prismaMock.prescription.findFirst).not.toHaveBeenCalled();
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+  });
+
+  it("allows the same key to retry after storage failure", async () => {
+    storageMocks.upload
+      .mockRejectedValueOnce(new Error("provider failed"))
+      .mockResolvedValueOnce(undefined);
+
+    expect((await uploadRequest()).status).toBe(500);
+    expect((await uploadRequest()).status).toBe(201);
+    expect(prismaMock.prescription.create).toHaveBeenCalledTimes(1);
   });
 
   it("preserves supersession validation and persistence", async () => {

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import {
   OrderStatus,
@@ -49,6 +49,7 @@ type MembershipReader = (
 
 export type CustomerPrescriptionUploadInput = CreatePrescriptionInput & {
   file: Express.Multer.File | undefined;
+  idempotencyKey: string;
 };
 
 const customerPrescriptionSelect = {
@@ -134,6 +135,14 @@ function prescriptionSupersessionConflictError() {
     409,
     "This prescription has already been superseded.",
     "PRESCRIPTION_SUPERSESSION_CONFLICT",
+  );
+}
+
+function prescriptionIdempotencyConflictError() {
+  return new ApiError(
+    409,
+    "This idempotency key was already used for a different prescription upload.",
+    "PRESCRIPTION_IDEMPOTENCY_CONFLICT",
   );
 }
 
@@ -302,6 +311,37 @@ async function validateSupersession(
   return previousPrescription;
 }
 
+function isUploadIdempotencyUniqueConflict(error: unknown) {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== "P2002"
+  ) {
+    return false;
+  }
+
+  const target = error.meta?.target;
+  return (
+    Array.isArray(target) &&
+    target.length === 2 &&
+    target[0] === "orderId" &&
+    target[1] === "uploadIdempotencyKey"
+  );
+}
+
+function fingerprintUpload(
+  file: Express.Multer.File,
+  supersedesPrescriptionId: string | undefined,
+) {
+  return createHash("sha256")
+    .update("mime\0")
+    .update(file.mimetype)
+    .update("\0supersedes\0")
+    .update(supersedesPrescriptionId ?? "null")
+    .update("\0bytes\0")
+    .update(file.buffer)
+    .digest("hex");
+}
+
 const pngSignature = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
@@ -349,16 +389,34 @@ function validateUploadFile(file: Express.Multer.File | undefined) {
   return file;
 }
 
-async function assertUploadEligibility(
-  customerId: string,
+async function findIdempotentUpload(
   orderId: string,
-  dataSource: PrescriptionDataSource,
+  idempotencyKey: string,
+  dataSource: Pick<PrismaClient, "prescription">,
 ) {
-  const order = await findOwnedOrderForUpload(customerId, orderId, dataSource);
-  if (order.items.length === 0) throw prescriptionNotRequiredError();
-  if (order.status !== OrderStatus.PRESCRIPTION_PENDING) {
-    throw prescriptionUploadNotAllowedError();
+  return dataSource.prescription.findFirst({
+    where: {
+      orderId,
+      uploadIdempotencyKey: idempotencyKey,
+    },
+    select: {
+      ...customerPrescriptionSelect,
+      uploadRequestHash: true,
+    },
+  });
+}
+
+function resolveIdempotentUpload(
+  existing: Awaited<ReturnType<typeof findIdempotentUpload>>,
+  requestHash: string,
+) {
+  if (!existing) return null;
+  if (existing.uploadRequestHash !== requestHash) {
+    throw prescriptionIdempotencyConflictError();
   }
+
+  const { uploadRequestHash: _uploadRequestHash, ...prescription } = existing;
+  return prescription;
 }
 
 async function createPrescriptionRecord(
@@ -367,6 +425,8 @@ async function createPrescriptionRecord(
   prescriptionId: string,
   storagePath: string,
   originalFilename: string,
+  idempotencyKey: string,
+  requestHash: string,
   input: CreatePrescriptionInput,
   dataSource: PrescriptionDataSource,
 ) {
@@ -399,6 +459,8 @@ async function createPrescriptionRecord(
               fileUrl: `/api/v1/prescriptions/${prescriptionId}/document-access`,
               storagePath,
               originalFilename,
+              uploadIdempotencyKey: idempotencyKey,
+              uploadRequestHash: requestHash,
               ...(input.supersedesPrescriptionId === undefined
                 ? {}
                 : {
@@ -432,8 +494,23 @@ export async function createCustomerPrescription(
   storage: PrescriptionStorage = prescriptionStorage,
   identityGenerator: PrescriptionIdentityGenerator = randomUUID,
 ) {
-  await assertUploadEligibility(customerId, orderId, dataSource);
+  const order = await findOwnedOrderForUpload(customerId, orderId, dataSource);
   const file = validateUploadFile(input.file);
+  const requestHash = fingerprintUpload(
+    file,
+    input.supersedesPrescriptionId,
+  );
+  const replay = resolveIdempotentUpload(
+    await findIdempotentUpload(orderId, input.idempotencyKey, dataSource),
+    requestHash,
+  );
+  if (replay) return replay;
+
+  if (order.items.length === 0) throw prescriptionNotRequiredError();
+  if (order.status !== OrderStatus.PRESCRIPTION_PENDING) {
+    throw prescriptionUploadNotAllowedError();
+  }
+
   const prescriptionId = identityGenerator();
   const storagePath = [
     "prescriptions",
@@ -456,6 +533,8 @@ export async function createCustomerPrescription(
       prescriptionId,
       storagePath,
       sanitizeFilename(file.originalname, file.mimetype),
+      input.idempotencyKey,
+      requestHash,
       input,
       dataSource,
     );
@@ -465,6 +544,15 @@ export async function createCustomerPrescription(
     } catch {
       throw prescriptionCleanupError();
     }
+
+    if (isUploadIdempotencyUniqueConflict(error)) {
+      const winner = resolveIdempotentUpload(
+        await findIdempotentUpload(orderId, input.idempotencyKey, dataSource),
+        requestHash,
+      );
+      if (winner) return winner;
+    }
+
     throw error;
   }
 }

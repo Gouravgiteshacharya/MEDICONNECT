@@ -9,6 +9,7 @@ import {
 } from "../services/prescription.service.js";
 import { ApiError } from "../utils/ApiError.js";
 import type { PrescriptionLibraryQuery } from "../validators/prescription.schemas.js";
+import { prescriptionIdempotencyKeySchema } from "../validators/prescription.schemas.js";
 
 function getAuthenticatedCustomerId(req: Request) {
   const customerId = req.user?.id;
@@ -21,10 +22,17 @@ function getAuthenticatedCustomerId(req: Request) {
 }
 
 export async function createPrescription(req: Request, res: Response) {
+  const parsedKey = prescriptionIdempotencyKeySchema.safeParse(
+    req.get("Idempotency-Key"),
+  );
+  if (!parsedKey.success) {
+    throw new ApiError(400, "Invalid request body.", "VALIDATION_ERROR");
+  }
+
   const prescription = await createCustomerPrescription(
     getAuthenticatedCustomerId(req),
     req.params.orderId as string,
-    { ...req.body, file: req.file },
+    { ...req.body, file: req.file, idempotencyKey: parsedKey.data },
   );
 
   res.status(201).json({ prescription });
