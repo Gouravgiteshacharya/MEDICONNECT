@@ -8,11 +8,14 @@ import {
 
 import LandingExperience from '../App'
 import AdminBlockedPage from '../features/admin/AdminBlockedPage'
+import AdminInventory from '../features/admin/AdminInventory'
 import AdminDeliveries from '../features/admin/AdminDeliveries'
 import AdminDeliveryDetail from '../features/admin/AdminDeliveryDetail'
 import AdminOrderDetail from '../features/admin/AdminOrderDetail'
 import AdminOrders from '../features/admin/AdminOrders'
 import AdminOverview from '../features/admin/AdminOverview'
+import AdminPharmacies from '../features/admin/AdminPharmacies'
+import AdminPharmacyDetail from '../features/admin/AdminPharmacyDetail'
 import AdminRiskDetail from '../features/admin/AdminRiskDetail'
 import AdminShell from '../features/admin/AdminShell'
 import AdminSupportDetail from '../features/admin/AdminSupportDetail'
@@ -155,14 +158,9 @@ function AnimatedRoutes() {
             }
           >
             <Route index element={<AdminOverview />} />
-            <Route
-              path="pharmacies"
-              element={<AdminBlockedPage type="pharmacies" />}
-            />
-            <Route
-              path="inventory"
-              element={<AdminBlockedPage type="inventory" />}
-            />
+            <Route path="pharmacies" element={<AdminPharmacies />} />
+            <Route path="pharmacies/:pharmacyId" element={<AdminPharmacyDetail />} />
+            <Route path="inventory" element={<AdminInventory />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="orders/:orderId" element={<AdminOrderDetail />} />
             <Route path="deliveries" element={<AdminDeliveries />} />

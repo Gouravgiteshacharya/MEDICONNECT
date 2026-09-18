@@ -17,6 +17,19 @@ export function labelFromEnum(value) {
     .join(' ')
 }
 
+export function formatDate(value) {
+  if (!value) return 'Not recorded'
+  return new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+export async function getMyPharmacyMemberships() {
+  const result = await apiRequest('/pharmacies/me')
+  return result.memberships ?? []
+}
+
 export async function getPharmacyDashboard(pharmacyId) {
   return apiRequest(`/pharmacies/${pharmacyId}/dashboard`)
 }
@@ -104,6 +117,51 @@ export async function decidePharmacyOrder(pharmacyId, orderId, decision) {
   )
 
   return result.order ?? result
+}
+
+export async function listPharmacyOrders(pharmacyId, options = {}) {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) })
+  if (options.cursor) params.set('cursor', options.cursor)
+  if (options.status) params.set('status', options.status)
+  if (options.fulfillmentMethod) {
+    params.set('fulfillmentMethod', options.fulfillmentMethod)
+  }
+  return apiRequest(`/pharmacies/${pharmacyId}/orders?${params.toString()}`)
+}
+
+export async function getPharmacyOrder(pharmacyId, orderId) {
+  const result = await apiRequest(`/pharmacies/${pharmacyId}/orders/${orderId}`)
+  return result.order ?? result
+}
+
+export async function updatePharmacyOrderPreparation(pharmacyId, orderId, status) {
+  const result = await apiRequest(
+    `/pharmacies/${pharmacyId}/orders/${orderId}/preparation`,
+    { method: 'PATCH', body: { status } },
+  )
+  return result.order ?? result
+}
+
+export async function completePharmacySelfPickup(pharmacyId, orderId) {
+  const result = await apiRequest(
+    `/pharmacies/${pharmacyId}/orders/${orderId}/pickup`,
+    { method: 'PATCH' },
+  )
+  return result.order ?? result
+}
+
+export async function listPharmacyPrescriptions(pharmacyId, options = {}) {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) })
+  if (options.cursor) params.set('cursor', options.cursor)
+  if (options.status) params.set('status', options.status)
+  return apiRequest(`/pharmacies/${pharmacyId}/prescriptions?${params.toString()}`)
+}
+
+export async function getPharmacyPrescription(pharmacyId, prescriptionId) {
+  const result = await apiRequest(
+    `/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}`,
+  )
+  return result.prescription ?? result
 }
 
 export async function reviewPharmacyPrescription(

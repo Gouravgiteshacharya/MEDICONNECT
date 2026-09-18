@@ -292,6 +292,7 @@
 }
 
 .admin-form input,
+.admin-form select,
 .admin-form textarea {
   width: 100%;
   min-height: 40px;
@@ -304,6 +305,10 @@
   color: #19212f;
 
   font-size: 12px;
+}
+
+.admin-form select {
+  appearance: none;
 }
 
 .admin-form textarea {

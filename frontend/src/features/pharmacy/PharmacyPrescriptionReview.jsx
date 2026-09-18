@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import {
   labelFromEnum,
+  formatDate,
+  getPharmacyPrescription,
   reviewPharmacyPrescription,
 } from './pharmacyService'
 import { usePharmacyContext } from './pharmacyWorkspace'
@@ -46,8 +48,17 @@ export default function PharmacyPrescriptionReview() {
 
   const [form, setForm] = useState(emptyForm)
   const [result, setResult] = useState(null)
+  const [prescription, setPrescription] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  async function load() {
+    setError('')
+    try { setPrescription(await getPharmacyPrescription(pharmacyId, prescriptionId)) }
+    catch (requestError) { setError(requestError?.message || 'Unable to load this prescription.') }
+  }
+
+  useEffect(() => { load() }, [pharmacyId, prescriptionId])
 
   function updateField(event) {
     const { name, value } = event.target
@@ -67,6 +78,7 @@ export default function PharmacyPrescriptionReview() {
           reviewPayload(form),
         ),
       )
+      await load()
     } catch (requestError) {
       setError(
         requestError?.message ||
@@ -82,7 +94,7 @@ export default function PharmacyPrescriptionReview() {
       <header className="pharmacy-page-header">
         <div>
           <span>PRESCRIPTION REVIEW</span>
-          <h1>Known prescription action</h1>
+          <h1>{prescription ? labelFromEnum(prescription.status) : 'Loading prescription...'}</h1>
           <p>
             Pharmacist membership is required by the backend. This page does
             not interpret medical content or provide treatment advice.
@@ -97,6 +109,16 @@ export default function PharmacyPrescriptionReview() {
           Back
         </button>
       </header>
+
+      {prescription && (
+        <section className="pharmacy-card pharmacy-message">
+          <strong>Order {prescription.order.orderNumber}</strong>
+          <p>Order status: {labelFromEnum(prescription.order.status)}</p>
+          <p>Uploaded: {formatDate(prescription.uploadedAt)} · Reviewed: {formatDate(prescription.reviewedAt)}</p>
+          {prescription.reviewNotes && <p>Notes: {prescription.reviewNotes}</p>}
+          {prescription.rejectionReason && <p>Reason: {prescription.rejectionReason}</p>}
+        </section>
+      )}
 
       <form className="pharmacy-form-panel" onSubmit={submitReview}>
         <h2>{prescriptionId}</h2>

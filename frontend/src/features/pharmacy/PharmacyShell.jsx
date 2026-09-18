@@ -4,8 +4,10 @@ import {
   useNavigate,
   useSearchParams,
 } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 
 import { useAuth } from '../../context/AuthContext'
+import { getMyPharmacyMemberships, labelFromEnum } from './pharmacyService'
 import './PharmacyShell.css'
 
 const PHARMACY_ID_KEY = 'mediconnect_pharmacy_workspace_id'
@@ -28,17 +30,54 @@ export default function PharmacyShell() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { authenticated, initializing, user } = useAuth()
-
-  const pharmacyId = searchParams.get('pharmacyId') || getStoredPharmacyId()
   const hasAccessRole = user?.role === 'PHARMACY_STAFF'
+  const [memberships, setMemberships] = useState([])
+  const [workspaceLoading, setWorkspaceLoading] = useState(true)
+  const [workspaceError, setWorkspaceError] = useState('')
+
+  const requestedPharmacyId = searchParams.get('pharmacyId') || getStoredPharmacyId()
+  const selectedMembership = memberships.find(
+    (membership) => membership.pharmacy.id === requestedPharmacyId,
+  ) ?? memberships[0]
+  const pharmacyId = selectedMembership?.pharmacy.id ?? ''
+
+  useEffect(() => {
+    if (!authenticated || !hasAccessRole) {
+      setWorkspaceLoading(false)
+      return
+    }
+
+    let active = true
+    setWorkspaceLoading(true)
+    getMyPharmacyMemberships()
+      .then((result) => {
+        if (!active) return
+        setMemberships(result)
+        setWorkspaceError('')
+      })
+      .catch((requestError) => {
+        if (!active) return
+        setWorkspaceError(
+          requestError?.message || 'Unable to load your pharmacy memberships.',
+        )
+      })
+      .finally(() => {
+        if (active) setWorkspaceLoading(false)
+      })
+
+    return () => { active = false }
+  }, [authenticated, hasAccessRole])
+
+  useEffect(() => {
+    if (!pharmacyId) return
+    localStorage.setItem(PHARMACY_ID_KEY, pharmacyId)
+    if (searchParams.get('pharmacyId') !== pharmacyId) {
+      setSearchParams({ pharmacyId }, { replace: true })
+    }
+  }, [pharmacyId, searchParams, setSearchParams])
 
   function selectPharmacy(event) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    const nextPharmacyId = String(formData.get('pharmacyId') ?? '').trim()
-
-    if (!nextPharmacyId) return
-
+    const nextPharmacyId = event.target.value
     localStorage.setItem(PHARMACY_ID_KEY, nextPharmacyId)
     setSearchParams({ pharmacyId: nextPharmacyId })
   }
@@ -48,7 +87,7 @@ export default function PharmacyShell() {
     return `${path}?pharmacyId=${encodeURIComponent(pharmacyId)}`
   }
 
-  if (initializing) {
+  if (initializing || workspaceLoading) {
     return (
       <main className="pharmacy-access">
         <div className="pharmacy-access-card">
@@ -93,28 +132,26 @@ export default function PharmacyShell() {
     )
   }
 
+  if (workspaceError) {
+    return (
+      <main className="pharmacy-access">
+        <section className="pharmacy-access-card">
+          <span>M</span>
+          <h1>Unable to open pharmacy workspace.</h1>
+          <p>{workspaceError}</p>
+        </section>
+      </main>
+    )
+  }
+
   if (!pharmacyId) {
     return (
       <main className="pharmacy-access">
-        <form className="pharmacy-access-card" onSubmit={selectPharmacy}>
+        <section className="pharmacy-access-card">
           <span>M</span>
-          <small className="pharmacy-access-temporary">Temporary QA setup</small>
-          <h1>Connect your pharmacy workspace.</h1>
-          <p>
-            Automatic membership selection is being connected. For now, use the
-            pharmacy ID supplied for this QA workspace. The API still validates
-            your active membership before returning data.
-          </p>
-          <label>
-            <span>Pharmacy ID</span>
-            <input
-              name="pharmacyId"
-              placeholder="Pharmacy UUID"
-              autoComplete="off"
-            />
-          </label>
-          <button type="submit">Open workspace</button>
-        </form>
+          <h1>No active pharmacy membership.</h1>
+          <p>Your account is not currently assigned to an active pharmacy workspace.</p>
+        </section>
       </main>
     )
   }
@@ -150,20 +187,22 @@ export default function PharmacyShell() {
           ))}
         </nav>
 
-        <details className="pharmacy-switcher">
-          <summary>Temporary workspace setup</summary>
-          <form onSubmit={selectPharmacy}>
-            <label>
-              <span>Pharmacy ID</span>
-              <input
-                name="pharmacyId"
-                defaultValue={pharmacyId}
-                autoComplete="off"
-              />
-            </label>
-            <button type="submit">Switch</button>
-          </form>
-        </details>
+        <div className="pharmacy-switcher">
+          <label>
+            <span>{memberships.length > 1 ? 'Active pharmacy' : 'Workspace'}</span>
+            {memberships.length > 1 ? (
+              <select value={pharmacyId} onChange={selectPharmacy}>
+                {memberships.map((membership) => (
+                  <option key={membership.id} value={membership.pharmacy.id}>
+                    {membership.pharmacy.name} · {labelFromEnum(membership.role)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <strong>{selectedMembership.pharmacy.name}</strong>
+            )}
+          </label>
+        </div>
       </aside>
 
       <div className="pharmacy-content">

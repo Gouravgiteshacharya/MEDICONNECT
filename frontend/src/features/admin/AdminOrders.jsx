@@ -1,96 +1,40 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { dispatchOrder } from './adminService'
+import { formatAdminDate, labelFromEnum, listAdminOrders } from './adminService'
 
 export default function AdminOrders() {
   const navigate = useNavigate()
-  const [orderId, setOrderId] = useState('')
-  const [result, setResult] = useState(null)
-  const [busy, setBusy] = useState(false)
+  const [orders, setOrders] = useState([])
+  const [filters, setFilters] = useState({ status: '', fulfillmentMethod: '', requiresPrescription: '' })
+  const [cursor, setCursor] = useState('')
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  async function submitDispatch(event) {
-    event.preventDefault()
-
-    setBusy(true)
-    setError('')
-    setResult(null)
-
+  async function load(nextCursor = '', append = false) {
+    setLoading(true); setError('')
     try {
-      setResult(await dispatchOrder(orderId.trim()))
-    } catch (requestError) {
-      setError(
-        requestError?.message ||
-          'Unable to dispatch this order.',
-      )
-    } finally {
-      setBusy(false)
-    }
+      const payload = await listAdminOrders({ ...filters, cursor: nextCursor, limit: 20 })
+      setOrders((current) => append ? [...current, ...payload.orders] : payload.orders)
+      setCursor(payload.nextCursor || '')
+    } catch (requestError) { setError(requestError?.message || 'Unable to load orders.') } finally { setLoading(false) }
   }
 
-  return (
-    <main className="admin-page">
-      <header className="admin-page-header">
-        <div>
-          <span>ORDER OPERATIONS</span>
-          <h1>Dispatch known order</h1>
-          <p>
-            The backend supports dispatch action for a known order ID. It does
-            not expose an admin order list or order detail endpoint yet.
-          </p>
-        </div>
-      </header>
+  useEffect(() => { load() }, [filters.status, filters.fulfillmentMethod, filters.requiresPrescription])
 
-      <section className="admin-blocked">
-        <strong>Order queue is blocked by backend API coverage.</strong>
-        <p>
-          Add admin order list/detail APIs before showing a real monitoring
-          table or operational order timeline here.
-        </p>
-      </section>
-
-      <form className="admin-form-panel" onSubmit={submitDispatch}>
-        <h2>Trigger dispatch</h2>
-        <p>
-          This calls the real admin endpoint and returns the backend dispatch
-          result.
-        </p>
-        <div className="admin-form inline">
-          <label>
-            <span>Order ID</span>
-            <input
-              required
-              value={orderId}
-              placeholder="Order UUID"
-              autoComplete="off"
-              onChange={(event) => setOrderId(event.target.value)}
-            />
-          </label>
-          <div className="admin-form-actions">
-            <button type="submit" className="admin-button" disabled={busy}>
-              {busy ? 'Dispatching...' : 'Dispatch'}
-            </button>
-            <button
-              type="button"
-              className="admin-secondary-button"
-              disabled={!orderId.trim()}
-              onClick={() => navigate(`/admin/orders/${orderId.trim()}`)}
-            >
-              Open detail
-            </button>
-          </div>
-        </div>
-      </form>
-
-      {error && <div className="admin-feedback error">{error}</div>}
-
-      {result && (
-        <section className="admin-result">
-          <strong>Dispatch result</strong>
-          <pre className="admin-pre">{JSON.stringify(result, null, 2)}</pre>
-        </section>
-      )}
-    </main>
-  )
+  return <main className="admin-page">
+    <header className="admin-page-header"><div><span>ORDER OPERATIONS</span><h1>Orders</h1><p>Monitor fulfillment and open a backend-authoritative order detail.</p></div></header>
+    <section className="admin-form-panel"><div className="admin-form inline">
+      <label><span>Status</span><select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">All</option>{['CREATED', 'PRESCRIPTION_PENDING', 'PRESCRIPTION_APPROVED', 'PRESCRIPTION_REJECTED', 'CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'RIDER_ASSIGNED', 'PICKED_UP', 'PICKED_UP_BY_CUSTOMER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED_BY_PHARMACY'].map((value) => <option key={value} value={value}>{labelFromEnum(value)}</option>)}</select></label>
+      <label><span>Fulfillment</span><select value={filters.fulfillmentMethod} onChange={(event) => setFilters({ ...filters, fulfillmentMethod: event.target.value })}><option value="">All</option><option value="SELF_PICKUP">Self pickup</option><option value="DELIVERY">Delivery</option></select></label>
+      <label><span>Prescription</span><select value={filters.requiresPrescription} onChange={(event) => setFilters({ ...filters, requiresPrescription: event.target.value })}><option value="">All</option><option value="true">Required</option><option value="false">Not required</option></select></label>
+    </div></section>
+    {error && <div className="admin-feedback error">{error}</div>}
+    <section className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Order</th><th>Pharmacy</th><th>Status</th><th>Fulfillment</th><th>Total</th><th>Created</th><th></th></tr></thead><tbody>
+      {orders.map((order) => <tr key={order.id}><td><strong>{order.orderNumber || order.id}</strong><small>{order.id}</small></td><td>{order.pharmacy?.name}</td><td>{labelFromEnum(order.status)}</td><td>{labelFromEnum(order.fulfillmentMethod)}</td><td>₹{order.totalAmount}</td><td>{formatAdminDate(order.placedAt)}</td><td><button className="admin-secondary-button" type="button" onClick={() => navigate(`/admin/orders/${order.id}`)}>Open</button></td></tr>)}
+      {!loading && orders.length === 0 && <tr><td colSpan="7">No orders match these filters.</td></tr>}
+    </tbody></table></section>
+    {loading && <div className="admin-feedback">Loading orders...</div>}
+    {cursor && !loading && <button className="admin-secondary-button" type="button" onClick={() => load(cursor, true)}>Load more</button>}
+  </main>
 }

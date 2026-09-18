@@ -10,6 +10,52 @@ export function labelFromEnum(value) {
     .join(' ')
 }
 
+export function formatAdminDate(value) {
+  if (!value) return 'Not available'
+
+  return new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function withQuery(path, params) {
+  const query = new URLSearchParams()
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value))
+    }
+  })
+
+  const suffix = query.toString()
+  return suffix ? `${path}?${suffix}` : path
+}
+
+export async function getAdminOperationsSummary() {
+  return apiRequest('/admin/operations/summary')
+}
+
+export async function listAdminPharmacies(params = {}) {
+  return apiRequest(withQuery('/admin/pharmacies', params))
+}
+
+export async function getAdminPharmacy(pharmacyId) {
+  return apiRequest(`/admin/pharmacies/${pharmacyId}`)
+}
+
+export async function listAdminInventory(params = {}) {
+  return apiRequest(withQuery('/admin/inventory', params))
+}
+
+export async function listAdminOrders(params = {}) {
+  return apiRequest(withQuery('/admin/orders', params))
+}
+
+export async function getAdminOrder(orderId) {
+  return apiRequest(`/admin/orders/${orderId}`)
+}
+
 export async function dispatchOrder(orderId) {
   return apiRequest(`/dispatch/orders/${orderId}`, {
     method: 'POST',
