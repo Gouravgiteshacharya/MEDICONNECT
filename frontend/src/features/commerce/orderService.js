@@ -40,3 +40,7 @@ export async function getOrders(options = {}) {
 export async function getOrder(orderId) {
   return apiRequest(`/orders/${orderId}`)
 }
+
+export async function cancelOrder(orderId) {
+  return apiRequest(`/orders/${orderId}/cancel`, { method: 'PATCH' })
+}

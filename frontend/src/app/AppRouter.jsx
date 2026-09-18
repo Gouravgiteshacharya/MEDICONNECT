@@ -29,6 +29,7 @@ import CustomerDeliveryAddress from '../features/customer/CustomerDeliveryAddres
 import CustomerOrderDetail from '../features/customer/CustomerOrderDetail'
 import CustomerOrders from '../features/customer/CustomerOrders'
 import CustomerPrescriptionDetail from '../features/customer/CustomerPrescriptionDetail'
+import CustomerPrescriptionUpload from '../features/customer/CustomerPrescriptionUpload'
 import CustomerPrescriptions from '../features/customer/CustomerPrescriptions'
 import CustomerProfile from '../features/customer/CustomerProfile'
 import CustomerShell from '../features/customer/CustomerShell'
@@ -124,8 +125,12 @@ function AnimatedRoutes() {
             <Route path="orders/:orderId" element={<CustomerOrderDetail />} />
             <Route path="prescriptions" element={<CustomerPrescriptions />} />
             <Route
-              path="prescriptions/:orderId"
+              path="prescriptions/:prescriptionId"
               element={<CustomerPrescriptionDetail />}
+            />
+            <Route
+              path="orders/:orderId/prescription"
+              element={<CustomerPrescriptionUpload />}
             />
             <Route path="profile" element={<CustomerProfile />} />
           </Route>

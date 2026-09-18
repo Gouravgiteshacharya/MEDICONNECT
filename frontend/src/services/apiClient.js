@@ -65,11 +65,15 @@ export async function apiRequest(path, options = {}) {
       payload?.message ??
       'Something went wrong. Please try again.'
 
-    throw new Error(
+    const error = new Error(
       typeof message === 'string'
         ? message
         : 'Something went wrong. Please try again.',
     )
+    error.code = payload?.error?.code ?? payload?.code
+    error.status = response.status
+    error.payload = payload
+    throw error
   }
 
   return payload?.data ?? payload

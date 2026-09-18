@@ -92,17 +92,25 @@ export default function CustomerCheckout() {
         (item) => item.requiresPrescription,
       )
       const destination = requiresPrescription
-        ? `/app/prescriptions/${order.id}`
+        ? `/app/orders/${order.id}/prescription`
         : `/app/orders/${order.id}`
 
       navigate(destination, {
         replace: true,
       })
     } catch (requestError) {
-      setError(
-        requestError?.message ||
-          'Unable to place your order. Please try again.',
-      )
+      const integrityMessages = {
+        CHECKOUT_QUANTITY_UNAVAILABLE: 'A medicine no longer has enough stock. Your cart has been refreshed.',
+        CHECKOUT_ITEM_NOT_ORDERABLE: 'A medicine is no longer available at this pharmacy. Your cart has been refreshed.',
+        CART_STATE_CONFLICT: 'Your cart changed before checkout. Review the refreshed cart before trying again.',
+        CART_FULFILLMENT_CONFLICT: 'The fulfilment selection changed. Review the refreshed cart before trying again.',
+        CHECKOUT_CONFLICT: 'Stock or checkout state changed. Review the refreshed cart before trying again.',
+        DELIVERY_QUOTE_EXPIRED: 'Your delivery quote expired. Choose the delivery address again for a fresh quote.',
+        DELIVERY_QUOTE_INVALID: 'The delivery quote is no longer valid. Choose the delivery address again.',
+        DELIVERY_QUOTE_ALREADY_USED: 'This delivery quote was already used. Choose the delivery address again.',
+      }
+      setError(integrityMessages[requestError?.code] || requestError?.message || 'Unable to place your order. Please try again.')
+      await loadCart()
     } finally {
       setPlacing(false)
     }

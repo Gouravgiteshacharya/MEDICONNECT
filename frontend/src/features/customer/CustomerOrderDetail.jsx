@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../context/AuthContext'
-import { getOrder } from '../commerce/orderService'
+import { cancelOrder, getOrder } from '../commerce/orderService'
 import CustomerAuthModal from './CustomerAuthModal'
 import './CustomerOrderDetail.css'
 
@@ -61,6 +61,7 @@ export default function CustomerOrderDetail() {
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [cancelling, setCancelling] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
 
   const loadOrder = useCallback(async () => {
@@ -89,6 +90,19 @@ export default function CustomerOrderDetail() {
     if (initializing) return
     loadOrder()
   }, [initializing, loadOrder])
+
+  async function cancelCurrentOrder() {
+    setCancelling(true)
+    setError('')
+    try {
+      await cancelOrder(orderId)
+      await loadOrder()
+    } catch (requestError) {
+      setError(requestError?.message || 'Unable to cancel this order.')
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   return (
     <div className="customer-order-detail-page">
@@ -161,6 +175,26 @@ export default function CustomerOrderDetail() {
                 <strong>{formatMoney(order.totalAmount)}</strong>
               </article>
             </section>
+
+            {['CREATED', 'PRESCRIPTION_PENDING', 'PRESCRIPTION_APPROVED', 'CONFIRMED'].includes(order.status) && (
+              <section className="customer-order-detail-section">
+                <div className="customer-order-detail-section-head">
+                  <span>ORDER ACTION</span>
+                  <strong>Cancellation available</strong>
+                </div>
+                <p className="customer-order-detail-copy">
+                  Cancellation remains subject to the backend’s current fulfilment state.
+                </p>
+                <button
+                  type="button"
+                  className="customer-order-detail-action"
+                  disabled={cancelling}
+                  onClick={cancelCurrentOrder}
+                >
+                  {cancelling ? 'Cancelling…' : 'Cancel order'}
+                </button>
+              </section>
+            )}
 
             <section className="customer-order-detail-section">
               <div className="customer-order-detail-section-head">
@@ -248,14 +282,19 @@ export default function CustomerOrderDetail() {
                 </div>
 
                 <p className="customer-order-detail-copy">
-                  Prescription metadata is managed on the linked order
-                  review page.
+                  Prescription documents and review history are managed on the
+                  linked prescription page.
                 </p>
 
                 <button
                   type="button"
                   className="customer-order-detail-action"
-                  onClick={() => navigate(`/app/prescriptions/${order.id}`)}
+                  onClick={() => {
+                    const latest = order.prescriptions?.at(-1)
+                    navigate(latest
+                      ? `/app/prescriptions/${latest.id}`
+                      : `/app/orders/${order.id}/prescription`)
+                  }}
                 >
                   Open prescription review
                 </button>

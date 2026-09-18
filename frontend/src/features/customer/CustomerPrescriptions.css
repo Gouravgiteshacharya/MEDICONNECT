@@ -11,6 +11,29 @@
   font: inherit;
 }
 
+.customer-prescription-primary,
+.customer-prescriptions-load-more {
+  min-height: 40px;
+  margin-top: 13px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
+  background: #29396f;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.customer-prescriptions-load-more { display: block; margin: 16px auto 0; }
+
+.customer-prescription-form input[type="file"] {
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid #dfe4ee;
+  border-radius: 10px;
+  background: #f8f9fc;
+}
+
 .customer-prescriptions-header {
   position: sticky;
   top: 0;
