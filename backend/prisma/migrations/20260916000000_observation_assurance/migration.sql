@@ -171,7 +171,7 @@ BEGIN
         RAISE EXCEPTION 'Unserialized acceptance';
       END IF;
     ELSIF NEW."status" IN ('FAILED', 'DELIVERED') THEN
-      IF o."writerTransaction" <> txid_current() OR o."writerAction" <> CASE WHEN NEW."status" = 'FAILED' THEN 'FAIL' ELSE 'DELIVER' END
+      IF o."writerTransaction" <> txid_current() OR o."writerAction" <> (CASE WHEN NEW."status" = 'FAILED' THEN 'FAIL' ELSE 'DELIVER' END)
         OR o."terminalEventId" IS NOT NULL THEN RAISE EXCEPTION 'Unserialized terminal transition'; END IF;
       IF NEW."status" = 'DELIVERED' AND NEW."deliveredAt" IS DISTINCT FROM o."lastSerializedAt" THEN RAISE EXCEPTION 'Unserialized delivery time'; END IF;
     ELSIF NOT ((OLD."status" = 'ACCEPTED' AND NEW."status" = 'PICKED_UP') OR
@@ -221,7 +221,7 @@ BEGIN
       IF o."writerAction" <> 'ACCEPT' OR o."acceptanceEventId" IS NOT NULL OR NEW."occurredAt" <> o."startedAt" THEN RAISE EXCEPTION 'Duplicate or invalid acceptance evidence'; END IF;
       UPDATE "DeliveryObservation" SET "acceptanceEventId" = NEW."id" WHERE "id" = o."id";
     ELSE
-      IF o."terminalEventId" IS NOT NULL OR o."writerAction" <> CASE WHEN NEW."eventType" = 'FAILED_DELIVERY' THEN 'FAIL' ELSE 'DELIVER' END THEN RAISE EXCEPTION 'Conflicting terminal evidence'; END IF;
+      IF o."terminalEventId" IS NOT NULL OR o."writerAction" <> (CASE WHEN NEW."eventType" = 'FAILED_DELIVERY' THEN 'FAIL' ELSE 'DELIVER' END) THEN RAISE EXCEPTION 'Conflicting terminal evidence'; END IF;
       IF NEW."eventType" = 'FAILED_DELIVERY' AND (
         NEW."metadata"->'requiresManualReview' IS DISTINCT FROM 'true'::jsonb
         OR NEW."metadata"->>'orderStatusAtFailure' IS DISTINCT FROM (SELECT "status"::text FROM "Order" WHERE "id" = o."orderId")
