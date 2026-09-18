@@ -7,6 +7,7 @@ import { healthRoutes } from "./health.routes.js";
 import { medicineRoutes } from "./medicine.routes.js";
 import { orderRoutes } from "./order.routes.js";
 import { pharmacyRoutes } from "./pharmacy.routes.js";
+import { prescriptionRoutes } from "./prescription.routes.js";
 import { userRoutes } from "./user.routes.js";
 
 export const apiRoutes = Router();
@@ -19,4 +20,5 @@ apiRoutes.use("/health", healthRoutes);
 apiRoutes.use("/medicines", medicineRoutes);
 apiRoutes.use("/orders", orderRoutes);
 apiRoutes.use("/pharmacies", pharmacyRoutes);
+apiRoutes.use("/prescriptions", prescriptionRoutes);
 apiRoutes.use("/users", userRoutes);
