@@ -25,6 +25,7 @@ vi.mock("../src/lib/prisma.js", () => ({
       updateMany: vi.fn(),
     },
     prescription: {},
+    pharmacyInventory: { updateMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -34,6 +35,7 @@ const prismaMock = prisma as unknown as {
   user: { findUnique: Mock };
   pharmacyStaff: { findFirst: Mock };
   order: { findFirst: Mock; findUnique: Mock; updateMany: Mock };
+  pharmacyInventory: { updateMany: Mock };
   $transaction: Mock;
 };
 
@@ -61,7 +63,14 @@ function currentOrder(
   return {
     id: orderId,
     status,
-    items: requiresPrescription ? [{ id: "55555555-5555-4555-8555-555555555555" }] : [],
+    pharmacyId,
+    inventoryCommittedAt: null,
+    inventoryRestoredAt: null,
+    items: [{
+      medicineId: "55555555-5555-4555-8555-555555555555",
+      quantity: 2,
+      requiresPrescription,
+    }],
   };
 }
 
@@ -104,6 +113,7 @@ function expectError(response: { status: number; body: unknown }, status: number
 describe("pharmacy order decision API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.pharmacyInventory.updateMany.mockResolvedValue({ count: 1 });
     prismaMock.$transaction.mockImplementation(async (callback) => callback(prisma));
   });
 
@@ -268,6 +278,47 @@ describe("pharmacy order decision API", () => {
       .send({ decision: "REJECT" });
     expectError(response, 409, "ORDER_DECISION_NOT_ALLOWED");
     expect(prismaMock.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("restores a committed order exactly with pharmacy rejection", async () => {
+    membership();
+    prismaMock.order.findFirst.mockResolvedValue({
+      ...currentOrder(OrderStatus.CREATED),
+      inventoryCommittedAt: decidedAt,
+    });
+    prismaMock.pharmacyInventory.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.order.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.order.findUnique.mockResolvedValue(orderResult(OrderStatus.REJECTED_BY_PHARMACY));
+
+    const response = await request(app)
+      .patch(`/api/v1/pharmacies/${pharmacyId}/orders/${orderId}/decision`)
+      .set("Authorization", authHeader())
+      .send({ decision: "REJECT" });
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.pharmacyInventory.updateMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.order.updateMany.mock.calls[0][0]).toEqual({
+      where: {
+        id: orderId,
+        pharmacyId,
+        status: OrderStatus.CREATED,
+        inventoryCommittedAt: { not: null },
+        inventoryRestoredAt: null,
+      },
+      data: {
+        status: OrderStatus.REJECTED_BY_PHARMACY,
+        inventoryRestoredAt: expect.any(Date),
+      },
+    });
+  });
+
+  it("does not mutate inventory when confirming an order", async () => {
+    mockDecisionSuccess();
+    await request(app)
+      .patch(`/api/v1/pharmacies/${pharmacyId}/orders/${orderId}/decision`)
+      .set("Authorization", authHeader())
+      .send({ decision: "CONFIRM" });
+    expect(prismaMock.pharmacyInventory.updateMany).not.toHaveBeenCalled();
   });
 
   it("prevents a stale decision from overwriting a completed one", async () => {

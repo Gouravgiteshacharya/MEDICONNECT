@@ -24,6 +24,7 @@ vi.mock("../src/lib/prisma.js", () => ({
     address: { findFirst: vi.fn() },
     deliveryQuote: { findUnique: vi.fn(), updateMany: vi.fn() },
     order: { create: vi.fn() },
+    pharmacyInventory: { updateMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -48,6 +49,7 @@ const prismaMock = prisma as unknown as {
   address: { findFirst: Mock };
   deliveryQuote: { findUnique: Mock; updateMany: Mock };
   order: { create: Mock };
+  pharmacyInventory: { updateMany: Mock };
   $transaction: Mock;
 };
 const inventoryMock = getOrderableInventorySnapshot as Mock;
@@ -228,6 +230,7 @@ describe("order creation API", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
     vi.clearAllMocks();
+    prismaMock.pharmacyInventory.updateMany.mockResolvedValue({ count: 1 });
     prismaMock.$transaction.mockImplementation(async (callback) =>
       callback(prisma),
     );
@@ -375,6 +378,21 @@ describe("order creation API", () => {
     expectError(response, 409, "CHECKOUT_QUANTITY_UNAVAILABLE");
   });
 
+  it("aborts checkout when the transactional stock authority is stale-short", async () => {
+    mockSelfPickupSuccess();
+    prismaMock.pharmacyInventory.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", authenticateAs())
+      .send(selfPickupInput);
+
+    expectError(response, 409, "CHECKOUT_QUANTITY_UNAVAILABLE");
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+    expect(prismaMock.cart.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.deliveryQuote.updateMany).not.toHaveBeenCalled();
+  });
+
   it("uses fresh prices and medicine snapshots with exact decimal math", async () => {
     mockSelfPickupSuccess();
     const response = await request(app)
@@ -418,6 +436,8 @@ describe("order creation API", () => {
     expect(prismaMock.order.create.mock.calls[0][0].data.status).toBe(
       OrderStatus.PRESCRIPTION_PENDING,
     );
+    expect(prismaMock.order.create.mock.calls[0][0].data.inventoryCommittedAt)
+      .toEqual(now);
   });
 
   it("creates SELF_PICKUP without delivery data or quote linkage and checks out the cart", async () => {

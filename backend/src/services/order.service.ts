@@ -20,6 +20,10 @@ import {
   getMedicineDetail,
   type MedicineDetail,
 } from "./medicine.service.js";
+import {
+  commitInventory,
+  restoreInventory,
+} from "./inventoryCommitment.service.js";
 
 export const MAX_CHECKOUT_ATTEMPTS = 3;
 
@@ -32,12 +36,12 @@ type OrderNumberGenerator = (now: Date) => string;
 type CheckoutClock = () => Date;
 type OrderTransactionClient = Pick<
   Prisma.TransactionClient,
-  "address" | "cart" | "deliveryQuote" | "order"
+  "address" | "cart" | "deliveryQuote" | "order" | "pharmacyInventory"
 >;
 
 export type OrderDataSource = Pick<
   PrismaClient,
-  "cart" | "address" | "deliveryQuote" | "order"
+  "cart" | "address" | "deliveryQuote" | "order" | "pharmacyInventory"
 > & {
   $transaction<T>(
     callback: (tx: OrderTransactionClient) => Promise<T>,
@@ -588,6 +592,16 @@ async function createOrderAttempt(
         quotedEtaMinutes = quote.estimatedDurationMinutes;
       }
 
+      await commitInventory(
+        tx,
+        currentCart.pharmacyId as string,
+        prepared.items.map((item) => ({
+          medicineId: item.medicineId,
+          quantity: item.quantity,
+        })),
+        now,
+      );
+
       const totalAmount = prepared.medicineSubtotal.add(deliveryFee);
       const order = await tx.order.create({
         data: {
@@ -596,6 +610,7 @@ async function createOrderAttempt(
           pharmacyId: currentCart.pharmacyId as string,
           fulfillmentMethod: input.fulfillmentMethod,
           status: prepared.status,
+          inventoryCommittedAt: now,
           ...addressSnapshots,
           medicineSubtotal: prepared.medicineSubtotal,
           deliveryFee,
@@ -717,7 +732,6 @@ const cancellableOrderStatuses: readonly OrderStatus[] = [
   OrderStatus.PRESCRIPTION_PENDING,
   OrderStatus.PRESCRIPTION_APPROVED,
   OrderStatus.CONFIRMED,
-  OrderStatus.PREPARING,
 ];
 
 function orderCancellationNotAllowedError() {
@@ -738,11 +752,17 @@ function orderCancellationConflictError() {
 
 type CancellationClock = () => Date;
 
-type CancellationDataSource = Pick<PrismaClient, "order"> & {
+type CancellationTransactionClient = Pick<
+  Prisma.TransactionClient,
+  "order" | "pharmacyInventory"
+>;
+
+type CancellationDataSource = Pick<
+  PrismaClient,
+  "order" | "pharmacyInventory"
+> & {
   $transaction<T>(
-    callback: (
-      tx: Pick<Prisma.TransactionClient, "order">,
-    ) => Promise<T>,
+    callback: (tx: CancellationTransactionClient) => Promise<T>,
     options: { isolationLevel: "Serializable" },
   ): Promise<T>;
 };
@@ -763,6 +783,13 @@ async function cancelCustomerOrderAttempt(
         select: {
           id: true,
           status: true,
+          pharmacyId: true,
+          inventoryCommittedAt: true,
+          inventoryRestoredAt: true,
+          items: {
+            select: { medicineId: true, quantity: true },
+            orderBy: { medicineId: "asc" },
+          },
         },
       });
 
@@ -774,15 +801,31 @@ async function cancelCustomerOrderAttempt(
         throw orderCancellationNotAllowedError();
       }
 
+      const committed = order.inventoryCommittedAt !== null;
+      if (committed && order.inventoryRestoredAt !== null) {
+        throw orderCancellationNotAllowedError();
+      }
+
+      if (committed) {
+        await restoreInventory(tx, order.pharmacyId, order.items, now);
+      }
+
       const updated = await tx.order.updateMany({
         where: {
           id: order.id,
           customerId,
           status: order.status,
+          ...(committed
+            ? {
+                inventoryCommittedAt: { not: null },
+                inventoryRestoredAt: null,
+              }
+            : { inventoryCommittedAt: null }),
         },
         data: {
           status: OrderStatus.CANCELLED,
           cancelledAt: now,
+          ...(committed ? { inventoryRestoredAt: now } : {}),
         },
       });
 
