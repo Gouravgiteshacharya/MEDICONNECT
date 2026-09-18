@@ -63,3 +63,24 @@ export async function getActivePharmacyMembership(
 
   return membership ? toPharmacyMembershipContext(membership) : null;
 }
+
+export async function listActivePharmacyMemberships(userId: string) {
+  const memberships = await prisma.pharmacyStaff.findMany({
+    where: { userId, isActive: true },
+    select: {
+      id: true,
+      role: true,
+      pharmacy: { select: { id: true, name: true } },
+    },
+    orderBy: { id: "asc" },
+  });
+
+  return memberships.map((membership) => ({
+    id: membership.id,
+    role: membership.role,
+    pharmacy: {
+      id: membership.pharmacy.id,
+      name: membership.pharmacy.name,
+    },
+  }));
+}

@@ -1,4 +1,5 @@
 import cors from "cors";
+import { createCorsOptions } from "./config/cors.js";
 import express, { type Express, type RequestHandler } from "express";
 import helmet from "helmet";
 import { prisma } from "./lib/prisma.js";
@@ -78,7 +79,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   const logisticsModel = mlConfig.enabled ? mlModel : null;
   app.disable("x-powered-by");
   app.use(helmet());
-  app.use(cors());
+  app.use(cors(createCorsOptions()));
   app.use(express.json({ limit: "100kb" }));
    app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
   app.use("/api/v1", apiRoutes);

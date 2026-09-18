@@ -2,6 +2,7 @@ import { UserRole } from "../../generated/prisma/client.js";
 import { Router } from "express";
 
 import {
+  getMyPharmacies,
   getOperationalProfile,
   getPublicProfile,
   updateOperationalProfile,
@@ -13,6 +14,10 @@ import {
   updateInventoryItem,
 } from "../controllers/inventory.controller.js";
 import { getDashboard } from "../controllers/pharmacyDashboard.controller.js";
+import { getOrder, listOrders } from "../controllers/pharmacyOrder.controller.js";
+import { pharmacyOrderListQuerySchema } from "../validators/pharmacyOrder.schemas.js";
+import { getPrescription, listPrescriptions } from "../controllers/pharmacyPrescription.controller.js";
+import { pharmacyPrescriptionListQuerySchema } from "../validators/pharmacyPrescription.schemas.js";
 import {
   completeSelfPickup,
   decideOrder,
@@ -43,10 +48,49 @@ import {
 
 export const pharmacyRoutes = Router();
 
+pharmacyRoutes.get(
+  "/me",
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  getMyPharmacies,
+);
+
 const inventoryAccess = [
   authenticate,
   authorizeRoles(UserRole.PHARMACY_STAFF),
 ] as const;
+
+pharmacyRoutes.get(
+  "/:pharmacyId/orders",
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest({ params: pharmacyParamsSchema, query: pharmacyOrderListQuerySchema }),
+  listOrders,
+);
+
+pharmacyRoutes.get(
+  "/:pharmacyId/orders/:orderId",
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest({ params: orderDecisionParamsSchema }),
+  getOrder,
+);
+
+pharmacyRoutes.get(
+  "/:pharmacyId/prescriptions",
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest({ params: pharmacyParamsSchema, query: pharmacyPrescriptionListQuerySchema }),
+  listPrescriptions,
+);
+
+pharmacyRoutes.get(
+  "/:pharmacyId/prescriptions/:prescriptionId",
+  authenticate,
+  authorizeRoles(UserRole.PHARMACY_STAFF),
+  validateRequest({ params: prescriptionReviewParamsSchema }),
+  getPrescription,
+);
 
 pharmacyRoutes.patch(
   "/:pharmacyId/prescriptions/:prescriptionId/review",
