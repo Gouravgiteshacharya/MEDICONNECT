@@ -24,6 +24,7 @@ vi.mock("../src/lib/prisma.js", () => ({
     address: { findFirst: vi.fn() },
     deliveryQuote: { findUnique: vi.fn(), updateMany: vi.fn() },
     order: { create: vi.fn() },
+    pharmacyInventory: { findFirst: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -48,6 +49,7 @@ const prismaMock = prisma as unknown as {
   address: { findFirst: Mock };
   deliveryQuote: { findUnique: Mock; updateMany: Mock };
   order: { create: Mock };
+  pharmacyInventory: { findFirst: Mock; updateMany: Mock };
   $transaction: Mock;
 };
 const inventoryMock = getOrderableInventorySnapshot as Mock;
@@ -107,6 +109,20 @@ function medicine(overrides: Record<string, unknown> = {}) {
     description: null,
     requiresPrescription: false,
     compositions: [],
+    ...overrides,
+  };
+}
+
+function transactionalInventory(overrides: Record<string, unknown> = {}) {
+  return {
+    quantity: 10,
+    sellingPrice: new Prisma.Decimal("10.25"),
+    medicine: {
+      name: "Fresh Medicine Name",
+      brandName: "Fresh Brand",
+      manufacturer: "Fresh Manufacturer",
+      requiresPrescription: false,
+    },
     ...overrides,
   };
 }
@@ -228,6 +244,10 @@ describe("order creation API", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
     vi.clearAllMocks();
+    prismaMock.pharmacyInventory.findFirst.mockResolvedValue(
+      transactionalInventory(),
+    );
+    prismaMock.pharmacyInventory.updateMany.mockResolvedValue({ count: 1 });
     prismaMock.$transaction.mockImplementation(async (callback) =>
       callback(prisma),
     );
@@ -375,6 +395,21 @@ describe("order creation API", () => {
     expectError(response, 409, "CHECKOUT_QUANTITY_UNAVAILABLE");
   });
 
+  it("aborts checkout when the transactional stock authority is stale-short", async () => {
+    mockSelfPickupSuccess();
+    prismaMock.pharmacyInventory.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", authenticateAs())
+      .send(selfPickupInput);
+
+    expectError(response, 409, "CHECKOUT_QUANTITY_UNAVAILABLE");
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+    expect(prismaMock.cart.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.deliveryQuote.updateMany).not.toHaveBeenCalled();
+  });
+
   it("uses fresh prices and medicine snapshots with exact decimal math", async () => {
     mockSelfPickupSuccess();
     const response = await request(app)
@@ -409,6 +444,14 @@ describe("order creation API", () => {
   it("starts prescription-required orders at PRESCRIPTION_PENDING", async () => {
     mockSelfPickupSuccess();
     inventoryMock.mockResolvedValue(inventory({ requiresPrescription: true }));
+    prismaMock.pharmacyInventory.findFirst.mockResolvedValue(
+      transactionalInventory({
+        medicine: {
+          ...transactionalInventory().medicine,
+          requiresPrescription: true,
+        },
+      }),
+    );
     const response = await request(app)
       .post("/api/v1/orders")
       .set("Authorization", authenticateAs())
@@ -418,6 +461,131 @@ describe("order creation API", () => {
     expect(prismaMock.order.create.mock.calls[0][0].data.status).toBe(
       OrderStatus.PRESCRIPTION_PENDING,
     );
+    expect(prismaMock.order.create.mock.calls[0][0].data.inventoryCommittedAt)
+      .toEqual(now);
+  });
+
+  it("replaces stale early price and descriptions with transactional values", async () => {
+    mockSelfPickupSuccess();
+    inventoryMock.mockResolvedValue(inventory({ sellingPrice: "1.00" }));
+    medicineMock.mockResolvedValue(medicine({
+      name: "Early Name",
+      brandName: "Early Brand",
+      manufacturer: "Early Manufacturer",
+    }));
+    prismaMock.pharmacyInventory.findFirst.mockResolvedValue(
+      transactionalInventory({
+        sellingPrice: new Prisma.Decimal("12.75"),
+        medicine: {
+          name: "Transactional Name",
+          brandName: "Transactional Brand",
+          manufacturer: "Transactional Manufacturer",
+          requiresPrescription: false,
+        },
+      }),
+    );
+
+    const response = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", authenticateAs())
+      .send(selfPickupInput);
+
+    expect(response.status).toBe(201);
+    const data = prismaMock.order.create.mock.calls[0][0].data;
+    expect(data.items.create[0].unitPrice.toFixed(2)).toBe("12.75");
+    expect(data.items.create[0].lineTotal.toFixed(2)).toBe("25.50");
+    expect(data.medicineSubtotal.toFixed(2)).toBe("25.50");
+    expect(data.totalAmount.toFixed(2)).toBe("25.50");
+    expect(data.items.create[0]).toEqual(expect.objectContaining({
+      medicineNameSnapshot: "Transactional Name",
+      brandNameSnapshot: "Transactional Brand",
+      manufacturerSnapshot: "Transactional Manufacturer",
+    }));
+  });
+
+  it("uses refreshed subtotal with the persisted delivery quote fee", async () => {
+    mockDeliverySuccess();
+    prismaMock.pharmacyInventory.findFirst.mockResolvedValue(
+      transactionalInventory({ sellingPrice: new Prisma.Decimal("12.75") }),
+    );
+
+    const response = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", authenticateAs())
+      .send(deliveryInput);
+
+    expect(response.status).toBe(201);
+    const data = prismaMock.order.create.mock.calls[0][0].data;
+    expect(data.medicineSubtotal.toFixed(2)).toBe("25.50");
+    expect(data.deliveryFee.toFixed(2)).toBe("4.50");
+    expect(data.totalAmount.toFixed(2)).toBe("30.00");
+    expect(data.deliveryDistanceKm).toBe(3.25);
+    expect(data.quotedEtaMinutes).toBe(25);
+  });
+
+  it.each([
+    "medicine inactive",
+    "pharmacy inactive",
+    "pharmacy unverified",
+    "pharmacy partner inactive",
+    "inventory unavailable",
+  ])("rejects safely when %s before the transaction", async () => {
+    mockSelfPickupSuccess();
+    prismaMock.pharmacyInventory.findFirst.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", authenticateAs())
+      .send(selfPickupInput);
+
+    expectError(response, 409, "CHECKOUT_ITEM_NOT_ORDERABLE");
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+    expect(prismaMock.pharmacyInventory.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("queries the complete established orderability contract transactionally", async () => {
+    mockSelfPickupSuccess();
+    await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", authenticateAs())
+      .send(selfPickupInput);
+
+    expect(prismaMock.pharmacyInventory.findFirst).toHaveBeenCalledWith({
+      where: {
+        pharmacyId,
+        medicineId,
+        availability: { in: [InventoryStatus.AVAILABLE, InventoryStatus.LOW_STOCK] },
+        pharmacy: { isActive: true, isVerified: true, partnerStatus: "ACTIVE" },
+        medicine: { isActive: true },
+      },
+      select: {
+        quantity: true,
+        sellingPrice: true,
+        medicine: {
+          select: {
+            name: true,
+            brandName: true,
+            manufacturer: true,
+            requiresPrescription: true,
+          },
+        },
+      },
+    });
+  });
+
+  it("returns quantity unavailable for a transactional shortage", async () => {
+    mockSelfPickupSuccess();
+    prismaMock.pharmacyInventory.findFirst.mockResolvedValue(
+      transactionalInventory({ quantity: 1 }),
+    );
+
+    const response = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", authenticateAs())
+      .send(selfPickupInput);
+
+    expectError(response, 409, "CHECKOUT_QUANTITY_UNAVAILABLE");
+    expect(prismaMock.pharmacyInventory.updateMany).not.toHaveBeenCalled();
   });
 
   it("creates SELF_PICKUP without delivery data or quote linkage and checks out the cart", async () => {
@@ -549,6 +717,49 @@ describe("order creation API", () => {
     expect(inventoryMock).toHaveBeenCalledTimes(2);
     expect(medicineMock).toHaveBeenCalledTimes(2);
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("repeats authoritative reads after P2034 and uses the successful attempt values", async () => {
+    mockSelfPickupSuccess();
+    prismaMock.pharmacyInventory.findFirst
+      .mockResolvedValueOnce(
+        transactionalInventory({ sellingPrice: new Prisma.Decimal("11.00") }),
+      )
+      .mockResolvedValueOnce(
+        transactionalInventory({
+          sellingPrice: new Prisma.Decimal("13.50"),
+          medicine: {
+            name: "Successful Retry Name",
+            brandName: null,
+            manufacturer: "Successful Retry Manufacturer",
+            requiresPrescription: true,
+          },
+        }),
+      );
+    let attempt = 0;
+    prismaMock.$transaction.mockImplementation(async (callback) => {
+      attempt += 1;
+      const result = await callback(prisma);
+      if (attempt === 1) throw knownError("P2034");
+      return result;
+    });
+
+    const response = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", authenticateAs())
+      .send(selfPickupInput);
+
+    expect(response.status).toBe(201);
+    expect(prismaMock.pharmacyInventory.findFirst).toHaveBeenCalledTimes(2);
+    expect(prismaMock.pharmacyInventory.updateMany).toHaveBeenCalledTimes(2);
+    expect(inventoryMock).toHaveBeenCalledTimes(2);
+    const successfulData = prismaMock.order.create.mock.calls[1][0].data;
+    expect(successfulData.items.create[0].unitPrice.toFixed(2)).toBe("13.50");
+    expect(successfulData.items.create[0].lineTotal.toFixed(2)).toBe("27.00");
+    expect(successfulData.medicineSubtotal.toFixed(2)).toBe("27.00");
+    expect(successfulData.status).toBe(OrderStatus.PRESCRIPTION_PENDING);
+    expect(successfulData.items.create[0].medicineNameSnapshot)
+      .toBe("Successful Retry Name");
   });
 
   it("retries only exact orderNumber P2002", async () => {

@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import {
   CartStatus,
   FulfillmentMethod,
+  InventoryStatus,
   OrderStatus,
+  PharmacyPartnerStatus,
   Prisma,
   type PrismaClient,
 } from "../../generated/prisma/client.js";
@@ -20,6 +22,10 @@ import {
   getMedicineDetail,
   type MedicineDetail,
 } from "./medicine.service.js";
+import {
+  commitInventory,
+  restoreInventory,
+} from "./inventoryCommitment.service.js";
 
 export const MAX_CHECKOUT_ATTEMPTS = 3;
 
@@ -32,12 +38,12 @@ type OrderNumberGenerator = (now: Date) => string;
 type CheckoutClock = () => Date;
 type OrderTransactionClient = Pick<
   Prisma.TransactionClient,
-  "address" | "cart" | "deliveryQuote" | "order"
+  "address" | "cart" | "deliveryQuote" | "order" | "pharmacyInventory"
 >;
 
 export type OrderDataSource = Pick<
   PrismaClient,
-  "cart" | "address" | "deliveryQuote" | "order"
+  "cart" | "address" | "deliveryQuote" | "order" | "pharmacyInventory"
 > & {
   $transaction<T>(
     callback: (tx: OrderTransactionClient) => Promise<T>,
@@ -445,6 +451,72 @@ async function prepareCheckout(
   };
 }
 
+async function prepareTransactionalCheckout(
+  cart: CheckoutCart,
+  inventoryDelegate: OrderTransactionClient["pharmacyInventory"],
+): Promise<Omit<PreparedCheckout, "cart">> {
+  const items: PreparedItem[] = [];
+  let medicineSubtotal = new Prisma.Decimal(0);
+
+  for (const cartItem of cart.items) {
+    const inventory = await inventoryDelegate.findFirst({
+      where: {
+        pharmacyId: cart.pharmacyId as string,
+        medicineId: cartItem.medicineId,
+        availability: {
+          in: [InventoryStatus.AVAILABLE, InventoryStatus.LOW_STOCK],
+        },
+        pharmacy: {
+          isActive: true,
+          isVerified: true,
+          partnerStatus: PharmacyPartnerStatus.ACTIVE,
+        },
+        medicine: { isActive: true },
+      },
+      select: {
+        quantity: true,
+        sellingPrice: true,
+        medicine: {
+          select: {
+            name: true,
+            brandName: true,
+            manufacturer: true,
+            requiresPrescription: true,
+          },
+        },
+      },
+    });
+
+    if (!inventory) throw checkoutItemNotOrderableError();
+    if (cartItem.quantity > inventory.quantity) {
+      throw checkoutQuantityUnavailableError();
+    }
+
+    const unitPrice = new Prisma.Decimal(inventory.sellingPrice);
+    const lineTotal = unitPrice.mul(cartItem.quantity);
+    medicineSubtotal = medicineSubtotal.add(lineTotal);
+    items.push({
+      cartItemId: cartItem.id,
+      medicineId: cartItem.medicineId,
+      medicineNameSnapshot: inventory.medicine.name,
+      brandNameSnapshot: inventory.medicine.brandName,
+      manufacturerSnapshot: inventory.medicine.manufacturer,
+      requiresPrescription: inventory.medicine.requiresPrescription,
+      quantity: cartItem.quantity,
+      unitPrice,
+      lineTotal,
+    });
+  }
+
+  return {
+    items,
+    medicineSubtotal,
+    status: items.some((item) => item.requiresPrescription)
+      ? OrderStatus.PRESCRIPTION_PENDING
+      : OrderStatus.CREATED,
+  };
+}
+
 function cartStillMatches(current: CheckoutCart, prepared: CheckoutCart) {
   return (
     current.id === prepared.id &&
@@ -514,6 +586,11 @@ async function createOrderAttempt(
       if (!cartStillMatches(currentCart, prepared.cart)) {
         throw checkoutConflictError();
       }
+
+      const authoritative = await prepareTransactionalCheckout(
+        currentCart,
+        tx.pharmacyInventory,
+      );
 
       let addressSnapshots = {
         deliveryAddressId: null as string | null,
@@ -588,22 +665,33 @@ async function createOrderAttempt(
         quotedEtaMinutes = quote.estimatedDurationMinutes;
       }
 
-      const totalAmount = prepared.medicineSubtotal.add(deliveryFee);
+      await commitInventory(
+        tx,
+        currentCart.pharmacyId as string,
+        authoritative.items.map((item) => ({
+          medicineId: item.medicineId,
+          quantity: item.quantity,
+        })),
+        now,
+      );
+
+      const totalAmount = authoritative.medicineSubtotal.add(deliveryFee);
       const order = await tx.order.create({
         data: {
           orderNumber,
           customerId,
           pharmacyId: currentCart.pharmacyId as string,
           fulfillmentMethod: input.fulfillmentMethod,
-          status: prepared.status,
+          status: authoritative.status,
+          inventoryCommittedAt: now,
           ...addressSnapshots,
-          medicineSubtotal: prepared.medicineSubtotal,
+          medicineSubtotal: authoritative.medicineSubtotal,
           deliveryFee,
           totalAmount,
           deliveryDistanceKm,
           quotedEtaMinutes,
           items: {
-            create: prepared.items.map((item) => ({
+            create: authoritative.items.map((item) => ({
               medicineId: item.medicineId,
               medicineNameSnapshot: item.medicineNameSnapshot,
               brandNameSnapshot: item.brandNameSnapshot,
@@ -717,7 +805,6 @@ const cancellableOrderStatuses: readonly OrderStatus[] = [
   OrderStatus.PRESCRIPTION_PENDING,
   OrderStatus.PRESCRIPTION_APPROVED,
   OrderStatus.CONFIRMED,
-  OrderStatus.PREPARING,
 ];
 
 function orderCancellationNotAllowedError() {
@@ -738,11 +825,17 @@ function orderCancellationConflictError() {
 
 type CancellationClock = () => Date;
 
-type CancellationDataSource = Pick<PrismaClient, "order"> & {
+type CancellationTransactionClient = Pick<
+  Prisma.TransactionClient,
+  "order" | "pharmacyInventory"
+>;
+
+type CancellationDataSource = Pick<
+  PrismaClient,
+  "order" | "pharmacyInventory"
+> & {
   $transaction<T>(
-    callback: (
-      tx: Pick<Prisma.TransactionClient, "order">,
-    ) => Promise<T>,
+    callback: (tx: CancellationTransactionClient) => Promise<T>,
     options: { isolationLevel: "Serializable" },
   ): Promise<T>;
 };
@@ -763,6 +856,13 @@ async function cancelCustomerOrderAttempt(
         select: {
           id: true,
           status: true,
+          pharmacyId: true,
+          inventoryCommittedAt: true,
+          inventoryRestoredAt: true,
+          items: {
+            select: { medicineId: true, quantity: true },
+            orderBy: { medicineId: "asc" },
+          },
         },
       });
 
@@ -774,15 +874,31 @@ async function cancelCustomerOrderAttempt(
         throw orderCancellationNotAllowedError();
       }
 
+      const committed = order.inventoryCommittedAt !== null;
+      if (committed && order.inventoryRestoredAt !== null) {
+        throw orderCancellationNotAllowedError();
+      }
+
+      if (committed) {
+        await restoreInventory(tx, order.pharmacyId, order.items, now);
+      }
+
       const updated = await tx.order.updateMany({
         where: {
           id: order.id,
           customerId,
           status: order.status,
+          ...(committed
+            ? {
+                inventoryCommittedAt: { not: null },
+                inventoryRestoredAt: null,
+              }
+            : { inventoryCommittedAt: null }),
         },
         data: {
           status: OrderStatus.CANCELLED,
           cancelledAt: now,
+          ...(committed ? { inventoryRestoredAt: now } : {}),
         },
       });
 

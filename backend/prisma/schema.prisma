@@ -240,6 +240,8 @@ model Order {
   confirmedAt                  DateTime?
   completedAt                  DateTime?
   cancelledAt                  DateTime?
+  inventoryCommittedAt         DateTime?
+  inventoryRestoredAt          DateTime?
   createdAt                    DateTime          @default(now())
   updatedAt                    DateTime          @updatedAt
 
@@ -295,6 +297,8 @@ model Prescription {
   reviewNotes              String?
   rejectionReason          String?
   supersedesPrescriptionId String?            @unique @db.Uuid
+  uploadIdempotencyKey     String?            @db.VarChar(128)
+  uploadRequestHash        String?            @db.VarChar(64)
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
 
@@ -303,6 +307,7 @@ model Prescription {
   supersedesPrescription   Prescription?  @relation("PrescriptionSupersession", fields: [supersedesPrescriptionId], references: [id], onDelete: Restrict)
   supersededByPrescription Prescription?  @relation("PrescriptionSupersession")
 
+  @@unique([orderId, uploadIdempotencyKey])
   @@index([orderId])
   @@index([status])
   @@index([reviewerStaffId])
