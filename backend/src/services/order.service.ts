@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import {
   CartStatus,
   FulfillmentMethod,
+  InventoryStatus,
   OrderStatus,
+  PharmacyPartnerStatus,
   Prisma,
   type PrismaClient,
 } from "../../generated/prisma/client.js";
@@ -449,6 +451,72 @@ async function prepareCheckout(
   };
 }
 
+async function prepareTransactionalCheckout(
+  cart: CheckoutCart,
+  inventoryDelegate: OrderTransactionClient["pharmacyInventory"],
+): Promise<Omit<PreparedCheckout, "cart">> {
+  const items: PreparedItem[] = [];
+  let medicineSubtotal = new Prisma.Decimal(0);
+
+  for (const cartItem of cart.items) {
+    const inventory = await inventoryDelegate.findFirst({
+      where: {
+        pharmacyId: cart.pharmacyId as string,
+        medicineId: cartItem.medicineId,
+        availability: {
+          in: [InventoryStatus.AVAILABLE, InventoryStatus.LOW_STOCK],
+        },
+        pharmacy: {
+          isActive: true,
+          isVerified: true,
+          partnerStatus: PharmacyPartnerStatus.ACTIVE,
+        },
+        medicine: { isActive: true },
+      },
+      select: {
+        quantity: true,
+        sellingPrice: true,
+        medicine: {
+          select: {
+            name: true,
+            brandName: true,
+            manufacturer: true,
+            requiresPrescription: true,
+          },
+        },
+      },
+    });
+
+    if (!inventory) throw checkoutItemNotOrderableError();
+    if (cartItem.quantity > inventory.quantity) {
+      throw checkoutQuantityUnavailableError();
+    }
+
+    const unitPrice = new Prisma.Decimal(inventory.sellingPrice);
+    const lineTotal = unitPrice.mul(cartItem.quantity);
+    medicineSubtotal = medicineSubtotal.add(lineTotal);
+    items.push({
+      cartItemId: cartItem.id,
+      medicineId: cartItem.medicineId,
+      medicineNameSnapshot: inventory.medicine.name,
+      brandNameSnapshot: inventory.medicine.brandName,
+      manufacturerSnapshot: inventory.medicine.manufacturer,
+      requiresPrescription: inventory.medicine.requiresPrescription,
+      quantity: cartItem.quantity,
+      unitPrice,
+      lineTotal,
+    });
+  }
+
+  return {
+    items,
+    medicineSubtotal,
+    status: items.some((item) => item.requiresPrescription)
+      ? OrderStatus.PRESCRIPTION_PENDING
+      : OrderStatus.CREATED,
+  };
+}
+
 function cartStillMatches(current: CheckoutCart, prepared: CheckoutCart) {
   return (
     current.id === prepared.id &&
@@ -518,6 +586,11 @@ async function createOrderAttempt(
       if (!cartStillMatches(currentCart, prepared.cart)) {
         throw checkoutConflictError();
       }
+
+      const authoritative = await prepareTransactionalCheckout(
+        currentCart,
+        tx.pharmacyInventory,
+      );
 
       let addressSnapshots = {
         deliveryAddressId: null as string | null,
@@ -595,30 +668,30 @@ async function createOrderAttempt(
       await commitInventory(
         tx,
         currentCart.pharmacyId as string,
-        prepared.items.map((item) => ({
+        authoritative.items.map((item) => ({
           medicineId: item.medicineId,
           quantity: item.quantity,
         })),
         now,
       );
 
-      const totalAmount = prepared.medicineSubtotal.add(deliveryFee);
+      const totalAmount = authoritative.medicineSubtotal.add(deliveryFee);
       const order = await tx.order.create({
         data: {
           orderNumber,
           customerId,
           pharmacyId: currentCart.pharmacyId as string,
           fulfillmentMethod: input.fulfillmentMethod,
-          status: prepared.status,
+          status: authoritative.status,
           inventoryCommittedAt: now,
           ...addressSnapshots,
-          medicineSubtotal: prepared.medicineSubtotal,
+          medicineSubtotal: authoritative.medicineSubtotal,
           deliveryFee,
           totalAmount,
           deliveryDistanceKm,
           quotedEtaMinutes,
           items: {
-            create: prepared.items.map((item) => ({
+            create: authoritative.items.map((item) => ({
               medicineId: item.medicineId,
               medicineNameSnapshot: item.medicineNameSnapshot,
               brandNameSnapshot: item.brandNameSnapshot,
