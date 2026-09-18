@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { buildInventoryRecord, buildMedicines, buildPharmacies, CORE_COUNTS, pharmacyName, selectMedicineIndexes } from '../src/dev/demo-data/generateDemoData.js'
+import { buildInventoryRecord, buildMedicines, buildPharmacies, CORE_COUNTS, keonjharLocalityLabels, pharmacyName, selectMedicineIndexes } from '../src/dev/demo-data/generateDemoData.js'
 import { DEFAULT_DEMO_SEED } from '../src/dev/demo-data/lib.js'
 import type { DemoLocation } from '../src/dev/demo-data/types.js'
 
@@ -45,6 +45,8 @@ describe('MediConnect demo data', () => {
     }
     const keonjhar = pharmacies.filter((pharmacy) => pharmacy.isKeonjharTown)
     expect(new Set(keonjhar.map((pharmacy) => `${pharmacy.latitude},${pharmacy.longitude}`)).size).toBe(10)
+    expect(keonjhar.map((pharmacy) => pharmacy.addressLine1)).toEqual(keonjharLocalityLabels)
+    expect(keonjhar.some((pharmacy) => /^Ward \d+/.test(pharmacy.addressLine1))).toBe(false)
   })
 
   it('selects unique inventory with strongly decreasing tier density', () => {
