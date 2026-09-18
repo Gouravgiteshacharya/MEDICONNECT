@@ -1,4 +1,16 @@
-# React + Vite
+# MediConnect frontend
+
+## Environment
+
+Copy `.env.example` to `.env.local` and configure values for the environment.
+
+`VITE_GOOGLE_MAPS_API_KEY` enables browser-side manual address search using the
+Google Maps JavaScript API and Places API. Use a browser key restricted to the
+allowed HTTP referrers and only the Google APIs required by this frontend.
+Never put the backend Google Routes credential or another server secret in a
+`VITE_` variable, because Vite exposes those values to the browser.
+
+## React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

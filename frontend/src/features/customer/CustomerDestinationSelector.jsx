@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { useAuth } from '../../context/AuthContext'
 import { destinationFromAddress, useCustomerDestination } from './CustomerDestinationContext'
+import ManualAddressSearch from './ManualAddressSearch'
 import './CustomerDestinationSelector.css'
 
 function locationErrorMessage(error) {
@@ -16,7 +17,6 @@ export default function CustomerDestinationSelector({ compact = false }) {
   const [open, setOpen] = useState(false)
   const [locating, setLocating] = useState(false)
   const [error, setError] = useState('')
-  const [manual, setManual] = useState({ address: '', city: '', state: '', postalCode: '' })
 
   function useCurrentLocation() {
     setError('')
@@ -57,6 +57,11 @@ export default function CustomerDestinationSelector({ compact = false }) {
     setOpen(false)
   }
 
+  function chooseManual(destination) {
+    setDestination(destination)
+    setOpen(false)
+  }
+
   return <>
     <button className={`customer-destination-trigger ${compact ? 'compact' : ''}`} type="button" onClick={() => setOpen(true)}>
       <span>⌖</span><span><small>Deliver medicines to</small><strong>{destination?.label || 'Choose destination'}</strong>{!compact && destination?.city && <em>{destination.city}, {destination.state}</em>}</span><b>⌄</b>
@@ -70,7 +75,7 @@ export default function CustomerDestinationSelector({ compact = false }) {
 
         {authenticated && <div className="customer-destination-section"><small>SAVED ADDRESSES</small>{addressesLoading && <p>Loading saved addresses…</p>}{addresses.map((address) => <button type="button" key={address.id} onClick={() => chooseSaved(address)} disabled={!destinationFromAddress(address)}><span><strong>{address.label}</strong><small>{address.addressLine1}, {address.city}, {address.state}</small></span>{!destinationFromAddress(address) && <em>Location required</em>}</button>)}{!addressesLoading && addresses.length === 0 && <p>No saved addresses yet.</p>}{addressesError && <p>{addressesError}</p>}</div>}
 
-        <div className="customer-destination-section manual"><small>ANOTHER ADDRESS</small><input placeholder="Street or area" value={manual.address} onChange={(event) => setManual({ ...manual, address: event.target.value })}/><div><input placeholder="City" value={manual.city} onChange={(event) => setManual({ ...manual, city: event.target.value })}/><input placeholder="State" value={manual.state} onChange={(event) => setManual({ ...manual, state: event.target.value })}/></div><input placeholder="Postal code" value={manual.postalCode} onChange={(event) => setManual({ ...manual, postalCode: event.target.value })}/><p>Address search is not configured yet. MediConnect needs Google Places or Geocoding to turn this address into a verified map location before it can search nearby pharmacies.</p><button type="button" disabled>Resolve and use address</button></div>
+        <ManualAddressSearch onSelect={chooseManual} />
 
         {error && <div className="customer-destination-error">{error}</div>}
       </section>
