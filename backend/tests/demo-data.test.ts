@@ -31,7 +31,9 @@ describe('MediConnect demo data', () => {
     expect(pharmacies).toHaveLength(CORE_COUNTS.pharmacies)
     expect(odisha).toHaveLength(1_200)
     expect(new Set(odisha.map((pharmacy) => pharmacy.district)).size).toBe(30)
+    expect(pharmacies.every((pharmacy) => pharmacy.isVerified && pharmacy.isActive && pharmacy.partnerStatus === 'ACTIVE')).toBe(true)
     expect(pharmacies.filter((pharmacy) => pharmacy.isKeonjharTown)).toHaveLength(10)
+    expect(pharmacies.filter((pharmacy) => pharmacy.city === 'Keonjhar')).toHaveLength(10)
     expect(pharmacies.reduce((sum, pharmacy) => sum + pharmacy.inventoryTarget, 0)).toBe(CORE_COUNTS.inventory)
   })
 

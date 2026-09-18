@@ -57,6 +57,7 @@ export async function validateDemoData(outputDir = DEFAULT_OUTPUT_DIR) {
     assert(!pharmacyIds.has(pharmacy.id), `Duplicate pharmacy ID: ${pharmacy.id}`)
     assert(pharmacy.licenseNumber.startsWith(`DEMO-MC-${manifest.seed}-`), `Pharmacy ${pharmacy.id} lacks a stable demo identifier`)
     assert(pharmacy.description.startsWith('Fictional independent local pharmacy'), `Pharmacy ${pharmacy.id} is not identified as fictional/local`)
+    assert(pharmacy.isVerified && pharmacy.isActive && pharmacy.partnerStatus === 'ACTIVE', `Demo marketplace pharmacy ${pharmacy.id} is not discoverable`)
     assert(!majorChainPattern.test(pharmacy.name), `Prohibited major-chain name: ${pharmacy.name}`)
     assert(pharmacy.city && pharmacy.district && pharmacy.state && /^\d{6}$/.test(pharmacy.postalCode), `Invalid city/state/postal association for ${pharmacy.id}`)
     assert(pharmacy.latitude >= 6 && pharmacy.latitude <= 38 && pharmacy.longitude >= 68 && pharmacy.longitude <= 98, `Coordinates outside India bounds for ${pharmacy.id}`)
@@ -70,6 +71,8 @@ export async function validateDemoData(outputDir = DEFAULT_OUTPUT_DIR) {
     if (pharmacy.isKeonjharTown) {
       assert(pharmacy.city === 'Keonjhar' && pharmacy.district === 'Kendujhar', `Bad Keonjhar town association for ${pharmacy.name}`)
       keonjharIds.add(pharmacy.id)
+    } else {
+      assert(pharmacy.city !== 'Keonjhar', `Non-curated pharmacy incorrectly assigned to Keonjhar town: ${pharmacy.name}`)
     }
   }
   assert(pharmacyCount === CORE_COUNTS.pharmacies, `Expected ${CORE_COUNTS.pharmacies} pharmacies, found ${pharmacyCount}`)
