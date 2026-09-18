@@ -105,17 +105,27 @@ export function pharmacyName(index: number, city: string) {
 
 export function buildPharmacies(locations: DemoLocation[], seed = DEFAULT_DEMO_SEED): DemoPharmacy[] {
   const pharmacies: DemoPharmacy[] = []
+  const kendujharOverflowLocation = locations.find(
+    (location) => location.city === 'Banspal' && location.district === 'Kendujhar',
+  )
+  if (!kendujharOverflowLocation) throw new Error('Location asset is missing the Kendujhar overflow centre')
   for (const { location, count } of allocateLocations(locations)) {
+    // The asset contains both the dedicated Keonjhar-town centre and a broader
+    // Keonjhar postal centre. Keep `city=Keonjhar` exclusive to the curated ten
+    // and place the broader allocation at the existing Banspal centre instead.
+    const effectiveLocation = !location.keonjharTown && location.city === 'Keonjhar' && location.district === 'Kendujhar'
+      ? kendujharOverflowLocation
+      : location
     for (let localIndex = 0; localIndex < count; localIndex++) {
       const index = pharmacies.length
       const random = createPrng(seedFromString(`${seed}:pharmacy:${index}`))
-      const distanceKm = location.radiusKm * Math.sqrt(random())
+      const distanceKm = effectiveLocation.radiusKm * Math.sqrt(random())
       const angle = random() * Math.PI * 2
-      const latitude = location.latitude + (distanceKm * Math.cos(angle)) / 111.32
-      const longitude = location.longitude + (distanceKm * Math.sin(angle)) / (111.32 * Math.cos(location.latitude * Math.PI / 180))
-      const city = location.keonjharTown ? 'Keonjhar' : location.city
+      const latitude = effectiveLocation.latitude + (distanceKm * Math.cos(angle)) / 111.32
+      const longitude = effectiveLocation.longitude + (distanceKm * Math.sin(angle)) / (111.32 * Math.cos(effectiveLocation.latitude * Math.PI / 180))
+      const city = effectiveLocation.keonjharTown ? 'Keonjhar' : effectiveLocation.city
       const name = pharmacyName(index, city)
-      const addressLine1 = location.keonjharTown
+      const addressLine1 = effectiveLocation.keonjharTown
         ? keonjharLocalityLabels[localIndex]
         : `Ward ${1 + (index % 30)}, ${city} Town Centre`
       if (majorChainPattern.test(name)) throw new Error(`Generated prohibited chain-like name: ${name}`)
@@ -127,14 +137,14 @@ export function buildPharmacies(locations: DemoLocation[], seed = DEFAULT_DEMO_S
         email: `demo-pharmacy-${String(index + 1).padStart(5, '0')}@example.invalid`,
         licenseNumber: `DEMO-MC-${seed}-${String(index + 1).padStart(5, '0')}`,
         addressLine1,
-        addressLine2: location.keonjharTown
+        addressLine2: effectiveLocation.keonjharTown
           ? 'Keonjhar, Kendujhar district'
-          : `Near Community Market, ${location.district} district`,
-        city, district: location.district, state: location.state, postalCode: location.postalCode,
+          : `Near Community Market, ${effectiveLocation.district} district`,
+        city, district: effectiveLocation.district, state: effectiveLocation.state, postalCode: effectiveLocation.postalCode,
         latitude: Number(latitude.toFixed(6)), longitude: Number(longitude.toFixed(6)),
-        isVerified: false, isActive: true, partnerStatus: 'ACTIVE',
+        isVerified: true, isActive: true, partnerStatus: 'ACTIVE',
         inventoryManagementMode: 'MEDICONNECT_MANAGED', inventoryTarget: 0,
-        isKeonjharTown: Boolean(location.keonjharTown),
+        isKeonjharTown: Boolean(effectiveLocation.keonjharTown),
       })
     }
   }
