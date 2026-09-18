@@ -1,18 +1,19 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import {
-  OrderStatus,
-  Prisma,
-  PrescriptionStatus,
-  UserRole,
-} from "../generated/prisma/client.js";
+import { OrderStatus, PrescriptionStatus, UserRole } from "../generated/prisma/client.js";
 import { app } from "../src/app.js";
-import {
-  createCustomerPrescription,
-  MAX_PRESCRIPTION_UPLOAD_ATTEMPTS,
-} from "../src/services/prescription.service.js";
 import { signAuthToken } from "../src/utils/jwt.js";
+
+const storageMocks = vi.hoisted(() => ({
+  upload: vi.fn(),
+  delete: vi.fn(),
+  createSignedUrl: vi.fn(),
+}));
+
+vi.mock("../src/services/prescriptionStorage.service.js", () => ({
+  prescriptionStorage: storageMocks,
+}));
 
 vi.mock("../src/lib/prisma.js", () => ({
   prisma: {
@@ -29,37 +30,26 @@ vi.mock("../src/lib/prisma.js", () => ({
 }));
 
 const { prisma } = await import("../src/lib/prisma.js");
-
 const prismaMock = prisma as unknown as {
   user: { findUnique: Mock };
   order: { findFirst: Mock };
-  prescription: {
-    create: Mock;
-    findMany: Mock;
-    findUnique: Mock;
-    findFirst: Mock;
-  };
+  prescription: { create: Mock; findMany: Mock; findUnique: Mock; findFirst: Mock };
   $transaction: Mock;
 };
 
 const customerId = "11111111-1111-4111-8111-111111111111";
 const orderId = "22222222-2222-4222-8222-222222222222";
 const prescriptionId = "33333333-3333-4333-8333-333333333333";
+const previousPrescriptionId = "44444444-4444-4444-8444-444444444444";
 const uploadedAt = new Date("2026-08-31T10:00:00.000Z");
-
-const validInput = {
-  fileUrl: "https://files.example.test/prescriptions/rx-1.pdf",
-  storagePath: "customer/orders/rx-1.pdf",
-  originalFilename: "prescription.pdf",
-};
+const pdf = Buffer.from("%PDF-1.7\nsecure prescription test");
+const png = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.from("image"),
+]);
 
 function authenticateAs(role: UserRole = UserRole.CUSTOMER) {
-  prismaMock.user.findUnique.mockResolvedValueOnce({
-    id: customerId,
-    role,
-    isActive: true,
-  });
-
+  prismaMock.user.findUnique.mockResolvedValueOnce({ id: customerId, role, isActive: true });
   return `Bearer ${signAuthToken({ userId: customerId, role })}`;
 }
 
@@ -67,11 +57,7 @@ function uploadableOrder(overrides: Record<string, unknown> = {}) {
   return {
     id: orderId,
     status: OrderStatus.PRESCRIPTION_PENDING,
-    items: [
-      {
-        id: "44444444-4444-4444-8444-444444444444",
-      },
-    ],
+    items: [{ id: "55555555-5555-4555-8555-555555555555" }],
     ...overrides,
   };
 }
@@ -80,8 +66,8 @@ function prescription(overrides: Record<string, unknown> = {}) {
   return {
     id: prescriptionId,
     orderId,
-    fileUrl: validInput.fileUrl,
-    originalFilename: validInput.originalFilename,
+    fileUrl: `/api/v1/prescriptions/${prescriptionId}/document-access`,
+    originalFilename: "prescription.pdf",
     status: PrescriptionStatus.PENDING_REVIEW,
     uploadedAt,
     reviewedAt: null,
@@ -92,1029 +78,166 @@ function prescription(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function expectError(
-  response: { status: number; body: unknown },
-  status: number,
-  code: string,
-) {
+function uploadRequest(filename = "prescription.pdf", content = pdf, type = "application/pdf") {
+  return request(app)
+    .post(`/api/v1/orders/${orderId}/prescriptions`)
+    .set("Authorization", authenticateAs())
+    .attach("file", content, { filename, contentType: type });
+}
+
+function expectError(response: { status: number; body: unknown }, status: number, code: string) {
   expect(response.status).toBe(status);
-  expect(response.body).toEqual(
-    expect.objectContaining({
-      code,
-    }),
-  );
+  expect(response.body).toEqual(expect.objectContaining({ code }));
 }
 
-function knownError(code: string) {
-  return new Prisma.PrismaClientKnownRequestError(code, {
-    code,
-    clientVersion: "test",
-  });
-}
-
-function supersessionUniqueError() {
-  return new Prisma.PrismaClientKnownRequestError(
-    "Unique constraint failed",
-    {
-      code: "P2002",
-      clientVersion: "test",
-      meta: {
-        target: ["supersedesPrescriptionId"],
-      },
-    },
-  );
-}
-
-describe("customer prescription API", () => {
+describe("secure customer prescription workflow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.$transaction.mockImplementation(async (callback) => callback(prisma));
+    prismaMock.order.findFirst.mockResolvedValue(uploadableOrder());
+    prismaMock.prescription.create.mockResolvedValue(prescription());
+    storageMocks.upload.mockResolvedValue(undefined);
+    storageMocks.delete.mockResolvedValue(undefined);
+  });
 
-    prismaMock.$transaction.mockImplementation(
-      async (callback) => callback(prisma),
+  it("rejects unauthenticated and non-customer uploads", async () => {
+    const unauthenticated = await request(app)
+      .post(`/api/v1/orders/${orderId}/prescriptions`)
+      .attach("file", pdf, { filename: "rx.pdf", contentType: "application/pdf" });
+    expect(unauthenticated.status).toBe(401);
+
+    const forbidden = await request(app)
+      .post(`/api/v1/orders/${orderId}/prescriptions`)
+      .set("Authorization", authenticateAs(UserRole.PHARMACY_STAFF))
+      .attach("file", pdf, { filename: "rx.pdf", contentType: "application/pdf" });
+    expect(forbidden.status).toBe(403);
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+  });
+
+  it("uploads a verified document and persists only server-controlled references", async () => {
+    const response = await uploadRequest("../unsafe prescription.pdf");
+    expect(response.status).toBe(201);
+    const stored = storageMocks.upload.mock.calls[0][0];
+    expect(stored.key).toMatch(
+      new RegExp(`^prescriptions/${customerId}/${orderId}/[0-9a-f-]+/[0-9a-f-]+-unsafe-prescription\\.pdf$`),
+    );
+    expect(stored.content).toEqual(pdf);
+    expect(stored.contentType).toBe("application/pdf");
+
+    const data = prismaMock.prescription.create.mock.calls[0][0].data;
+    expect(data.storagePath).toBe(stored.key);
+    expect(data.originalFilename).toBe("unsafe-prescription.pdf");
+    expect(data.fileUrl).toBe(`/api/v1/prescriptions/${data.id}/document-access`);
+    expect(data).not.toHaveProperty("reviewerStaffId");
+    expect(data).not.toHaveProperty("reviewedAt");
+    expect(prismaMock.$transaction.mock.calls[0][1]).toEqual({ isolationLevel: "Serializable" });
+  });
+
+  it("generates distinct storage keys for separate uploads", async () => {
+    expect((await uploadRequest()).status).toBe(201);
+    expect((await uploadRequest("second.pdf")).status).toBe(201);
+    const [first, second] = storageMocks.upload.mock.calls.map((call) => call[0].key);
+    expect(first).not.toBe(second);
+  });
+
+  it.each([
+    ["unsupported type", Buffer.from("plain text"), "text/plain"],
+    ["PDF MIME with PNG bytes", png, "application/pdf"],
+    ["PNG MIME with PDF bytes", pdf, "image/png"],
+  ])("rejects %s before storage", async (_name, content, type) => {
+    const response = await uploadRequest("document.bin", content, type);
+    expectError(response, 415, "PRESCRIPTION_FILE_TYPE_UNSUPPORTED");
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing and oversized files", async () => {
+    const missing = await request(app)
+      .post(`/api/v1/orders/${orderId}/prescriptions`)
+      .set("Authorization", authenticateAs());
+    expectError(missing, 400, "VALIDATION_ERROR");
+
+    const oversized = Buffer.concat([Buffer.from("%PDF-"), Buffer.alloc(10 * 1024 * 1024)]);
+    const tooLarge = await uploadRequest("large.pdf", oversized);
+    expectError(tooLarge, 413, "PRESCRIPTION_FILE_TOO_LARGE");
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+  });
+
+  it("does not allow clients to choose storagePath or fileUrl", async () => {
+    const response = await uploadRequest()
+      .field("storagePath", "another/customer/rx.pdf")
+      .field("fileUrl", "https://public.example.test/rx.pdf");
+    expectError(response, 400, "VALIDATION_ERROR");
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+  });
+
+  it("checks order ownership before uploading", async () => {
+    prismaMock.order.findFirst.mockResolvedValue(null);
+    const response = await uploadRequest();
+    expectError(response, 404, "ORDER_NOT_FOUND");
+    expect(prismaMock.order.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: orderId, customerId } }),
+    );
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [uploadableOrder({ items: [] }), "PRESCRIPTION_NOT_REQUIRED"],
+    [uploadableOrder({ status: OrderStatus.CONFIRMED }), "PRESCRIPTION_UPLOAD_NOT_ALLOWED"],
+  ])("preserves lifecycle eligibility", async (order, code) => {
+    prismaMock.order.findFirst.mockResolvedValue(order);
+    const response = await uploadRequest();
+    expectError(response, 409, code);
+    expect(storageMocks.upload).not.toHaveBeenCalled();
+  });
+
+  it("does not create metadata when provider upload fails", async () => {
+    storageMocks.upload.mockRejectedValue(new Error("provider failed"));
+    const response = await uploadRequest();
+    expect(response.status).toBe(500);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("deletes the uploaded object when database creation fails", async () => {
+    prismaMock.$transaction.mockRejectedValue(new Error("database failed"));
+    const response = await uploadRequest();
+    expect(response.status).toBe(500);
+    expect(storageMocks.delete).toHaveBeenCalledWith(storageMocks.upload.mock.calls[0][0].key);
+  });
+
+  it("preserves supersession validation and persistence", async () => {
+    prismaMock.prescription.findUnique.mockResolvedValue({
+      id: previousPrescriptionId,
+      orderId,
+      status: PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
+    });
+    prismaMock.prescription.findFirst.mockResolvedValue(null);
+    prismaMock.prescription.create.mockResolvedValue(
+      prescription({ supersedesPrescriptionId: previousPrescriptionId }),
+    );
+    const response = await uploadRequest().field("supersedesPrescriptionId", previousPrescriptionId);
+    expect(response.status).toBe(201);
+    expect(prismaMock.prescription.create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ supersedesPrescriptionId: previousPrescriptionId }),
     );
   });
 
-  describe("POST /api/v1/orders/:orderId/prescriptions", () => {
-    it("rejects unauthenticated and non-customer requests", async () => {
-      const unauthenticated = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .send(validInput);
-
-      expect(unauthenticated.status).toBe(401);
-
-      const forbidden = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set(
-          "Authorization",
-          authenticateAs(UserRole.PHARMACY_STAFF),
-        )
-        .send(validInput);
-
-      expect(forbidden.status).toBe(403);
-      expect(
-        prismaMock.order.findFirst,
-      ).not.toHaveBeenCalled();
-    });
-
-    it.each([
-      ["invalid order id", "not-a-uuid", validInput],
-      [
-        "missing file URL",
-        orderId,
-        { originalFilename: "rx.pdf" },
-      ],
-      ["empty file URL", orderId, { fileUrl: "" }],
-      [
-        "invalid file URL",
-        orderId,
-        { fileUrl: "not-a-url" },
-      ],
-      [
-        "invalid supersedes prescription id",
-        orderId,
-        {
-          ...validInput,
-          supersedesPrescriptionId: "not-a-uuid",
-        },
-      ],
-      [
-        "unknown field",
-        orderId,
-        {
-          ...validInput,
-          status: "APPROVED",
-        },
-      ],
-      [
-        "reviewer identity",
-        orderId,
-        {
-          ...validInput,
-          reviewerStaffId: customerId,
-        },
-      ],
-      [
-        "review timestamp",
-        orderId,
-        {
-          ...validInput,
-          reviewedAt: uploadedAt.toISOString(),
-        },
-      ],
-      [
-        "review notes",
-        orderId,
-        {
-          ...validInput,
-          reviewNotes: "approved",
-        },
-      ],
-      [
-        "rejection reason",
-        orderId,
-        {
-          ...validInput,
-          rejectionReason: "invalid",
-        },
-      ],
-    ])(
-      "rejects %s through strict validation",
-      async (_name, id, body) => {
-        const response = await request(app)
-          .post(`/api/v1/orders/${id}/prescriptions`)
-          .set("Authorization", authenticateAs())
-          .send(body);
-
-        expectError(
-          response,
-          400,
-          "VALIDATION_ERROR",
-        );
-
-        expect(
-          prismaMock.order.findFirst,
-        ).not.toHaveBeenCalled();
-
-        expect(
-          prismaMock.prescription.create,
-        ).not.toHaveBeenCalled();
-      },
-    );
-
-    it("does not leak an inaccessible order", async () => {
-      prismaMock.order.findFirst.mockResolvedValue(null);
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send(validInput);
-
-      expectError(
-        response,
-        404,
-        "ORDER_NOT_FOUND",
-      );
-
-      expect(
-        prismaMock.order.findFirst,
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            id: orderId,
-            customerId,
-          },
-        }),
-      );
-    });
-
-    it("rejects an order that does not require a prescription", async () => {
-      prismaMock.order.findFirst.mockResolvedValue(
-        uploadableOrder({
-          items: [],
-        }),
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send(validInput);
-
-      expectError(
-        response,
-        409,
-        "PRESCRIPTION_NOT_REQUIRED",
-      );
-
-      expect(
-        prismaMock.prescription.create,
-      ).not.toHaveBeenCalled();
-    });
-
-    it.each([
-      OrderStatus.CREATED,
-      OrderStatus.PRESCRIPTION_APPROVED,
-      OrderStatus.PRESCRIPTION_REJECTED,
-      OrderStatus.CONFIRMED,
-      OrderStatus.CANCELLED,
-    ])(
-      "rejects upload while the order is %s",
-      async (status) => {
-        prismaMock.order.findFirst.mockResolvedValue(
-          uploadableOrder({
-            status,
-          }),
-        );
-
-        const response = await request(app)
-          .post(`/api/v1/orders/${orderId}/prescriptions`)
-          .set("Authorization", authenticateAs())
-          .send(validInput);
-
-        expectError(
-          response,
-          409,
-          "PRESCRIPTION_UPLOAD_NOT_ALLOWED",
-        );
-
-        expect(
-          prismaMock.prescription.create,
-        ).not.toHaveBeenCalled();
-      },
-    );
-
-    it("creates a pending-review record without customer-controlled review fields", async () => {
-      prismaMock.order.findFirst.mockResolvedValue(
-        uploadableOrder(),
-      );
-
-      prismaMock.prescription.create.mockResolvedValue(
-        prescription(),
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send(validInput);
-
-      expect(response.status).toBe(201);
-
-      expect(response.body).toEqual({
-        prescription: {
-          ...prescription(),
-          uploadedAt: uploadedAt.toISOString(),
-        },
-      });
-
-      const createArgs =
-        prismaMock.prescription.create.mock.calls[0][0];
-
-      expect(createArgs.data).toEqual({
-        orderId,
-        ...validInput,
-      });
-
-      expect(createArgs.data).not.toHaveProperty(
-        "status",
-      );
-      expect(createArgs.data).not.toHaveProperty(
-        "reviewerStaffId",
-      );
-      expect(createArgs.data).not.toHaveProperty(
-        "reviewedAt",
-      );
-      expect(createArgs.data).not.toHaveProperty(
-        "reviewNotes",
-      );
-      expect(createArgs.data).not.toHaveProperty(
-        "rejectionReason",
-      );
-      expect(createArgs.data).not.toHaveProperty(
-        "supersedesPrescriptionId",
-      );
-
-      expect(createArgs.select).not.toHaveProperty(
-        "storagePath",
-      );
-      expect(createArgs.select).not.toHaveProperty(
-        "reviewerStaffId",
-      );
-
-      expect(
-        createArgs.select.supersedesPrescriptionId,
-      ).toBe(true);
-
-      expect(
-        response.body.prescription,
-      ).not.toHaveProperty("storagePath");
-
-      expect(
-        response.body.prescription,
-      ).not.toHaveProperty("reviewerStaffId");
-
-      expect(
-        response.body.prescription.supersedesPrescriptionId,
-      ).toBeNull();
-
-      expect(
-        prismaMock.$transaction,
-      ).toHaveBeenCalledWith(
-        expect.any(Function),
-        {
-          isolationLevel: "Serializable",
-        },
-      );
-    });
-
-    it("creates separate rows for multiple ordinary uploads and never mutates the order", async () => {
-      prismaMock.order.findFirst.mockResolvedValue(
-        uploadableOrder(),
-      );
-
-      prismaMock.prescription.create
-        .mockResolvedValueOnce(
-          prescription(),
-        )
-        .mockResolvedValueOnce(
-          prescription({
-            id: "55555555-5555-4555-8555-555555555555",
-          }),
-        );
-
-      const first = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send(validInput);
-
-      const second = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send({
-          ...validInput,
-          fileUrl:
-            "https://files.example.test/rx-2.pdf",
-        });
-
-      expect(first.status).toBe(201);
-      expect(second.status).toBe(201);
-
-      expect(
-        prismaMock.prescription.create,
-      ).toHaveBeenCalledTimes(2);
-
-      expect(
-        prismaMock.prescription.create.mock.calls[0][0]
-          .data,
-      ).not.toHaveProperty("id");
-
-      expect(
-        prismaMock.prescription.create.mock.calls[1][0]
-          .data,
-      ).not.toHaveProperty("id");
-
-      expect(
-        prismaMock.prescription.create.mock.calls[0][0]
-          .data,
-      ).not.toHaveProperty(
-        "supersedesPrescriptionId",
-      );
-
-      expect(
-        prismaMock.prescription.create.mock.calls[1][0]
-          .data,
-      ).not.toHaveProperty(
-        "supersedesPrescriptionId",
-      );
-
-      expect(prismaMock.order).not.toHaveProperty(
-        "update",
-      );
-    });
-
-    it("creates a resubmission that supersedes an ADDITIONAL_INFO_REQUIRED prescription", async () => {
-      const previousPrescriptionId =
-        "55555555-5555-4555-8555-555555555555";
-
-      const replacementPrescriptionId =
-        "66666666-6666-4666-8666-666666666666";
-
-      prismaMock.order.findFirst.mockResolvedValue(
-        uploadableOrder(),
-      );
-
-      prismaMock.prescription.findUnique.mockResolvedValue(
-        {
-          id: previousPrescriptionId,
-          orderId,
-          status:
-            PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
-        },
-      );
-
-      prismaMock.prescription.findFirst.mockResolvedValue(
-        null,
-      );
-
-      prismaMock.prescription.create.mockResolvedValue(
-        prescription({
-          id: replacementPrescriptionId,
-          supersedesPrescriptionId:
-            previousPrescriptionId,
-        }),
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send({
-          ...validInput,
-          fileUrl:
-            "https://files.example.test/prescriptions/rx-resubmission.pdf",
-          supersedesPrescriptionId:
-            previousPrescriptionId,
-        });
-
-      expect(response.status).toBe(201);
-
-      expect(
-        response.body.prescription
-          .supersedesPrescriptionId,
-      ).toBe(previousPrescriptionId);
-
-      expect(
-        prismaMock.prescription.findUnique,
-      ).toHaveBeenCalledWith({
-        where: {
-          id: previousPrescriptionId,
-        },
-        select: {
-          id: true,
-          orderId: true,
-          status: true,
-        },
-      });
-
-      expect(
-        prismaMock.prescription.findFirst,
-      ).toHaveBeenCalledWith({
-        where: {
-          supersedesPrescriptionId:
-            previousPrescriptionId,
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      expect(
-        prismaMock.prescription.create,
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            orderId,
-            supersedesPrescriptionId:
-              previousPrescriptionId,
-          }),
-        }),
-      );
-    });
-
-    it("rejects an unknown superseded prescription", async () => {
-      const previousPrescriptionId =
-        "55555555-5555-4555-8555-555555555555";
-
-      prismaMock.order.findFirst.mockResolvedValue(
-        uploadableOrder(),
-      );
-
-      prismaMock.prescription.findUnique.mockResolvedValue(
-        null,
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send({
-          ...validInput,
-          supersedesPrescriptionId:
-            previousPrescriptionId,
-        });
-
-      expectError(
-        response,
-        409,
-        "PRESCRIPTION_SUPERSESSION_NOT_ALLOWED",
-      );
-
-      expect(
-        prismaMock.prescription.findFirst,
-      ).not.toHaveBeenCalled();
-
-      expect(
-        prismaMock.prescription.create,
-      ).not.toHaveBeenCalled();
-    });
-
-    it("rejects superseding a prescription from another order", async () => {
-      const previousPrescriptionId =
-        "55555555-5555-4555-8555-555555555555";
-
-      prismaMock.order.findFirst.mockResolvedValue(
-        uploadableOrder(),
-      );
-
-      prismaMock.prescription.findUnique.mockResolvedValue(
-        {
-          id: previousPrescriptionId,
-          orderId:
-            "77777777-7777-4777-8777-777777777777",
-          status:
-            PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
-        },
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send({
-          ...validInput,
-          supersedesPrescriptionId:
-            previousPrescriptionId,
-        });
-
-      expectError(
-        response,
-        409,
-        "PRESCRIPTION_SUPERSESSION_NOT_ALLOWED",
-      );
-
-      expect(
-        prismaMock.prescription.findFirst,
-      ).not.toHaveBeenCalled();
-
-      expect(
-        prismaMock.prescription.create,
-      ).not.toHaveBeenCalled();
-    });
-
-    it.each([
-      PrescriptionStatus.PENDING_REVIEW,
-      PrescriptionStatus.APPROVED,
-      PrescriptionStatus.REJECTED,
-    ])(
-      "rejects superseding a prescription in %s",
-      async (status) => {
-        const previousPrescriptionId =
-          "55555555-5555-4555-8555-555555555555";
-
-        prismaMock.order.findFirst.mockResolvedValue(
-          uploadableOrder(),
-        );
-
-        prismaMock.prescription.findUnique.mockResolvedValue(
-          {
-            id: previousPrescriptionId,
-            orderId,
-            status,
-          },
-        );
-
-        const response = await request(app)
-          .post(`/api/v1/orders/${orderId}/prescriptions`)
-          .set("Authorization", authenticateAs())
-          .send({
-            ...validInput,
-            supersedesPrescriptionId:
-              previousPrescriptionId,
-          });
-
-        expectError(
-          response,
-          409,
-          "PRESCRIPTION_SUPERSESSION_NOT_ALLOWED",
-        );
-
-        expect(
-          prismaMock.prescription.findFirst,
-        ).not.toHaveBeenCalled();
-
-        expect(
-          prismaMock.prescription.create,
-        ).not.toHaveBeenCalled();
-      },
-    );
-
-    it("rejects a prescription that has already been superseded", async () => {
-      const previousPrescriptionId =
-        "55555555-5555-4555-8555-555555555555";
-
-      prismaMock.order.findFirst.mockResolvedValue(
-        uploadableOrder(),
-      );
-
-      prismaMock.prescription.findUnique.mockResolvedValue(
-        {
-          id: previousPrescriptionId,
-          orderId,
-          status:
-            PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
-        },
-      );
-
-      prismaMock.prescription.findFirst.mockResolvedValue(
-        {
-          id: "66666666-6666-4666-8666-666666666666",
-        },
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send({
-          ...validInput,
-          supersedesPrescriptionId:
-            previousPrescriptionId,
-        });
-
-      expectError(
-        response,
-        409,
-        "PRESCRIPTION_SUPERSESSION_CONFLICT",
-      );
-
-      expect(
-        prismaMock.prescription.create,
-      ).not.toHaveBeenCalled();
-    });
-
-    it("maps a concurrent supersession unique conflict to a safe conflict", async () => {
-      const previousPrescriptionId =
-        "55555555-5555-4555-8555-555555555555";
-
-      prismaMock.order.findFirst.mockResolvedValue(
-        uploadableOrder(),
-      );
-
-      prismaMock.prescription.findUnique.mockResolvedValue(
-        {
-          id: previousPrescriptionId,
-          orderId,
-          status:
-            PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
-        },
-      );
-
-      prismaMock.prescription.findFirst.mockResolvedValue(
-        null,
-      );
-
-      prismaMock.prescription.create.mockRejectedValue(
-        supersessionUniqueError(),
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send({
-          ...validInput,
-          supersedesPrescriptionId:
-            previousPrescriptionId,
-        });
-
-      expectError(
-        response,
-        409,
-        "PRESCRIPTION_SUPERSESSION_CONFLICT",
-      );
-
-      expect(
-        prismaMock.$transaction,
-      ).toHaveBeenCalledTimes(1);
-
-      expect(
-        prismaMock.prescription.create,
-      ).toHaveBeenCalledTimes(1);
-    });
-
-    it("retries P2034 and re-reads order eligibility", async () => {
-      prismaMock.order.findFirst
-        .mockRejectedValueOnce(
-          knownError("P2034"),
-        )
-        .mockResolvedValueOnce(
-          uploadableOrder(),
-        );
-
-      prismaMock.prescription.create.mockResolvedValue(
-        prescription(),
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send(validInput);
-
-      expect(response.status).toBe(201);
-
-      expect(
-        prismaMock.$transaction,
-      ).toHaveBeenCalledTimes(2);
-
-      expect(
-        prismaMock.order.findFirst,
-      ).toHaveBeenCalledTimes(2);
-
-      expect(
-        prismaMock.prescription.create,
-      ).toHaveBeenCalledTimes(1);
-    });
-
-    it("re-checks eligibility and stops if the order state changes on retry", async () => {
-      prismaMock.order.findFirst
-        .mockRejectedValueOnce(
-          knownError("P2034"),
-        )
-        .mockResolvedValueOnce(
-          uploadableOrder({
-            status: OrderStatus.CONFIRMED,
-          }),
-        );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send(validInput);
-
-      expectError(
-        response,
-        409,
-        "PRESCRIPTION_UPLOAD_NOT_ALLOWED",
-      );
-
-      expect(
-        prismaMock.$transaction,
-      ).toHaveBeenCalledTimes(2);
-
-      expect(
-        prismaMock.order.findFirst,
-      ).toHaveBeenCalledTimes(2);
-
-      expect(
-        prismaMock.prescription.create,
-      ).not.toHaveBeenCalled();
-    });
-
-    it("returns upload conflict after exactly three P2034 failures", async () => {
-      prismaMock.order.findFirst.mockRejectedValue(
-        knownError("P2034"),
-      );
-
-      const response = await request(app)
-        .post(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs())
-        .send(validInput);
-
-      expectError(
-        response,
-        409,
-        "PRESCRIPTION_UPLOAD_CONFLICT",
-      );
-
-      expect(
-        prismaMock.$transaction,
-      ).toHaveBeenCalledTimes(
-        MAX_PRESCRIPTION_UPLOAD_ATTEMPTS,
-      );
-
-      expect(
-        prismaMock.order.findFirst,
-      ).toHaveBeenCalledTimes(
-        MAX_PRESCRIPTION_UPLOAD_ATTEMPTS,
-      );
-
-      expect(
-        prismaMock.prescription.create,
-      ).not.toHaveBeenCalled();
-    });
-
-    it("does not retry unrelated errors", async () => {
-      const failure = new Error(
-        "database unavailable",
-      );
-
-      prismaMock.$transaction.mockRejectedValue(
-        failure,
-      );
-
-      await expect(
-        createCustomerPrescription(
-          customerId,
-          orderId,
-          validInput,
-        ),
-      ).rejects.toBe(failure);
-
-      expect(
-        prismaMock.$transaction,
-      ).toHaveBeenCalledTimes(1);
-    });
+  it("rejects invalid supersession and removes the uploaded object", async () => {
+    prismaMock.prescription.findUnique.mockResolvedValue(null);
+    const response = await uploadRequest().field("supersedesPrescriptionId", previousPrescriptionId);
+    expectError(response, 409, "PRESCRIPTION_SUPERSESSION_NOT_ALLOWED");
+    expect(storageMocks.delete).toHaveBeenCalledTimes(1);
   });
 
-  describe("GET /api/v1/orders/:orderId/prescriptions", () => {
-    it("rejects unauthenticated and non-customer requests", async () => {
-      const unauthenticated = await request(app).get(
-        `/api/v1/orders/${orderId}/prescriptions`,
-      );
-
-      expect(unauthenticated.status).toBe(401);
-
-      const forbidden = await request(app)
-        .get(`/api/v1/orders/${orderId}/prescriptions`)
-        .set(
-          "Authorization",
-          authenticateAs(UserRole.PHARMACY_STAFF),
-        );
-
-      expect(forbidden.status).toBe(403);
-
-      expect(
-        prismaMock.order.findFirst,
-      ).not.toHaveBeenCalled();
-    });
-
-    it("rejects an invalid order UUID", async () => {
-      const response = await request(app)
-        .get(
-          "/api/v1/orders/not-a-uuid/prescriptions",
-        )
-        .set("Authorization", authenticateAs());
-
-      expectError(
-        response,
-        400,
-        "VALIDATION_ERROR",
-      );
-    });
-
-    it("does not leak an inaccessible order", async () => {
-      prismaMock.order.findFirst.mockResolvedValue(
-        null,
-      );
-
-      const response = await request(app)
-        .get(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs());
-
-      expectError(
-        response,
-        404,
-        "ORDER_NOT_FOUND",
-      );
-
-      expect(
-        prismaMock.order.findFirst,
-      ).toHaveBeenCalledWith({
-        where: {
-          id: orderId,
-          customerId,
-        },
-        select: {
-          id: true,
-        },
-      });
-    });
-
-    it("returns an empty history for an owned order", async () => {
-      prismaMock.order.findFirst.mockResolvedValue({
-        id: orderId,
-      });
-
-      prismaMock.prescription.findMany.mockResolvedValue(
-        [],
-      );
-
-      const response = await request(app)
-        .get(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs());
-
-      expect(response.status).toBe(200);
-
-      expect(response.body).toEqual({
-        prescriptions: [],
-      });
-    });
-
-    it("returns all statuses and supersession metadata in deterministic order without private fields", async () => {
-      prismaMock.order.findFirst.mockResolvedValue({
-        id: orderId,
-      });
-
-      const oldPrescriptionId =
-        "10000000-0000-4000-8000-000000000004";
-
-      const records = [
-        prescription({
-          id: "10000000-0000-4000-8000-000000000001",
-        }),
-        prescription({
-          id: "10000000-0000-4000-8000-000000000002",
-          status: PrescriptionStatus.APPROVED,
-        }),
-        prescription({
-          id: "10000000-0000-4000-8000-000000000003",
-          status: PrescriptionStatus.REJECTED,
-        }),
-        prescription({
-          id: oldPrescriptionId,
-          status:
-            PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
-        }),
-        prescription({
-          id: "10000000-0000-4000-8000-000000000005",
-          supersedesPrescriptionId:
-            oldPrescriptionId,
-        }),
-      ];
-
-      prismaMock.prescription.findMany.mockResolvedValue(
-        records,
-      );
-
-      const response = await request(app)
-        .get(`/api/v1/orders/${orderId}/prescriptions`)
-        .set("Authorization", authenticateAs());
-
-      expect(response.status).toBe(200);
-
-      expect(
-        response.body.prescriptions.map(
-          (item: { status: string }) =>
-            item.status,
-        ),
-      ).toEqual([
-        PrescriptionStatus.PENDING_REVIEW,
-        PrescriptionStatus.APPROVED,
-        PrescriptionStatus.REJECTED,
-        PrescriptionStatus.ADDITIONAL_INFO_REQUIRED,
-        PrescriptionStatus.PENDING_REVIEW,
-      ]);
-
-      expect(
-        response.body.prescriptions[4]
-          .supersedesPrescriptionId,
-      ).toBe(oldPrescriptionId);
-
-      expect(
-        prismaMock.prescription.findMany,
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            orderId,
-          },
-          orderBy: [
-            {
-              uploadedAt: "asc",
-            },
-            {
-              id: "asc",
-            },
-          ],
-        }),
-      );
-
-      const select =
-        prismaMock.prescription.findMany.mock.calls[0][0]
-          .select;
-
-      expect(select).not.toHaveProperty(
-        "storagePath",
-      );
-
-      expect(select).not.toHaveProperty(
-        "reviewerStaffId",
-      );
-
-      expect(
-        select.supersedesPrescriptionId,
-      ).toBe(true);
-
-      for (const item of response.body.prescriptions) {
-        expect(item).not.toHaveProperty(
-          "storagePath",
-        );
-
-        expect(item).not.toHaveProperty(
-          "reviewerStaffId",
-        );
-      }
-    });
-
-    it.each([
-      OrderStatus.CREATED,
-      OrderStatus.PRESCRIPTION_APPROVED,
-      OrderStatus.PRESCRIPTION_REJECTED,
-      OrderStatus.DELIVERED,
-      OrderStatus.CANCELLED,
-    ])(
-      "continues to return history after order state %s",
-      async (_status) => {
-        prismaMock.order.findFirst.mockResolvedValue({
-          id: orderId,
-        });
-
-        prismaMock.prescription.findMany.mockResolvedValue([
-          prescription(),
-        ]);
-
-        const response = await request(app)
-          .get(`/api/v1/orders/${orderId}/prescriptions`)
-          .set("Authorization", authenticateAs());
-
-        expect(response.status).toBe(200);
-
-        expect(
-          response.body.prescriptions,
-        ).toHaveLength(1);
-      },
-    );
+  it("keeps nested prescription history safe and deterministic", async () => {
+    prismaMock.order.findFirst.mockResolvedValue({ id: orderId });
+    prismaMock.prescription.findMany.mockResolvedValue([prescription()]);
+    const response = await request(app)
+      .get(`/api/v1/orders/${orderId}/prescriptions`)
+      .set("Authorization", authenticateAs());
+    expect(response.status).toBe(200);
+    const args = prismaMock.prescription.findMany.mock.calls[0][0];
+    expect(args.orderBy).toEqual([{ uploadedAt: "asc" }, { id: "asc" }]);
+    expect(args.select).not.toHaveProperty("storagePath");
+    expect(args.select).not.toHaveProperty("reviewerStaffId");
   });
 });

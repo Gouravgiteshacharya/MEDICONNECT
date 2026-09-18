@@ -10,13 +10,25 @@ export const prescriptionOrderParamsSchema = z
 
 export const createPrescriptionSchema = z
   .object({
-    fileUrl: z.string().trim().min(1).url().max(2048),
-    storagePath: z.string().trim().min(1).max(1024).optional(),
-    originalFilename: z.string().trim().min(1).max(255).optional(),
     supersedesPrescriptionId: uuidSchema.optional(),
+  })
+  .strict();
+
+export const prescriptionParamsSchema = z
+  .object({ prescriptionId: uuidSchema })
+  .strict();
+
+export const prescriptionLibraryQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+    cursor: uuidSchema.optional(),
   })
   .strict();
 
 export type CreatePrescriptionInput = z.infer<
   typeof createPrescriptionSchema
+>;
+
+export type PrescriptionLibraryQuery = z.infer<
+  typeof prescriptionLibraryQuerySchema
 >;
