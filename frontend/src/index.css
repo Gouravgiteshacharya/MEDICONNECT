@@ -22,8 +22,15 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font-family: inherit;
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid #5c79c5;
+  outline-offset: 3px;
 }
 
 #root {

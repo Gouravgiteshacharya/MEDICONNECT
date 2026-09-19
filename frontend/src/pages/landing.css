@@ -1312,11 +1312,22 @@
   gap: 5px;
 }
 
-.mc-footer nav button {
+.mc-footer nav button,
+.mc-footer nav a {
   border: 0;
   background: transparent;
   color: #667081;
   cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+}
+
+.mc-footer nav button:hover,
+.mc-footer nav button:focus-visible,
+.mc-footer nav a:hover,
+.mc-footer nav a:focus-visible {
+  color: #1f356f;
+  text-decoration: underline;
 }
 
 .mc-floating-search {
@@ -9370,7 +9381,8 @@
     gap: 8px 14px !important;
   }
 
-  .mc-footer nav button {
+  .mc-footer nav button,
+  .mc-footer nav a {
     padding: 0 !important;
 
     font-size: 11px !important;

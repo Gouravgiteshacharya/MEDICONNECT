@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import Seo from '../components/Seo'
 import './landing.css'
 
 function SearchIcon() {
@@ -194,6 +196,7 @@ function LandingPage({
         leaving ? 'mc-landing-leaving' : ''
       }`}
     >
+      <Seo />
       <header className="mc-nav">
         <button
           className="mc-brand"
@@ -1527,10 +1530,11 @@ function LandingPage({
         <p>Connecting customers with local pharmacies.</p>
 
         <nav>
-          <button type="button">Customer</button>
-          <button type="button">Pharmacies</button>
-          <button type="button">Support</button>
-          <button type="button">Privacy</button>
+          <button type="button" onClick={() => openSearch()}>Customer</button>
+          <button type="button" onClick={() => goToSection('mc-audience-section')}>Pharmacies</button>
+          <Link to="/?auth=login">Support</Link>
+          <Link to="/privacy">Privacy</Link>
+          <Link to="/terms">Terms</Link>
         </nav>
       </footer>
 

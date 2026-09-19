@@ -30,6 +30,38 @@ export default function CustomerAuthModal({
     }
   }, [audience, initialMode, open])
 
+  useEffect(() => {
+    if (!open) return undefined
+    const previousFocus = document.activeElement
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector('.customer-auth-sheet input')?.focus()
+    })
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !loading) onClose()
+      if (event.key === 'Tab') {
+        const focusable = [...document.querySelectorAll(
+          '.customer-auth-sheet button:not(:disabled), .customer-auth-sheet input:not(:disabled)',
+        )]
+        if (!focusable.length) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocus?.focus?.()
+    }
+  }, [loading, onClose, open])
+
   if (!open) return null
 
   function updateField(event) {
@@ -125,6 +157,7 @@ export default function CustomerAuthModal({
             className="customer-auth-close"
             onClick={onClose}
             disabled={loading}
+            aria-label="Close sign-in dialog"
           >
             ×
           </button>
@@ -149,6 +182,7 @@ export default function CustomerAuthModal({
                   onChange={updateField}
                   autoComplete="name"
                   required
+                  maxLength={120}
                 />
               </label>
 
@@ -160,6 +194,8 @@ export default function CustomerAuthModal({
                   onChange={updateField}
                   autoComplete="tel"
                   inputMode="tel"
+                  minLength={7}
+                  maxLength={20}
                 />
               </label>
             </>
@@ -174,6 +210,7 @@ export default function CustomerAuthModal({
               onChange={updateField}
               autoComplete="email"
               required
+              maxLength={254}
             />
           </label>
 
@@ -190,6 +227,8 @@ export default function CustomerAuthModal({
                   : 'new-password'
               }
               required
+              minLength={mode === 'register' ? 8 : 1}
+              maxLength={128}
             />
           </label>
 

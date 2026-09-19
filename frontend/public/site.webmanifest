@@ -1,0 +1,13 @@
+{
+  "name": "MediConnect",
+  "short_name": "MediConnect",
+  "description": "Find medicines at participating local pharmacies.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#f7f9fc",
+  "theme_color": "#2d4a91",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

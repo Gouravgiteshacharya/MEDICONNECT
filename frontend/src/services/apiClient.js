@@ -1,5 +1,13 @@
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1'
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.trim()
+const API_BASE = configuredApiBase || (
+  import.meta.env.PROD
+    ? 'https://mediconnect-3jsq.onrender.com/api/v1'
+    : 'http://localhost:4000/api/v1'
+)
+
+if (import.meta.env.PROD && !API_BASE.startsWith('https://')) {
+  throw new Error('Production API configuration must use HTTPS.')
+}
 
 const ACCESS_TOKEN_KEY = 'mediconnect_access_token'
 

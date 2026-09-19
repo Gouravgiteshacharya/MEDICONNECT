@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import Seo from '../../components/Seo'
+import { trackEvent } from '../../services/analytics'
 
 import {
   submitPharmacyApplication,
   submitRiderApplication,
 } from './partnerApplicationService'
 import './PartnerApplicationPage.css'
+import './PartnerHardening.css'
 
 const pharmacyInitial = {
   pharmacyName: '', contactName: '', contactEmail: '', phone: '',
@@ -22,11 +25,11 @@ const riderInitial = {
   emergencyContact: '', consentAccepted: false,
 }
 
-function Field({ label, name, value, onChange, required = false, type = 'text', children }) {
+function Field({ label, name, value, onChange, required = false, type = 'text', children, ...inputProps }) {
   return (
     <label className="partner-field">
       <span>{label}{required ? ' *' : ''}</span>
-      {children || <input name={name} value={value} onChange={onChange} required={required} type={type} />}
+      {children || <input name={name} value={value} onChange={onChange} required={required} type={type} {...inputProps} />}
     </label>
   )
 }
@@ -42,11 +45,28 @@ export default function PartnerApplicationPage() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (pharmacy) trackEvent('partner_pharmacy_application_started')
+    if (rider) trackEvent('partner_rider_application_started')
+  }, [pharmacy, rider])
+
   if (!pharmacy && !rider) return <main className="partner-page"><p>Application type not found.</p></main>
 
   function change(event) {
     const { name, value, type, checked } = event.target
     setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }))
+  }
+
+  function choosePhoto(event) {
+    const nextPhoto = event.target.files?.[0] || null
+    setError('')
+    if (nextPhoto && nextPhoto.size > 10 * 1024 * 1024) {
+      event.target.value = ''
+      setPhoto(null)
+      setError('The pharmacy photo must be 10 MB or smaller.')
+      return
+    }
+    setPhoto(nextPhoto)
   }
 
   function captureLocation() {
@@ -94,6 +114,7 @@ export default function PartnerApplicationPage() {
         })
       }
       setResult(response)
+      trackEvent(pharmacy ? 'partner_pharmacy_application_submitted' : 'partner_rider_application_submitted')
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -104,6 +125,7 @@ export default function PartnerApplicationPage() {
   if (result) {
     return (
       <main className="partner-page">
+        <Seo title={pharmacy ? 'Partner with MediConnect' : 'Become a MediConnect Delivery Partner'} description={pharmacy ? 'Apply to join MediConnect as a participating local pharmacy.' : 'Apply to become a verified MediConnect delivery partner.'} path={`/partner/${partnerType}/apply`} />
         <section className="partner-success">
           <span>M</span>
           <small>APPLICATION SUBMITTED</small>
@@ -118,6 +140,7 @@ export default function PartnerApplicationPage() {
 
   return (
     <main className="partner-page">
+      <Seo title={pharmacy ? 'Partner with MediConnect' : 'Become a MediConnect Delivery Partner'} description={pharmacy ? 'Apply to join MediConnect as a participating local pharmacy.' : 'Apply to become a verified MediConnect delivery partner.'} path={`/partner/${partnerType}/apply`} />
       <header className="partner-header">
         <Link to="/" className="partner-brand"><span>M</span><strong>MediConnect</strong></Link>
         <Link to="/?auth=login&audience=staff">Already approved? Staff &amp; Partner Login</Link>
@@ -133,28 +156,28 @@ export default function PartnerApplicationPage() {
         <div className="partner-form-grid">
           {pharmacy ? (
             <>
-              <Field label="Pharmacy name" name="pharmacyName" value={form.pharmacyName} onChange={change} required />
-              <Field label="Owner / contact name" name="contactName" value={form.contactName} onChange={change} required />
-              <Field label="Contact email" name="contactEmail" value={form.contactEmail} onChange={change} type="email" required />
-              <Field label="Phone" name="phone" value={form.phone} onChange={change} required />
+              <Field label="Pharmacy name" name="pharmacyName" value={form.pharmacyName} onChange={change} maxLength={160} required />
+              <Field label="Owner / contact name" name="contactName" value={form.contactName} onChange={change} maxLength={120} required />
+              <Field label="Contact email" name="contactEmail" value={form.contactEmail} onChange={change} type="email" maxLength={254} autoComplete="email" required />
+              <Field label="Phone" name="phone" value={form.phone} onChange={change} minLength={7} maxLength={20} inputMode="tel" autoComplete="tel" required />
             </>
           ) : (
             <>
-              <Field label="Full name" name="fullName" value={form.fullName} onChange={change} required />
-              <Field label="Email" name="email" value={form.email} onChange={change} type="email" required />
-              <Field label="Phone" name="phone" value={form.phone} onChange={change} required />
+              <Field label="Full name" name="fullName" value={form.fullName} onChange={change} maxLength={120} required />
+              <Field label="Email" name="email" value={form.email} onChange={change} type="email" maxLength={254} autoComplete="email" required />
+              <Field label="Phone" name="phone" value={form.phone} onChange={change} minLength={7} maxLength={20} inputMode="tel" autoComplete="tel" required />
               <Field label="Date of birth" name="dateOfBirth" value={form.dateOfBirth} onChange={change} type="date" />
             </>
           )}
-          <Field label={pharmacy ? 'Pharmacy address' : 'Home / local address'} name="addressLine1" value={form.addressLine1} onChange={change} required />
-          <Field label="Address line 2" name="addressLine2" value={form.addressLine2} onChange={change} />
-          <Field label="City / locality" name="city" value={form.city} onChange={change} required />
-          <Field label="State" name="state" value={form.state} onChange={change} required />
-          <Field label="Postal code" name="postalCode" value={form.postalCode} onChange={change} required />
+          <Field label={pharmacy ? 'Pharmacy address' : 'Home / local address'} name="addressLine1" value={form.addressLine1} onChange={change} maxLength={200} autoComplete="street-address" required />
+          <Field label="Address line 2" name="addressLine2" value={form.addressLine2} onChange={change} maxLength={200} />
+          <Field label="City / locality" name="city" value={form.city} onChange={change} maxLength={100} autoComplete="address-level2" required />
+          <Field label="State" name="state" value={form.state} onChange={change} maxLength={100} autoComplete="address-level1" required />
+          <Field label="Postal code" name="postalCode" value={form.postalCode} onChange={change} maxLength={12} autoComplete="postal-code" required />
           {pharmacy ? (
             <>
-              <Field label="Latitude" name="latitude" value={form.latitude} onChange={change} type="number" required />
-              <Field label="Longitude" name="longitude" value={form.longitude} onChange={change} type="number" required />
+              <Field label="Latitude" name="latitude" value={form.latitude} onChange={change} type="number" min="-90" max="90" step="any" required />
+              <Field label="Longitude" name="longitude" value={form.longitude} onChange={change} type="number" min="-180" max="180" step="any" required />
               <div className="partner-location-action">
                 <button type="button" onClick={captureLocation}>Capture current location</button>
                 <small>{locationStatus || 'Browser location is stored separately and is not treated as proof by itself.'}</small>
@@ -166,7 +189,7 @@ export default function PartnerApplicationPage() {
               <Field label="Delivery-support information" name="deliverySupportInfo" value={form.deliverySupportInfo} onChange={change} />
               <label className="partner-field partner-photo">
                 <span>Pharmacy photo *</span>
-                <input type="file" accept="image/jpeg,image/png" required onChange={(event) => setPhoto(event.target.files?.[0] || null)} />
+                <input type="file" accept="image/jpeg,image/png" required onChange={choosePhoto} />
                 <small>Please take/upload a clear photo of the pharmacy while you are physically at the pharmacy location. MediConnect will verify the submitted location during the field visit.</small>
               </label>
               <label className="partner-check"><input type="checkbox" name="pickupAvailable" checked={form.pickupAvailable} onChange={change} /> Pickup is available</label>
@@ -177,7 +200,7 @@ export default function PartnerApplicationPage() {
                 <select name="vehicleType" value={form.vehicleType} onChange={change}><option>BIKE</option><option>SCOOTER</option><option>BICYCLE</option><option>CAR</option><option>WALKER</option></select>
               </Field>
               <Field label="Vehicle number" name="vehicleNumber" value={form.vehicleNumber} onChange={change} />
-              <Field label="Driving licence number" name="drivingLicenseNumber" value={form.drivingLicenseNumber} onChange={change} />
+              <Field label="Driving licence number" name="drivingLicenseNumber" value={form.drivingLicenseNumber} onChange={change} maxLength={80} required={!['BICYCLE', 'WALKER'].includes(form.vehicleType)} />
               <Field label="Identity document reference" name="identityDocumentReference" value={form.identityDocumentReference} onChange={change} />
               <Field label="Emergency contact" name="emergencyContact" value={form.emergencyContact} onChange={change} />
               <div className="partner-notice"><strong>In-person verification is mandatory.</strong><p>MediConnect will contact you with the nearest verification centre and appointment details. No office location is assigned by this form.</p></div>

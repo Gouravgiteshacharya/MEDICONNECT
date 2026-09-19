@@ -10,6 +10,29 @@ allowed HTTP referrers and only the Google APIs required by this frontend.
 Never put the backend Google Routes credential or another server secret in a
 `VITE_` variable, because Vite exposes those values to the browser.
 
+`VITE_API_BASE_URL` must use HTTPS outside local development. The deployment
+currently targets the Render API. `VITE_PUBLIC_SITE_URL` is the canonical HTTPS
+origin used for canonical links, social metadata, `robots.txt`, and
+`sitemap.xml`; set it to the final public custom domain before launch. On
+Vercel, builds fall back to the automatic `VERCEL_PROJECT_PRODUCTION_URL`.
+
+The Google browser key is intentionally public. Restrict it in Google Cloud to
+the exact production and preview HTTP referrers and only the Maps JavaScript and
+Places APIs. Never substitute a server credential or service-role key.
+
+Analytics instrumentation is disabled by default. Setting
+`VITE_ANALYTICS_ENABLED=true` only emits allow-listed, payload-free browser
+events through `mediconnect:analytics`; a reviewed provider adapter can listen
+for those events later. Do not attach addresses, contact data, medicine details,
+prescription data, credentials, tokens, licence numbers, document names, or
+signed URLs.
+
+MediConnect currently uses browser storage only for essential authentication
+and customer destination state. No advertising cookies, non-essential tracking
+cookies, or third-party analytics are loaded, so the implementation does not
+show a cosmetic consent banner. If an optional analytics provider is added,
+obtain and persist explicit accept/reject preference before loading it.
+
 ## React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

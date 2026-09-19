@@ -5,53 +5,58 @@ import {
   Routes,
   useLocation,
 } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 
-import LandingExperience from '../App'
-import AdminBlockedPage from '../features/admin/AdminBlockedPage'
-import AdminInventory from '../features/admin/AdminInventory'
-import AdminDeliveries from '../features/admin/AdminDeliveries'
-import AdminDeliveryDetail from '../features/admin/AdminDeliveryDetail'
-import AdminOrderDetail from '../features/admin/AdminOrderDetail'
-import AdminOrders from '../features/admin/AdminOrders'
-import AdminOverview from '../features/admin/AdminOverview'
-import AdminPharmacies from '../features/admin/AdminPharmacies'
-import AdminPharmacyDetail from '../features/admin/AdminPharmacyDetail'
-import AdminPartnerApplications from '../features/admin/AdminPartnerApplications'
-import AdminPartnerApplicationDetail from '../features/admin/AdminPartnerApplicationDetail'
-import AdminRiskDetail from '../features/admin/AdminRiskDetail'
-import AdminShell from '../features/admin/AdminShell'
-import AdminSupportDetail from '../features/admin/AdminSupportDetail'
-import CustomerApp from '../features/customer/CustomerApp'
-import CustomerSearch from '../features/customer/CustomerSearch'
-import CustomerPharmacyResults from '../features/customer/CustomerPharmacyResults'
-import CustomerPharmacyDetail from '../features/customer/CustomerPharmacyDetail'
-import CustomerCart from '../features/customer/CustomerCart'
-import CustomerCheckout from '../features/customer/CustomerCheckout'
-import CustomerDeliveryAddress from '../features/customer/CustomerDeliveryAddress'
-import CustomerOrderDetail from '../features/customer/CustomerOrderDetail'
-import CustomerOrders from '../features/customer/CustomerOrders'
-import CustomerPrescriptionDetail from '../features/customer/CustomerPrescriptionDetail'
-import CustomerPrescriptionUpload from '../features/customer/CustomerPrescriptionUpload'
-import CustomerPrescriptions from '../features/customer/CustomerPrescriptions'
-import CustomerProfile from '../features/customer/CustomerProfile'
-import CustomerShell from '../features/customer/CustomerShell'
-import PharmacyCatalogue from '../features/pharmacy/PharmacyCatalogue'
-import PharmacyDashboard from '../features/pharmacy/PharmacyDashboard'
-import PharmacyInventory from '../features/pharmacy/PharmacyInventory'
-import PharmacyOrderAction from '../features/pharmacy/PharmacyOrderAction'
-import PharmacyOrders from '../features/pharmacy/PharmacyOrders'
-import PharmacyPrescriptionReview from '../features/pharmacy/PharmacyPrescriptionReview'
-import PharmacyPrescriptions from '../features/pharmacy/PharmacyPrescriptions'
-import PharmacyProfile from '../features/pharmacy/PharmacyProfile'
-import PharmacyShell from '../features/pharmacy/PharmacyShell'
 import { AuthProvider, useAuth } from '../context/AuthContext'
-import RiderApp from '../features/rider/RiderApp'
-import PartnerApplicationPage from '../features/partners/PartnerApplicationPage'
 import {
   getRoleHome,
   isRoleAllowed,
   USER_ROLES,
 } from './roleRouting'
+
+const LandingExperience = lazy(() => import('../App'))
+const PrivacyPage = lazy(() => import('../pages/PrivacyPage'))
+const TermsPage = lazy(() => import('../pages/TermsPage'))
+const NotFoundPage = lazy(() => import('../pages/NotFoundPage'))
+const PartnerApplicationPage = lazy(() => import('../features/partners/PartnerApplicationPage'))
+const CustomerShell = lazy(() => import('../features/customer/CustomerShell'))
+const CustomerApp = lazy(() => import('../features/customer/CustomerApp'))
+const CustomerSearch = lazy(() => import('../features/customer/CustomerSearch'))
+const CustomerPharmacyResults = lazy(() => import('../features/customer/CustomerPharmacyResults'))
+const CustomerPharmacyDetail = lazy(() => import('../features/customer/CustomerPharmacyDetail'))
+const CustomerCart = lazy(() => import('../features/customer/CustomerCart'))
+const CustomerCheckout = lazy(() => import('../features/customer/CustomerCheckout'))
+const CustomerDeliveryAddress = lazy(() => import('../features/customer/CustomerDeliveryAddress'))
+const CustomerOrderDetail = lazy(() => import('../features/customer/CustomerOrderDetail'))
+const CustomerOrders = lazy(() => import('../features/customer/CustomerOrders'))
+const CustomerPrescriptionDetail = lazy(() => import('../features/customer/CustomerPrescriptionDetail'))
+const CustomerPrescriptionUpload = lazy(() => import('../features/customer/CustomerPrescriptionUpload'))
+const CustomerPrescriptions = lazy(() => import('../features/customer/CustomerPrescriptions'))
+const CustomerProfile = lazy(() => import('../features/customer/CustomerProfile'))
+const PharmacyShell = lazy(() => import('../features/pharmacy/PharmacyShell'))
+const PharmacyDashboard = lazy(() => import('../features/pharmacy/PharmacyDashboard'))
+const PharmacyInventory = lazy(() => import('../features/pharmacy/PharmacyInventory'))
+const PharmacyCatalogue = lazy(() => import('../features/pharmacy/PharmacyCatalogue'))
+const PharmacyOrders = lazy(() => import('../features/pharmacy/PharmacyOrders'))
+const PharmacyOrderAction = lazy(() => import('../features/pharmacy/PharmacyOrderAction'))
+const PharmacyPrescriptions = lazy(() => import('../features/pharmacy/PharmacyPrescriptions'))
+const PharmacyPrescriptionReview = lazy(() => import('../features/pharmacy/PharmacyPrescriptionReview'))
+const PharmacyProfile = lazy(() => import('../features/pharmacy/PharmacyProfile'))
+const AdminShell = lazy(() => import('../features/admin/AdminShell'))
+const AdminOverview = lazy(() => import('../features/admin/AdminOverview'))
+const AdminPharmacies = lazy(() => import('../features/admin/AdminPharmacies'))
+const AdminPharmacyDetail = lazy(() => import('../features/admin/AdminPharmacyDetail'))
+const AdminPartnerApplications = lazy(() => import('../features/admin/AdminPartnerApplications'))
+const AdminPartnerApplicationDetail = lazy(() => import('../features/admin/AdminPartnerApplicationDetail'))
+const AdminInventory = lazy(() => import('../features/admin/AdminInventory'))
+const AdminOrders = lazy(() => import('../features/admin/AdminOrders'))
+const AdminOrderDetail = lazy(() => import('../features/admin/AdminOrderDetail'))
+const AdminDeliveries = lazy(() => import('../features/admin/AdminDeliveries'))
+const AdminDeliveryDetail = lazy(() => import('../features/admin/AdminDeliveryDetail'))
+const AdminBlockedPage = lazy(() => import('../features/admin/AdminBlockedPage'))
+const AdminSupportDetail = lazy(() => import('../features/admin/AdminSupportDetail'))
+const AdminRiskDetail = lazy(() => import('../features/admin/AdminRiskDetail'))
+const RiderApp = lazy(() => import('../features/rider/RiderApp'))
 
 function AuthLoadingState() {
   return (
@@ -101,8 +106,11 @@ function AnimatedRoutes() {
 
   return (
     <div className="route-transition-shell" key={location.pathname}>
+      <Suspense fallback={<AuthLoadingState />}>
       <Routes location={location}>
           <Route path="/" element={<LandingExperience />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/partner/:partnerType/apply" element={<PartnerApplicationPage />} />
           <Route
             path="/app"
@@ -209,7 +217,9 @@ function AnimatedRoutes() {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </Suspense>
     </div>
   )
 }

@@ -1,0 +1,34 @@
+.partner-field input,
+.partner-field select {
+  border-color: #96a79d;
+}
+
+.partner-field small,
+.partner-location-action small {
+  color: #4f625c;
+}
+
+.partner-field input:focus-visible,
+.partner-field select:focus-visible,
+.partner-submit:focus-visible,
+.partner-location-action button:focus-visible,
+.partner-header a:focus-visible {
+  outline: 3px solid #5579bd;
+  outline-offset: 3px;
+}
+
+@media (max-width: 360px) {
+  .partner-intro,
+  .partner-form,
+  .partner-success {
+    width: min(100% - 24px, 940px);
+  }
+
+  .partner-header {
+    padding-inline: 12px;
+  }
+
+  .partner-form {
+    padding: 18px;
+  }
+}
