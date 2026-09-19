@@ -14,6 +14,7 @@ import {
 import { authenticate } from "../middleware/authenticate.js";
 import { authorizeRoles } from "../middleware/authorizeRoles.js";
 import { parsePrescriptionUpload } from "../middleware/prescriptionUpload.js";
+import { prescriptionUploadRateLimit } from "../middleware/rateLimit.js";
 import { validateRequest } from "../middleware/validateRequest.js";
 import {
   createOrderSchema,
@@ -47,6 +48,7 @@ orderRoutes.get(
 orderRoutes.post(
   "/:orderId/prescriptions",
   validateRequest({ params: prescriptionOrderParamsSchema }),
+  prescriptionUploadRateLimit,
   parsePrescriptionUpload,
   validateRequest(createPrescriptionSchema),
   createPrescription,

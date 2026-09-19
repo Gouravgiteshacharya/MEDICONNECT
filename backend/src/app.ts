@@ -78,7 +78,17 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   const app = express();
   const logisticsModel = mlConfig.enabled ? mlModel : null;
   app.disable("x-powered-by");
-  app.use(helmet());
+  app.set("trust proxy", 1);
+  app.use(helmet({
+    referrerPolicy: { policy: "no-referrer" },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: "same-site" },
+  }));
   app.use(cors(createCorsOptions()));
   app.use(express.json({ limit: "100kb" }));
    app.use("/api/v1/orders", createTrackingRouter(store as unknown as TrackingStore, authenticate, { freshnessThresholdMs: locationConfig.freshnessThresholdMs, now }));
