@@ -16,6 +16,8 @@ import AdminOrders from '../features/admin/AdminOrders'
 import AdminOverview from '../features/admin/AdminOverview'
 import AdminPharmacies from '../features/admin/AdminPharmacies'
 import AdminPharmacyDetail from '../features/admin/AdminPharmacyDetail'
+import AdminPartnerApplications from '../features/admin/AdminPartnerApplications'
+import AdminPartnerApplicationDetail from '../features/admin/AdminPartnerApplicationDetail'
 import AdminRiskDetail from '../features/admin/AdminRiskDetail'
 import AdminShell from '../features/admin/AdminShell'
 import AdminSupportDetail from '../features/admin/AdminSupportDetail'
@@ -44,6 +46,7 @@ import PharmacyProfile from '../features/pharmacy/PharmacyProfile'
 import PharmacyShell from '../features/pharmacy/PharmacyShell'
 import { AuthProvider, useAuth } from '../context/AuthContext'
 import RiderApp from '../features/rider/RiderApp'
+import PartnerApplicationPage from '../features/partners/PartnerApplicationPage'
 import {
   getRoleHome,
   isRoleAllowed,
@@ -100,6 +103,7 @@ function AnimatedRoutes() {
     <div className="route-transition-shell" key={location.pathname}>
       <Routes location={location}>
           <Route path="/" element={<LandingExperience />} />
+          <Route path="/partner/:partnerType/apply" element={<PartnerApplicationPage />} />
           <Route
             path="/app"
             element={
@@ -165,6 +169,11 @@ function AnimatedRoutes() {
             <Route index element={<AdminOverview />} />
             <Route path="pharmacies" element={<AdminPharmacies />} />
             <Route path="pharmacies/:pharmacyId" element={<AdminPharmacyDetail />} />
+            <Route path="applications" element={<Navigate to="/admin/applications/pharmacies" replace />} />
+            <Route path="applications/pharmacies" element={<AdminPartnerApplications type="pharmacies" />} />
+            <Route path="applications/pharmacies/:applicationId" element={<AdminPartnerApplicationDetail type="pharmacies" />} />
+            <Route path="applications/riders" element={<AdminPartnerApplications type="riders" />} />
+            <Route path="applications/riders/:applicationId" element={<AdminPartnerApplicationDetail type="riders" />} />
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="orders/:orderId" element={<AdminOrderDetail />} />

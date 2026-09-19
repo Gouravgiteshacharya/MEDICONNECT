@@ -139,6 +139,7 @@ function App() {
         openSearch={openSearch}
         openApp={() => transitionTo(getRoleHome(user?.role))}
         openLanding={() => navigate('/')}
+        openPartnerApplication={(type) => transitionTo(`/partner/${type}/apply`)}
         leaving={leaving}
       />
 

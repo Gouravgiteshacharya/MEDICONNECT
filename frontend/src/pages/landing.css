@@ -338,6 +338,28 @@
   color: #fff;
 }
 
+.mc-partner-entry {
+  max-width: 520px;
+  align-items: center;
+}
+
+.mc-partner-entry > strong {
+  width: 100%;
+  color: #fff;
+  font-size: 12px;
+}
+
+.mc-partner-entry > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.mc-partner-entry .mc-partner-login-secondary {
+  background: transparent;
+  border-color: rgba(255, 255, 255, .1);
+}
+
 .mc-staff-login {
   padding: 9px 11px;
 

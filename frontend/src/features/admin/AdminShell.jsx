@@ -6,6 +6,7 @@ import './AdminShell.css'
 const navItems = [
   { label: 'Overview', path: '/admin' },
   { label: 'Pharmacies', path: '/admin/pharmacies' },
+  { label: 'Applications', path: '/admin/applications' },
   { label: 'Inventory', path: '/admin/inventory' },
   { label: 'Orders', path: '/admin/orders' },
   { label: 'Deliveries', path: '/admin/deliveries' },

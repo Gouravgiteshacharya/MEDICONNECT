@@ -76,3 +76,34 @@ export async function optimizeDeliveryBatch(batchId) {
     body: {},
   })
 }
+
+export async function listPartnerApplications(type, params = {}) {
+  return apiRequest(withQuery(`/admin/applications/${type}`, params))
+}
+
+export async function getPartnerApplication(type, applicationId) {
+  return apiRequest(`/admin/applications/${type}/${applicationId}`)
+}
+
+export async function transitionPartnerApplication(type, applicationId, body) {
+  return apiRequest(`/admin/applications/${type}/${applicationId}/status`, {
+    method: 'PATCH', body,
+  })
+}
+
+export async function recordPartnerVerification(type, applicationId, body) {
+  const action = type === 'pharmacies' ? 'field-visit' : 'office-verification'
+  return apiRequest(`/admin/applications/${type}/${applicationId}/${action}`, {
+    method: 'PUT', body,
+  })
+}
+
+export async function approvePartnerApplication(type, applicationId) {
+  return apiRequest(`/admin/applications/${type}/${applicationId}/approve`, {
+    method: 'POST', body: {},
+  })
+}
+
+export async function getPharmacyApplicationPhotoAccess(applicationId) {
+  return apiRequest(`/admin/applications/pharmacies/${applicationId}/photo-access`)
+}

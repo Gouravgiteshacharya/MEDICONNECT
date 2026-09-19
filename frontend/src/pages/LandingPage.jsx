@@ -56,6 +56,7 @@ function LandingPage({
   openSearch,
   openApp,
   openLanding,
+  openPartnerApplication,
   leaving = false,
 }) {
   const [fulfilmentPreview, setFulfilmentPreview] = useState('delivery')
@@ -282,14 +283,6 @@ function LandingPage({
             </>
           ) : (
             <>
-              <button
-                className="mc-staff-login"
-                type="button"
-                onClick={() => openAuth('login', 'staff')}
-              >
-                Staff & Partner Login
-              </button>
-
               <button className="mc-login" type="button" onClick={() => openAuth('login')}>
                 Log in
               </button>
@@ -353,9 +346,19 @@ function LandingPage({
             </div>
 
             {!authenticated && (
-              <div className="mc-role-entry" aria-label="Workspace sign in">
-                <span>Work with MediConnect?</span>
+              <div className="mc-role-entry mc-partner-entry" aria-label="Partner applications and sign in">
+                <strong>Work with MediConnect?</strong>
+                <div>
+                  <button type="button" onClick={() => openPartnerApplication('pharmacy')}>
+                    Join as a Pharmacy
+                  </button>
+                  <button type="button" onClick={() => openPartnerApplication('rider')}>
+                    Become a Delivery Partner
+                  </button>
+                </div>
+                <span>Already a MediConnect partner?</span>
                 <button
+                  className="mc-partner-login-secondary"
                   type="button"
                   onClick={() => openAuth('login', 'staff')}
                 >
