@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import './admin.css'
 import RiskQueue from './risk/RiskQueue.jsx'
 
@@ -40,7 +40,6 @@ export default function AdminWorkspace({ session }) {
   const [view, setView] = useState('landing')
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
   const heading = useRef(null)
-  useEffect(() => { session.restore() }, [session])
   useEffect(() => { heading.current?.focus() }, [state.status])
   return <main className="operations" aria-labelledby="operations-heading">
     <h1 id="operations-heading" tabIndex={-1} ref={heading}>Operations</h1>

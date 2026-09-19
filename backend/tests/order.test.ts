@@ -34,6 +34,7 @@ vi.mock("../src/services/inventory.service.js", () => ({
 
 vi.mock("../src/services/medicine.service.js", () => ({
   getMedicineDetail: vi.fn(),
+  listMedicines: vi.fn(),
 }));
 
 const { prisma } = await import("../src/lib/prisma.js");

@@ -229,10 +229,36 @@ export interface SupportAdapter {
   ): Promise<ToolExecutionResult<unknown>>;
 }
 
-export interface AIProvider {
-  generateOperationalReply(
+/** Common response boundary for deterministic and presentation-enhanced assistants. */
+export interface AssistantResponder {
+  respond(
     request: AssistantRequest,
     context: TrustedAssistantContext,
+  ): Promise<AssistantResponse>;
+}
+/**
+ * Privacy-minimized presentation input for an optional AI provider.
+ * Never include identity, trusted context, original user text, raw tool data,
+ * support free text, prescription review notes, or exact addresses.
+ */
+export interface OperationalReplyInput {
+  readonly intent: "medicine_discovery";
+  readonly medicine: {
+    readonly name: string;
+    readonly reportingPharmacyCount: number;
+    readonly radiusKm: number;
+    readonly hasStaleAvailability: boolean;
+    readonly requiresPrescription: boolean;
+  };
+}
+
+/**
+ * Optional presentation-only enhancement boundary.
+ * Routing, safety, tool execution, and domain decisions remain deterministic.
+ */
+export interface AIProvider {
+  generateOperationalReply(
+    input: OperationalReplyInput,
   ): Promise<ToolExecutionResult<string>>;
 }
 

@@ -5,6 +5,7 @@ export * from "./adapters/order-context.adapter.js";
 export * from "./adapters/prescription-context.adapter.js";
 export * from "./composition.js";
 export * from "./contracts.js";
+export * from "./operational-reply-enhancer.js";
 export * from "./predictors.js";
 export * from "./routing.js";
 export * from "./safety-policy.js";

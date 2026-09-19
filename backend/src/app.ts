@@ -11,6 +11,7 @@ import { authenticate as platformAuthenticate } from "./middleware/authenticate.
 import { errorHandler } from "./middleware/errorHandler.js";
 import { notFound } from "./middleware/notFound.js";
 import { createApiRoutes } from "./routes/index.js";
+import type { AssistantResponder } from "./modules/intelligence-experience/contracts.js";
 import { createRiderRouter } from "./riders/rider.routes.js";
 import type { RiderStore } from "./riders/rider.service.js";
 import type { LocationStore } from "./location/location.service.js";
@@ -50,6 +51,7 @@ export interface AppDependencies
     RiskHookDependencies {
   store?: RiderStore;
   authenticate?: RequestHandler;
+  assistant?: AssistantResponder;
   locationConfig?: LocationConfig;
   deliveryQuoteConfig?: DeliveryQuoteConfig;
   distanceProvider?: DistanceProvider;
@@ -121,7 +123,15 @@ export function createApp(dependencies: AppDependencies = {}): Express {
     }),
   );
 
-  app.use("/api/v1", createApiRoutes({ etaRuntime, onEtaShadowResult }));
+  app.use(
+    "/api/v1",
+    createApiRoutes({
+      authenticate,
+      assistant: dependencies.assistant,
+      etaRuntime,
+      onEtaShadowResult,
+    }),
+  );
 
   app.use(
     "/api/v1/riders",

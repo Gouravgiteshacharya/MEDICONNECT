@@ -1,5 +1,7 @@
 import type { EtaShadowDependencies } from "../ml/eta-runtime.js";
-import { Router } from "express";
+import type { AssistantResponder } from "../modules/intelligence-experience/contracts.js";
+import { Router, type RequestHandler } from "express";
+import { createAssistantRoutes } from "./assistant.routes.js";
 
 import { authRoutes } from "./auth.routes.js";
 import { adminRoutes } from "./admin.routes.js";
@@ -10,10 +12,19 @@ import { createOrderRoutes } from "./order.routes.js";
 import { pharmacyRoutes } from "./pharmacy.routes.js";
 import { userRoutes } from "./user.routes.js";
 
-export function createApiRoutes(dependencies: EtaShadowDependencies = {}) {
+export interface ApiRouteDependencies extends EtaShadowDependencies {
+  readonly authenticate: RequestHandler;
+  readonly assistant?: AssistantResponder;
+}
+
+export function createApiRoutes(dependencies: ApiRouteDependencies) {
   const apiRoutes = Router();
 
   apiRoutes.use("/admin", adminRoutes);
+  apiRoutes.use(
+    "/assistant",
+    createAssistantRoutes(dependencies.authenticate, dependencies.assistant),
+  );
 
   apiRoutes.use("/auth", authRoutes);
   apiRoutes.use("/cart", cartRoutes);
@@ -25,5 +36,3 @@ export function createApiRoutes(dependencies: EtaShadowDependencies = {}) {
 
   return apiRoutes;
 }
-
-export const apiRoutes = createApiRoutes();

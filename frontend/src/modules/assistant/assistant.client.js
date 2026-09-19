@@ -6,6 +6,21 @@ export function buildAssistantRequest(message, correlationId) {
   return request
 }
 
+export function createAssistantClient(session) {
+  if (!session || typeof session.request !== 'function') {
+    throw new TypeError('An authenticated session request boundary is required.')
+  }
+
+  return {
+    respond(request) {
+      return session.request('/assistant/respond', {
+        method: 'POST',
+        body: request,
+      })
+    },
+  }
+}
+
 export class UnavailableAssistantClient {
   async respond() {
     return {
