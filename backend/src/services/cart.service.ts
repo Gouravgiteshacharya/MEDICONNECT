@@ -235,7 +235,7 @@ async function updateCartFulfillmentAttempt(
         deliveryAddressId = address.id;
       }
 
-      const [updatedCart] = await tx.cart.updateManyAndReturn({
+      const updateResult = await tx.cart.updateMany({
         where: {
           id: cart.id,
           customerId,
@@ -246,6 +246,16 @@ async function updateCartFulfillmentAttempt(
         data: {
           fulfillmentMethod: input.fulfillmentMethod,
           deliveryAddressId,
+        },
+      });
+
+      if (updateResult.count !== 1) throw cartStateConflictError();
+
+      const updatedCart = await tx.cart.findFirst({
+        where: {
+          id: cart.id,
+          customerId,
+          status: CartStatus.ACTIVE,
         },
         select: cartSelect,
       });

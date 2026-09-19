@@ -197,13 +197,12 @@ function mockFulfillmentSuccess(
   if (deliveryAddressId) {
     prismaMock.address.findFirst.mockResolvedValue({ id: deliveryAddressId });
   }
-  prismaMock.cart.updateManyAndReturn.mockResolvedValue([
-    {
-      ...activeCart,
-      fulfillmentMethod,
-      deliveryAddressId,
-    },
-  ]);
+  prismaMock.cart.updateMany.mockResolvedValue({ count: 1 });
+  prismaMock.cart.findFirst.mockResolvedValue({
+    ...activeCart,
+    fulfillmentMethod,
+    deliveryAddressId,
+  });
 }
 
 describe("customer cart API", () => {
@@ -305,7 +304,7 @@ describe("customer cart API", () => {
         .set("Authorization", authenticateAs())
         .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
       expectError(response, 404, "CART_NOT_FOUND");
-      expect(prismaMock.cart.updateManyAndReturn).not.toHaveBeenCalled();
+      expect(prismaMock.cart.updateMany).not.toHaveBeenCalled();
     });
 
     it("rejects multiple active carts", async () => {
@@ -330,7 +329,7 @@ describe("customer cart API", () => {
         .set("Authorization", authenticateAs())
         .send({ fulfillmentMethod: FulfillmentMethod.SELF_PICKUP });
       expectError(response, 409, "CART_STATE_CONFLICT");
-      expect(prismaMock.cart.updateManyAndReturn).not.toHaveBeenCalled();
+      expect(prismaMock.cart.updateMany).not.toHaveBeenCalled();
     });
 
     it("sets DELIVERY for an owned address and returns the existing cart shape", async () => {
@@ -355,7 +354,7 @@ describe("customer cart API", () => {
         where: { id: addressId, userId: customerId },
         select: { id: true },
       });
-      expect(prismaMock.cart.updateManyAndReturn).toHaveBeenCalledWith({
+      expect(prismaMock.cart.updateMany).toHaveBeenCalledWith({
         where: {
           id: cartId,
           customerId,
@@ -366,6 +365,13 @@ describe("customer cart API", () => {
         data: {
           fulfillmentMethod: FulfillmentMethod.DELIVERY,
           deliveryAddressId: addressId,
+        },
+      });
+      expect(prismaMock.cart.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: cartId,
+          customerId,
+          status: CartStatus.ACTIVE,
         },
         select: expect.any(Object),
       });
@@ -387,7 +393,7 @@ describe("customer cart API", () => {
             deliveryAddressId: addressId,
           });
         expectError(response, 404, "ADDRESS_NOT_FOUND");
-        expect(prismaMock.cart.updateManyAndReturn).not.toHaveBeenCalled();
+        expect(prismaMock.cart.updateMany).not.toHaveBeenCalled();
       },
     );
 
@@ -422,7 +428,7 @@ describe("customer cart API", () => {
         }),
       );
       expect(prismaMock.address.findFirst).not.toHaveBeenCalled();
-      expect(prismaMock.cart.updateManyAndReturn.mock.calls[0][0].data).toEqual(
+      expect(prismaMock.cart.updateMany.mock.calls[0][0].data).toEqual(
         {
           fulfillmentMethod: FulfillmentMethod.SELF_PICKUP,
           deliveryAddressId: null,
