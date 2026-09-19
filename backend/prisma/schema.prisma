@@ -18,18 +18,22 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  addresses                Address[]           @relation("UserAddresses")
-  pharmacyStaffMemberships PharmacyStaff[]     @relation("PharmacyStaffUser")
-  carts                    Cart[]              @relation("CustomerCarts")
-  orders                   Order[]             @relation("CustomerOrders")
-  deliveryPartnerProfile   DeliveryPartner?    @relation("DeliveryPartnerUser")
-  deliveryQuotes           DeliveryQuote[]     @relation("CustomerDeliveryQuotes")
-  inventoryUpdates         PharmacyInventory[] @relation("InventoryUpdatedByUser")
-  reportedSupportTickets   SupportTicket[]     @relation("SupportReporter")
-  assignedSupportTickets   SupportTicket[]     @relation("SupportAssignedAdmin")
-  supportMessages          SupportMessage[]    @relation("SupportMessageSender")
-  riskAssessments          RiskAssessment[]    @relation("RiskTargetUser")
-  reviewedRiskAssessments  RiskAssessment[]    @relation("RiskReviewedByAdmin")
+  addresses                    Address[]                        @relation("UserAddresses")
+  pharmacyStaffMemberships     PharmacyStaff[]                  @relation("PharmacyStaffUser")
+  carts                        Cart[]                           @relation("CustomerCarts")
+  orders                       Order[]                          @relation("CustomerOrders")
+  deliveryPartnerProfile       DeliveryPartner?                 @relation("DeliveryPartnerUser")
+  deliveryQuotes               DeliveryQuote[]                  @relation("CustomerDeliveryQuotes")
+  inventoryUpdates             PharmacyInventory[]              @relation("InventoryUpdatedByUser")
+  reportedSupportTickets       SupportTicket[]                  @relation("SupportReporter")
+  assignedSupportTickets       SupportTicket[]                  @relation("SupportAssignedAdmin")
+  supportMessages              SupportMessage[]                 @relation("SupportMessageSender")
+  riskAssessments              RiskAssessment[]                 @relation("RiskTargetUser")
+  reviewedRiskAssessments      RiskAssessment[]                 @relation("RiskReviewedByAdmin")
+  approvedPharmacyApplications PharmacyPartnerApplication[]     @relation("PharmacyApplicationApprovedUser")
+  verifiedPharmacyVisits       PharmacyFieldVisitVerification[] @relation("PharmacyVisitVerifier")
+  approvedRiderApplications    RiderPartnerApplication[]        @relation("RiderApplicationApprovedUser")
+  verifiedRiderOffices         RiderOfficeVerification[]        @relation("RiderOfficeVerifier")
 
   @@index([role])
   @@index([isActive])
@@ -81,11 +85,12 @@ model Pharmacy {
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 
-  staff          PharmacyStaff[]
-  inventory      PharmacyInventory[]
-  carts          Cart[]
-  orders         Order[]
-  deliveryQuotes DeliveryQuote[]
+  staff              PharmacyStaff[]
+  inventory          PharmacyInventory[]
+  carts              Cart[]
+  orders             Order[]
+  deliveryQuotes     DeliveryQuote[]
+  partnerApplication PharmacyPartnerApplication? @relation("ApprovedPharmacyApplication")
 
   @@index([city, state])
   @@index([isActive, isVerified])
@@ -108,6 +113,121 @@ model PharmacyStaff {
   @@unique([userId, pharmacyId])
   @@index([pharmacyId, role])
   @@index([isActive])
+}
+
+model PharmacyPartnerApplication {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  pharmacyName          String
+  contactName           String
+  contactEmail          String
+  phone                 String
+  addressLine1          String
+  addressLine2          String?
+  city                  String
+  state                 String
+  postalCode            String
+  latitude              Float
+  longitude             Float
+  locationCapturedAt    DateTime?
+  licenseNumber         String
+  gstNumber             String?
+  pharmacistDetails     String?
+  operatingInfo         String
+  pickupAvailable       Boolean
+  deliverySupportInfo   String?
+  photoStoragePath      String
+  photoOriginalFilename String
+  photoMimeType         String
+  photoUploadedAt       DateTime                  @default(now())
+  consentAcceptedAt     DateTime
+  status                PharmacyApplicationStatus @default(APPLICATION_SUBMITTED)
+  rejectionReason       String?
+  approvedUserId        String?                   @unique @db.Uuid
+  approvedPharmacyId    String?                   @unique @db.Uuid
+  submittedAt           DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  approvedUser     User?                           @relation("PharmacyApplicationApprovedUser", fields: [approvedUserId], references: [id], onDelete: SetNull)
+  approvedPharmacy Pharmacy?                       @relation("ApprovedPharmacyApplication", fields: [approvedPharmacyId], references: [id], onDelete: SetNull)
+  fieldVisit       PharmacyFieldVisitVerification?
+
+  @@index([status, submittedAt])
+  @@index([contactEmail])
+  @@index([phone])
+  @@index([licenseNumber])
+}
+
+model PharmacyFieldVisitVerification {
+  id              String                    @id @default(uuid()) @db.Uuid
+  applicationId   String                    @unique @db.Uuid
+  verifierAdminId String                    @db.Uuid
+  scheduledAt     DateTime?
+  visitedAt       DateTime?
+  latitude        Float?
+  longitude       Float?
+  notes           String?
+  checklist       Json
+  result          PartnerVerificationResult @default(PENDING)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  application   PharmacyPartnerApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  verifierAdmin User                       @relation("PharmacyVisitVerifier", fields: [verifierAdminId], references: [id], onDelete: Restrict)
+
+  @@index([verifierAdminId])
+  @@index([result])
+}
+
+model RiderPartnerApplication {
+  id                        String                 @id @default(uuid()) @db.Uuid
+  fullName                  String
+  email                     String
+  phone                     String
+  addressLine1              String
+  addressLine2              String?
+  city                      String
+  state                     String
+  postalCode                String
+  dateOfBirth               DateTime?
+  vehicleType               VehicleType
+  vehicleNumber             String?
+  drivingLicenseNumber      String?
+  identityDocumentReference String?
+  emergencyContact          String?
+  consentAcceptedAt         DateTime
+  status                    RiderApplicationStatus @default(APPLICATION_SUBMITTED)
+  rejectionReason           String?
+  approvedUserId            String?                @unique @db.Uuid
+  submittedAt               DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  approvedUser       User?                    @relation("RiderApplicationApprovedUser", fields: [approvedUserId], references: [id], onDelete: SetNull)
+  officeVerification RiderOfficeVerification?
+
+  @@index([status, submittedAt])
+  @@index([email])
+  @@index([phone])
+  @@index([drivingLicenseNumber])
+}
+
+model RiderOfficeVerification {
+  id              String                    @id @default(uuid()) @db.Uuid
+  applicationId   String                    @unique @db.Uuid
+  officeName      String?
+  verifierAdminId String                    @db.Uuid
+  scheduledAt     DateTime?
+  verifiedAt      DateTime?
+  notes           String?
+  checklist       Json
+  result          PartnerVerificationResult @default(PENDING)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  application   RiderPartnerApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  verifierAdmin User                    @relation("RiderOfficeVerifier", fields: [verifierAdminId], references: [id], onDelete: Restrict)
+
+  @@index([verifierAdminId])
+  @@index([result])
 }
 
 model Medicine {
@@ -596,6 +716,31 @@ enum PharmacyStaffRole {
   MANAGER
   PHARMACIST
   STAFF
+}
+
+enum PharmacyApplicationStatus {
+  APPLICATION_SUBMITTED
+  DOCUMENT_REVIEW
+  FIELD_VISIT_PENDING
+  FIELD_VISIT_COMPLETED
+  APPROVED
+  REJECTED
+}
+
+enum RiderApplicationStatus {
+  APPLICATION_SUBMITTED
+  DOCUMENT_REVIEW
+  OFFICE_VERIFICATION_PENDING
+  OFFICE_VERIFICATION_COMPLETED
+  APPROVED
+  REJECTED
+}
+
+enum PartnerVerificationResult {
+  PENDING
+  PASSED
+  FAILED
+  NEEDS_FOLLOW_UP
 }
 
 enum InventoryStatus {
