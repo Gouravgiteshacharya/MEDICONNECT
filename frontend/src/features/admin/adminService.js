@@ -107,3 +107,7 @@ export async function approvePartnerApplication(type, applicationId) {
 export async function getPharmacyApplicationPhotoAccess(applicationId) {
   return apiRequest(`/admin/applications/pharmacies/${applicationId}/photo-access`)
 }
+
+export async function getRiderApplicationIdentityAccess(applicationId) {
+  return apiRequest(`/admin/applications/riders/${applicationId}/identity-access`)
+}

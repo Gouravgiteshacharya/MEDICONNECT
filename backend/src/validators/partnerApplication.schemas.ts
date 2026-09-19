@@ -4,6 +4,7 @@ import {
   PartnerVerificationResult,
   PharmacyApplicationStatus,
   RiderApplicationStatus,
+  RiderIdentityDocumentType,
   VehicleType,
 } from "../../generated/prisma/client.js";
 import { emailSchema, trimmedText, uuidSchema } from "./common.schemas.js";
@@ -36,8 +37,9 @@ export const pharmacyApplicationSchema = z.object({
   postalCode: trimmedText(12),
   latitude: z.coerce.number().min(-90).max(90),
   longitude: z.coerce.number().min(-180).max(180),
-  locationCapturedAt: optionalDate,
+  locationCapturedAt: z.coerce.date(),
   licenseNumber: trimmedText(80),
+  gstRegistered: multipartBoolean,
   gstNumber: optionalText(30),
   pharmacistDetails: optionalText(500),
   operatingInfo: trimmedText(1000),
@@ -47,7 +49,15 @@ export const pharmacyApplicationSchema = z.object({
     (value) => value === true || value === "true",
     z.literal(true),
   ),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.gstRegistered && !value.gstNumber) {
+    context.addIssue({
+      code: "custom",
+      path: ["gstNumber"],
+      message: "GSTIN is required when the pharmacy is GST-registered.",
+    });
+  }
+});
 
 export const riderApplicationSchema = z.object({
   fullName: trimmedText(120),
@@ -62,9 +72,12 @@ export const riderApplicationSchema = z.object({
   vehicleType: z.enum(VehicleType),
   vehicleNumber: optionalText(40),
   drivingLicenseNumber: optionalText(80),
-  identityDocumentReference: optionalText(160),
+  identityDocumentType: z.enum(RiderIdentityDocumentType),
   emergencyContact: optionalText(120),
-  consentAccepted: z.literal(true),
+  consentAccepted: z.preprocess(
+    (value) => value === true || value === "true",
+    z.literal(true),
+  ),
 }).strict().superRefine((value, context) => {
   if (
     value.vehicleType !== VehicleType.BICYCLE &&

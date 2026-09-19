@@ -6,6 +6,7 @@ import {
   formatAdminDate,
   getPartnerApplication,
   getPharmacyApplicationPhotoAccess,
+  getRiderApplicationIdentityAccess,
   labelFromEnum,
   recordPartnerVerification,
   transitionPartnerApplication,
@@ -67,6 +68,13 @@ export default function AdminPartnerApplicationDetail({ type }) {
     } catch (requestError) { setError(requestError.message) }
   }
 
+  async function openRiderIdentity() {
+    try {
+      const response = await getRiderApplicationIdentityAccess(applicationId)
+      window.open(response.documentAccess.url, '_blank', 'noopener,noreferrer')
+    } catch (requestError) { setError(requestError.message) }
+  }
+
   if (!application) return <main className="admin-partner-page"><p>{error || 'Loading application…'}</p></main>
   const status = application.status
   const pendingVerification = pharmacy ? status === 'FIELD_VISIT_PENDING' : status === 'OFFICE_VERIFICATION_PENDING'
@@ -79,9 +87,10 @@ export default function AdminPartnerApplicationDetail({ type }) {
       {error && <p className="admin-partner-error">{error}</p>}
       <section className="admin-partner-details">
         <Detail label="Contact" value={pharmacy ? application.contactName : application.fullName} /><Detail label="Email" value={pharmacy ? application.contactEmail : application.email} /><Detail label="Phone" value={application.phone} /><Detail label="Location" value={`${application.city}, ${application.state} ${application.postalCode}`} />
-        {pharmacy ? <><Detail label="Licence" value={application.licenseNumber} /><Detail label="Submitted coordinates" value={`${application.latitude}, ${application.longitude}`} /><Detail label="Browser location captured" value={formatAdminDate(application.locationCapturedAt)} /><Detail label="Photo uploaded" value={formatAdminDate(application.photoUploadedAt)} /><Detail label="Operating information" value={application.operatingInfo} /><Detail label="Pickup available" value={application.pickupAvailable ? 'Yes' : 'No'} /></> : <><Detail label="Vehicle" value={`${labelFromEnum(application.vehicleType)} ${application.vehicleNumber || ''}`} /><Detail label="Driving licence" value={application.drivingLicenseNumber} /><Detail label="Identity reference" value={application.identityDocumentReference} /><Detail label="Emergency contact" value={application.emergencyContact} /></>}
+        {pharmacy ? <><Detail label="Licence" value={application.licenseNumber} /><Detail label="GST status" value={application.gstRegistered ? `Registered${application.gstNumber ? ` — ${application.gstNumber}` : ''}` : 'Not registered'} /><Detail label="Submitted coordinates" value={`${application.latitude}, ${application.longitude}`} /><Detail label="Browser location captured" value={formatAdminDate(application.locationCapturedAt)} /><Detail label="Photo uploaded" value={formatAdminDate(application.photoUploadedAt)} /><Detail label="Operating information" value={application.operatingInfo} /><Detail label="Pickup available" value={application.pickupAvailable ? 'Yes' : 'No'} /></> : <><Detail label="Vehicle" value={`${labelFromEnum(application.vehicleType)} ${application.vehicleNumber || ''}`} /><Detail label="Driving licence" value={application.drivingLicenseNumber} /><Detail label="Identity proof type" value={labelFromEnum(application.identityDocumentType)} /><Detail label="Identity file" value={application.identityDocumentOriginalFilename} /><Detail label="Identity uploaded" value={formatAdminDate(application.identityDocumentUploadedAt)} /><Detail label="Emergency contact" value={application.emergencyContact} /></>}
       </section>
       {pharmacy && <button className="admin-partner-action secondary" onClick={openPhoto}>Open private pharmacy photo</button>}
+      {!pharmacy && application.identityDocumentOriginalFilename && <button className="admin-partner-action secondary" onClick={openRiderIdentity}>Open private rider identity proof</button>}
       <section className="admin-partner-workflow"><h2>Verification workflow</h2><div className="admin-partner-actions">
         {status === 'APPLICATION_SUBMITTED' && <button onClick={() => transition('DOCUMENT_REVIEW')}>Start document review</button>}
         {status === 'DOCUMENT_REVIEW' && <button onClick={() => transition(pharmacy ? 'FIELD_VISIT_PENDING' : 'OFFICE_VERIFICATION_PENDING')}>{pharmacy ? 'Mark field visit pending' : 'Mark office verification pending'}</button>}

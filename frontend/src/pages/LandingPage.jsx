@@ -350,7 +350,7 @@ function LandingPage({
 
             {!authenticated && (
               <div className="mc-role-entry mc-partner-entry" aria-label="Partner applications and sign in">
-                <strong>Work with MediConnect?</strong>
+                <strong>Partner with MediConnect</strong>
                 <div>
                   <button type="button" onClick={() => openPartnerApplication('pharmacy')}>
                     Join as a Pharmacy
@@ -359,14 +359,16 @@ function LandingPage({
                     Become a Delivery Partner
                   </button>
                 </div>
-                <span>Already a MediConnect partner?</span>
-                <button
-                  className="mc-partner-login-secondary"
-                  type="button"
-                  onClick={() => openAuth('login', 'staff')}
-                >
-                  Staff & Partner Login
-                </button>
+                <div className="mc-partner-login-row">
+                  <span>Already a MediConnect partner?</span>
+                  <button
+                    className="mc-partner-login-secondary"
+                    type="button"
+                    onClick={() => openAuth('login', 'staff')}
+                  >
+                    Staff & Partner Login
+                  </button>
+                </div>
               </div>
             )}
           </div>

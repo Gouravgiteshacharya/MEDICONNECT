@@ -112,14 +112,7 @@ function AnimatedRoutes() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/partner/:partnerType/apply" element={<PartnerApplicationPage />} />
-          <Route
-            path="/app"
-            element={
-              <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
-                <CustomerShell />
-              </ProtectedRoute>
-            }
-          >
+          <Route path="/app" element={<CustomerShell />}>
             <Route index element={<CustomerApp />} />
             <Route path="search" element={<CustomerSearch />} />
             <Route path="results" element={<CustomerPharmacyResults />} />
@@ -127,24 +120,78 @@ function AnimatedRoutes() {
               path="pharmacy/:pharmacyId"
               element={<CustomerPharmacyDetail />}
             />
-            <Route path="cart" element={<CustomerCart />} />
+            <Route
+              path="cart"
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerCart />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="delivery-address"
-              element={<CustomerDeliveryAddress />}
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerDeliveryAddress />
+                </ProtectedRoute>
+              }
             />
-            <Route path="checkout" element={<CustomerCheckout />} />
-            <Route path="orders" element={<CustomerOrders />} />
-            <Route path="orders/:orderId" element={<CustomerOrderDetail />} />
-            <Route path="prescriptions" element={<CustomerPrescriptions />} />
+            <Route
+              path="checkout"
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerCheckout />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="orders"
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerOrders />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="orders/:orderId"
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerOrderDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="prescriptions"
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerPrescriptions />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="prescriptions/:prescriptionId"
-              element={<CustomerPrescriptionDetail />}
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerPrescriptionDetail />
+                </ProtectedRoute>
+              }
             />
             <Route
               path="orders/:orderId/prescription"
-              element={<CustomerPrescriptionUpload />}
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerPrescriptionUpload />
+                </ProtectedRoute>
+              }
             />
-            <Route path="profile" element={<CustomerProfile />} />
+            <Route
+              path="profile"
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+                  <CustomerProfile />
+                </ProtectedRoute>
+              }
+            />
           </Route>
           <Route
             path="/pharmacy"

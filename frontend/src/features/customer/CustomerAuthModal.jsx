@@ -167,8 +167,8 @@ export default function CustomerAuthModal({
           {audience === 'staff'
             ? 'For pharmacy staff, delivery partners, and MediConnect operations. Your account role opens the correct workspace.'
             : mode === 'login'
-            ? 'Sign in to search, order, and manage your medicines.'
-            : 'Create an account to order from nearby pharmacies.'}
+            ? 'Sign in when you are ready to order, save addresses, or manage your medicines.'
+            : 'Create an account when you are ready to order from a nearby pharmacy.'}
         </p>
 
         <form onSubmit={handleSubmit}>

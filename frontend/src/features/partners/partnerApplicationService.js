@@ -8,10 +8,10 @@ export function submitPharmacyApplication(form) {
   })
 }
 
-export function submitRiderApplication(body) {
+export function submitRiderApplication(form) {
   return apiRequest('/partner/rider/apply', {
     auth: false,
     method: 'POST',
-    body,
+    body: form,
   })
 }

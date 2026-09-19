@@ -53,16 +53,27 @@ export async function apiRequest(path, options = {}) {
     requestHeaders['Content-Type'] ??= 'application/json'
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...requestOptions,
-    headers: requestHeaders,
-    body:
-      body !== undefined &&
-      !(body instanceof FormData) &&
-      typeof body !== 'string'
-        ? JSON.stringify(body)
-        : body,
-  })
+  let response
+
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...requestOptions,
+      headers: requestHeaders,
+      body:
+        body !== undefined &&
+        !(body instanceof FormData) &&
+        typeof body !== 'string'
+          ? JSON.stringify(body)
+          : body,
+    })
+  } catch (cause) {
+    const error = new Error(
+      'Unable to reach MediConnect right now. Please check your connection and try again.',
+    )
+    error.code = 'NETWORK_UNAVAILABLE'
+    error.cause = cause
+    throw error
+  }
 
   const payload = await response.json().catch(() => null)
 

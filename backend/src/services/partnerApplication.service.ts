@@ -47,6 +47,7 @@ const pharmacyDetailSelect = {
   latitude: true,
   longitude: true,
   locationCapturedAt: true,
+  gstRegistered: true,
   gstNumber: true,
   pharmacistDetails: true,
   operatingInfo: true,
@@ -84,6 +85,10 @@ const riderDetailSelect = {
   vehicleNumber: true,
   drivingLicenseNumber: true,
   identityDocumentReference: true,
+  identityDocumentType: true,
+  identityDocumentOriginalFilename: true,
+  identityDocumentMimeType: true,
+  identityDocumentUploadedAt: true,
   emergencyContact: true,
   consentAcceptedAt: true,
   rejectionReason: true,
@@ -117,11 +122,42 @@ function validatePhoto(file: Express.Multer.File | undefined) {
   return file;
 }
 
-function safeFilename(value: string) {
-  return (value.split(/[\\/]/).pop() ?? "pharmacy-photo")
+function safeFilename(value: string, fallback = "upload") {
+  return (value.split(/[\\/]/).pop() ?? fallback)
     .normalize("NFKC")
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .slice(0, 180) || "pharmacy-photo";
+    .slice(0, 180) || fallback;
+}
+
+function validateIdentityDocument(file: Express.Multer.File | undefined) {
+  if (!file) {
+    throw new ApiError(400, "An identity proof document is required.", "RIDER_IDENTITY_DOCUMENT_REQUIRED");
+  }
+
+  const jpeg =
+    file.mimetype === "image/jpeg" &&
+    file.buffer.length >= 3 &&
+    file.buffer[0] === 0xff &&
+    file.buffer[1] === 0xd8 &&
+    file.buffer[2] === 0xff;
+  const png =
+    file.mimetype === "image/png" &&
+    file.buffer.subarray(0, 8).equals(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+  const pdf =
+    file.mimetype === "application/pdf" &&
+    file.buffer.subarray(0, 5).toString("ascii") === "%PDF-";
+
+  if (!jpeg && !png && !pdf) {
+    throw new ApiError(
+      415,
+      "Identity proof must be a valid PDF, JPEG, or PNG.",
+      "RIDER_IDENTITY_DOCUMENT_TYPE_UNSUPPORTED",
+    );
+  }
+
+  return file;
 }
 
 export async function submitPharmacyApplication(input: PharmacyApplicationInput, uploadedFile: Express.Multer.File | undefined) {
@@ -140,7 +176,7 @@ export async function submitPharmacyApplication(input: PharmacyApplicationInput,
   if (duplicate) throw conflict("An active pharmacy application already uses this email, phone, or licence number.", "PHARMACY_APPLICATION_DUPLICATE");
 
   const applicationId = randomUUID();
-  const filename = safeFilename(file.originalname);
+  const filename = safeFilename(file.originalname, "pharmacy-photo");
   const storagePath = `partner-applications/pharmacies/${applicationId}/${randomUUID()}-${filename}`;
   await prescriptionStorage.upload({ key: storagePath, content: file.buffer, contentType: file.mimetype });
   try {
@@ -160,7 +196,8 @@ export async function submitPharmacyApplication(input: PharmacyApplicationInput,
         longitude: input.longitude,
         locationCapturedAt: input.locationCapturedAt,
         licenseNumber: input.licenseNumber,
-        gstNumber: input.gstNumber,
+        gstRegistered: input.gstRegistered,
+        gstNumber: input.gstRegistered ? input.gstNumber : null,
         pharmacistDetails: input.pharmacistDetails,
         operatingInfo: input.operatingInfo,
         pickupAvailable: input.pickupAvailable,
@@ -182,43 +219,76 @@ export async function submitPharmacyApplication(input: PharmacyApplicationInput,
   }
 }
 
-export async function submitRiderApplication(input: RiderApplicationInput) {
+export async function submitRiderApplication(
+  input: RiderApplicationInput,
+  uploadedFile: Express.Multer.File | undefined,
+) {
+  const file = validateIdentityDocument(uploadedFile);
   const duplicate = await prisma.riderPartnerApplication.findFirst({
     where: {
       status: { not: RiderApplicationStatus.REJECTED },
       OR: [
         { email: { equals: input.email, mode: "insensitive" } },
         { phone: input.phone },
-        ...(input.drivingLicenseNumber ? [{ drivingLicenseNumber: { equals: input.drivingLicenseNumber, mode: "insensitive" as const } }] : []),
+        ...(input.drivingLicenseNumber
+          ? [{ drivingLicenseNumber: { equals: input.drivingLicenseNumber, mode: "insensitive" as const } }]
+          : []),
       ],
     },
     select: { id: true },
   });
-  if (duplicate) throw conflict("An active rider application already uses this email, phone, or driving licence.", "RIDER_APPLICATION_DUPLICATE");
+
+  if (duplicate) {
+    throw conflict(
+      "An active rider application already uses this email, phone, or driving licence.",
+      "RIDER_APPLICATION_DUPLICATE",
+    );
+  }
+
+  const applicationId = randomUUID();
+  const filename = safeFilename(file.originalname, "identity-proof");
+  const storagePath =
+    `partner-applications/riders/${applicationId}/${randomUUID()}-${filename}`;
+
+  await prescriptionStorage.upload({
+    key: storagePath,
+    content: file.buffer,
+    contentType: file.mimetype,
+  });
+
   try {
     return await prisma.riderPartnerApplication.create({
       data: {
-      fullName: input.fullName,
-      email: input.email,
-      phone: input.phone,
-      addressLine1: input.addressLine1,
-      addressLine2: input.addressLine2,
-      city: input.city,
-      state: input.state,
-      postalCode: input.postalCode,
-      dateOfBirth: input.dateOfBirth,
-      vehicleType: input.vehicleType,
-      vehicleNumber: input.vehicleNumber,
-      drivingLicenseNumber: input.drivingLicenseNumber,
-      identityDocumentReference: input.identityDocumentReference,
-      emergencyContact: input.emergencyContact,
-      consentAcceptedAt: new Date(),
+        id: applicationId,
+        fullName: input.fullName,
+        email: input.email,
+        phone: input.phone,
+        addressLine1: input.addressLine1,
+        addressLine2: input.addressLine2,
+        city: input.city,
+        state: input.state,
+        postalCode: input.postalCode,
+        dateOfBirth: input.dateOfBirth,
+        vehicleType: input.vehicleType,
+        vehicleNumber: input.vehicleNumber,
+        drivingLicenseNumber: input.drivingLicenseNumber,
+        identityDocumentType: input.identityDocumentType,
+        identityDocumentStoragePath: storagePath,
+        identityDocumentOriginalFilename: filename,
+        identityDocumentMimeType: file.mimetype,
+        identityDocumentUploadedAt: new Date(),
+        emergencyContact: input.emergencyContact,
+        consentAcceptedAt: new Date(),
       },
       select: riderSummarySelect,
     });
   } catch (error) {
+    await prescriptionStorage.delete(storagePath);
     if (isUniqueConflict(error)) {
-      throw conflict("An active rider application already uses this email, phone, or driving licence.", "RIDER_APPLICATION_DUPLICATE");
+      throw conflict(
+        "An active rider application already uses this email, phone, or driving licence.",
+        "RIDER_APPLICATION_DUPLICATE",
+      );
     }
     throw error;
   }
@@ -270,6 +340,24 @@ export async function createPharmacyPhotoAccess(applicationId: string) {
   const application = await prisma.pharmacyPartnerApplication.findUnique({ where: { id: applicationId }, select: { photoStoragePath: true } });
   if (!application) throw notFound("pharmacy");
   return prescriptionStorage.createSignedUrl(application.photoStoragePath, 300);
+}
+
+export async function createRiderIdentityDocumentAccess(applicationId: string) {
+  const application = await prisma.riderPartnerApplication.findUnique({
+    where: { id: applicationId },
+    select: { identityDocumentStoragePath: true },
+  });
+
+  if (!application) throw notFound("rider");
+  if (!application.identityDocumentStoragePath) {
+    throw new ApiError(
+      404,
+      "Identity document is not available for this application.",
+      "RIDER_IDENTITY_DOCUMENT_NOT_FOUND",
+    );
+  }
+
+  return prescriptionStorage.createSignedUrl(application.identityDocumentStoragePath, 300);
 }
 
 const pharmacyTransitions: Record<PharmacyApplicationStatus, PharmacyApplicationStatus[]> = {

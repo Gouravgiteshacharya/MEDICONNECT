@@ -130,6 +130,7 @@ model PharmacyPartnerApplication {
   longitude             Float
   locationCapturedAt    DateTime?
   licenseNumber         String
+  gstRegistered         Boolean                   @default(false)
   gstNumber             String?
   pharmacistDetails     String?
   operatingInfo         String
@@ -193,6 +194,11 @@ model RiderPartnerApplication {
   vehicleNumber             String?
   drivingLicenseNumber      String?
   identityDocumentReference String?
+  identityDocumentType      RiderIdentityDocumentType?
+  identityDocumentStoragePath String?
+  identityDocumentOriginalFilename String?
+  identityDocumentMimeType  String?
+  identityDocumentUploadedAt DateTime?
   emergencyContact          String?
   consentAcceptedAt         DateTime
   status                    RiderApplicationStatus @default(APPLICATION_SUBMITTED)
@@ -734,6 +740,14 @@ enum RiderApplicationStatus {
   OFFICE_VERIFICATION_COMPLETED
   APPROVED
   REJECTED
+}
+
+enum RiderIdentityDocumentType {
+  AADHAAR
+  VOTER_ID
+  DRIVING_LICENCE
+  PASSPORT
+  OTHER_GOVERNMENT_ID
 }
 
 enum PartnerVerificationResult {

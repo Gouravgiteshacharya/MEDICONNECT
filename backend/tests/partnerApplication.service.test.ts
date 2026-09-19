@@ -61,9 +61,10 @@ describe("partner application service", () => {
     const pharmacyInput = { pharmacyName: "Local Care", contactName: "Owner", contactEmail: "owner@example.com", phone: "9999999999", addressLine1: "Road", city: "Keonjhar", state: "Odisha", postalCode: "758001", latitude: 21.63, longitude: 85.58, licenseNumber: "LIC-1", operatingInfo: "Open daily", pickupAvailable: true, consentAccepted: true } as never;
     await expect(submitPharmacyApplication(pharmacyInput, photo)).rejects.toMatchObject({ code: "PHARMACY_APPLICATION_DUPLICATE" });
     expect(storage.upload).not.toHaveBeenCalled();
-    const riderInput = { fullName: "Rider", email: "rider@example.com", phone: "8888888888", addressLine1: "Road", city: "Keonjhar", state: "Odisha", postalCode: "758001", vehicleType: "BIKE", drivingLicenseNumber: "DL-1", consentAccepted: true } as never;
+    const riderInput = { fullName: "Rider", email: "rider@example.com", phone: "8888888888", addressLine1: "Road", city: "Keonjhar", state: "Odisha", postalCode: "758001", vehicleType: "BIKE", drivingLicenseNumber: "DL-1", identityDocumentType: "DRIVING_LICENCE", consentAccepted: true } as never;
+    const identityDocument = { originalname: "identity.pdf", mimetype: "application/pdf", buffer: Buffer.from("%PDF-1.4\n") } as Express.Multer.File;
     prisma.riderPartnerApplication.findFirst.mockResolvedValue({ id: applicationId });
-    await expect(submitRiderApplication(riderInput)).rejects.toMatchObject({ code: "RIDER_APPLICATION_DUPLICATE" });
+    await expect(submitRiderApplication(riderInput, identityDocument)).rejects.toMatchObject({ code: "RIDER_APPLICATION_DUPLICATE" });
   });
 
   it("prevents pharmacy and rider activation before required verification", async () => {

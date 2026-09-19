@@ -4,6 +4,7 @@ import {
   approvePharmacyApplication,
   approveRiderApplication,
   createPharmacyPhotoAccess,
+  createRiderIdentityDocumentAccess,
   getPharmacyApplication,
   getRiderApplication,
   listPharmacyApplications,
@@ -34,7 +35,7 @@ export async function createPharmacyApplication(req: Request, res: Response) {
 }
 
 export async function createRiderApplication(req: Request, res: Response) {
-  const application = await submitRiderApplication(req.body as RiderApplicationInput);
+  const application = await submitRiderApplication(req.body as RiderApplicationInput, req.file);
   res.status(201).json({ application, message: "Your application has been received. Before activation, you must complete an in-person verification at a MediConnect verification office. MediConnect will contact you with the nearest verification centre and appointment details." });
 }
 
@@ -80,5 +81,10 @@ export async function adminApproveRiderApplication(req: Request, res: Response) 
 
 export async function adminGetPharmacyPhotoAccess(req: Request, res: Response) {
   const url = await createPharmacyPhotoAccess(applicationId(req));
+  res.json({ documentAccess: { url, expiresAt: new Date(Date.now() + 300_000) } });
+}
+
+export async function adminGetRiderIdentityDocumentAccess(req: Request, res: Response) {
+  const url = await createRiderIdentityDocumentAccess(applicationId(req));
   res.json({ documentAccess: { url, expiresAt: new Date(Date.now() + 300_000) } });
 }

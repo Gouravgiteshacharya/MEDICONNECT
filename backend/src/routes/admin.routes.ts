@@ -16,6 +16,7 @@ import {
   adminGetPharmacyApplication,
   adminGetPharmacyPhotoAccess,
   adminGetRiderApplication,
+  adminGetRiderIdentityDocumentAccess,
   adminListPharmacyApplications,
   adminListRiderApplications,
   adminRecordFieldVisit,
@@ -49,6 +50,7 @@ adminRoutes.put("/applications/pharmacies/:applicationId/field-visit", validateR
 adminRoutes.post("/applications/pharmacies/:applicationId/approve", validateRequest({ params: applicationParamsSchema }), adminApprovePharmacyApplication);
 adminRoutes.get("/applications/riders", validateRequest({ query: riderApplicationListSchema }), adminListRiderApplications);
 adminRoutes.get("/applications/riders/:applicationId", validateRequest({ params: applicationParamsSchema }), adminGetRiderApplication);
+adminRoutes.get("/applications/riders/:applicationId/identity-access", validateRequest({ params: applicationParamsSchema }), adminGetRiderIdentityDocumentAccess);
 adminRoutes.patch("/applications/riders/:applicationId/status", validateRequest({ params: applicationParamsSchema, body: riderTransitionSchema }), adminTransitionRiderApplication);
 adminRoutes.put("/applications/riders/:applicationId/office-verification", validateRequest({ params: applicationParamsSchema, body: officeVerificationSchema }), adminRecordOfficeVerification);
 adminRoutes.post("/applications/riders/:applicationId/approve", validateRequest({ params: applicationParamsSchema }), adminApproveRiderApplication);
