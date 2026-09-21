@@ -19,6 +19,7 @@ import {
   type PharmacyMembershipContext,
   type PharmacyMembershipDataSource,
 } from "./pharmacyMembership.service.js";
+import { restoreInventory } from "./inventoryCommitment.service.js";
 
 export const MAX_PHARMACY_WORKFLOW_ATTEMPTS = 3;
 
@@ -32,12 +33,12 @@ type WorkflowClock = () => Date;
 
 type WorkflowTransactionClient = Pick<
   Prisma.TransactionClient,
-  "order" | "pharmacyStaff" | "prescription"
+  "order" | "pharmacyStaff" | "prescription" | "pharmacyInventory"
 >;
 
 export type PharmacyWorkflowDataSource = Pick<
   PrismaClient,
-  "order" | "prescription"
+  "order" | "prescription" | "pharmacyInventory"
 > & {
   $transaction<T>(
     callback: (tx: WorkflowTransactionClient) => Promise<T>,
@@ -301,7 +302,15 @@ async function reviewPrescriptionAttempt(
           },
           order: {
             select: {
+              id: true,
               status: true,
+              pharmacyId: true,
+              inventoryCommittedAt: true,
+              inventoryRestoredAt: true,
+              items: {
+                select: { medicineId: true, quantity: true },
+                orderBy: { medicineId: "asc" },
+              },
             },
           },
         },
@@ -383,14 +392,44 @@ async function reviewPrescriptionAttempt(
         ),
       );
 
+      const committed = current!.order.inventoryCommittedAt !== null;
+      const rejecting = orderStatus === OrderStatus.PRESCRIPTION_REJECTED;
+      if (
+        rejecting &&
+        committed &&
+        current!.order.inventoryRestoredAt !== null
+      ) {
+        throw prescriptionReviewNotAllowedError();
+      }
+
+      if (rejecting && committed) {
+        await restoreInventory(
+          tx,
+          current!.order.pharmacyId,
+          current!.order.items,
+          now,
+        );
+      }
+
       const orderUpdated = await tx.order.updateMany({
         where: {
           id: current!.orderId,
           pharmacyId,
           status: OrderStatus.PRESCRIPTION_PENDING,
+          ...(rejecting && committed
+            ? {
+                inventoryCommittedAt: { not: null },
+                inventoryRestoredAt: null,
+              }
+            : rejecting
+              ? { inventoryCommittedAt: null }
+              : {}),
         },
         data: {
           status: orderStatus,
+          ...(rejecting && committed
+            ? { inventoryRestoredAt: now }
+            : {}),
         },
       });
 
@@ -461,7 +500,14 @@ export async function reviewPharmacyPrescription(
 type DecisionOrder = {
   id: string;
   status: OrderStatus;
-  items: { id: string }[];
+  pharmacyId: string;
+  inventoryCommittedAt: Date | null;
+  inventoryRestoredAt: Date | null;
+  items: {
+    medicineId: string | null;
+    quantity: number;
+    requiresPrescription: boolean;
+  }[];
 };
 
 function nextOrderStatus(
@@ -479,8 +525,9 @@ function nextOrderStatus(
     throw orderDecisionNotAllowedError();
   }
 
-  const requiresPrescription =
-    order.items.length > 0;
+  const requiresPrescription = order.items.some(
+    (item) => item.requiresPrescription,
+  );
 
   if (
     (order.status === OrderStatus.CREATED &&
@@ -522,14 +569,16 @@ async function decideOrderAttempt(
         select: {
           id: true,
           status: true,
+          pharmacyId: true,
+          inventoryCommittedAt: true,
+          inventoryRestoredAt: true,
           items: {
-            where: {
+            select: {
+              medicineId: true,
+              quantity: true,
               requiresPrescription: true,
             },
-            select: {
-              id: true,
-            },
-            take: 1,
+            orderBy: { medicineId: "asc" },
           },
         },
       });
@@ -543,14 +592,35 @@ async function decideOrderAttempt(
         input,
       );
 
+      const rejecting = status === OrderStatus.REJECTED_BY_PHARMACY;
+      const committed = order.inventoryCommittedAt !== null;
+      if (rejecting && committed && order.inventoryRestoredAt !== null) {
+        throw orderDecisionNotAllowedError();
+      }
+
+      if (rejecting && committed) {
+        await restoreInventory(tx, order.pharmacyId, order.items, now);
+      }
+
       const updated = await tx.order.updateMany({
         where: {
           id: order.id,
           pharmacyId,
           status: order.status,
+          ...(rejecting && committed
+            ? {
+                inventoryCommittedAt: { not: null },
+                inventoryRestoredAt: null,
+              }
+            : rejecting
+              ? { inventoryCommittedAt: null }
+              : {}),
         },
         data: {
           status,
+          ...(rejecting && committed
+            ? { inventoryRestoredAt: now }
+            : {}),
           ...(status === OrderStatus.CONFIRMED
             ? { confirmedAt: now }
             : {}),

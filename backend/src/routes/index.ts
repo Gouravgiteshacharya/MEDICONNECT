@@ -10,6 +10,7 @@ import { healthRoutes } from "./health.routes.js";
 import { medicineRoutes } from "./medicine.routes.js";
 import { createOrderRoutes } from "./order.routes.js";
 import { pharmacyRoutes } from "./pharmacy.routes.js";
+import { prescriptionRoutes } from "./prescription.routes.js";
 import { userRoutes } from "./user.routes.js";
 
 export interface ApiRouteDependencies extends EtaShadowDependencies {
@@ -32,6 +33,7 @@ export function createApiRoutes(dependencies: ApiRouteDependencies) {
   apiRoutes.use("/medicines", medicineRoutes);
   apiRoutes.use("/orders", createOrderRoutes(dependencies));
   apiRoutes.use("/pharmacies", pharmacyRoutes);
+  apiRoutes.use("/prescriptions", prescriptionRoutes);
   apiRoutes.use("/users", userRoutes);
 
   return apiRoutes;

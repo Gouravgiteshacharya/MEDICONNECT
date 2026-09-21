@@ -237,6 +237,16 @@ describe("OperationalReplyEnhancer", () => {
     });
   }
 
+  it("falls back exactly when the provider times out", async () => {
+    const response = structuredClone(medicineResponse);
+    const ai = provider(() => new Promise(() => {}));
+    const assistant = new OperationalReplyEnhancer(responder(response), ai, 10);
+
+    const result = await assistant.respond(request, context);
+
+    expect(result).toBe(response);
+    expect(ai.generateOperationalReply).toHaveBeenCalledOnce();
+  });
   it("falls back exactly when the provider throws", async () => {
     const response = structuredClone(medicineResponse);
     const ai = provider(() => Promise.reject(new Error("private provider error")));

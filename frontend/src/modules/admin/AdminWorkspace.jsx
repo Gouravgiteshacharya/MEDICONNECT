@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import './admin.css'
 import RiskQueue from './risk/RiskQueue.jsx'
 

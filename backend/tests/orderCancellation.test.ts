@@ -21,6 +21,7 @@ vi.mock("../src/lib/prisma.js", () => ({
       findFirst: vi.fn(),
       updateMany: vi.fn(),
     },
+    pharmacyInventory: { updateMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -33,6 +34,7 @@ const prismaMock = prisma as unknown as {
     findFirst: Mock;
     updateMany: Mock;
   };
+  pharmacyInventory: { updateMany: Mock };
   $transaction: Mock;
 };
 
@@ -52,10 +54,18 @@ function authHeader(role: UserRole = UserRole.CUSTOMER) {
   return `Bearer ${signAuthToken({ userId: customerId, role })}`;
 }
 
-function currentOrder(status: OrderStatus) {
+function currentOrder(
+  status: OrderStatus,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     id: orderId,
     status,
+    pharmacyId,
+    inventoryCommittedAt: null,
+    inventoryRestoredAt: null,
+    items: [],
+    ...overrides,
   };
 }
 
@@ -164,6 +174,13 @@ describe("customer order cancellation API", () => {
       select: {
         id: true,
         status: true,
+        pharmacyId: true,
+        inventoryCommittedAt: true,
+        inventoryRestoredAt: true,
+        items: {
+          select: { medicineId: true, quantity: true },
+          orderBy: { medicineId: "asc" },
+        },
       },
     });
   });
@@ -173,7 +190,6 @@ describe("customer order cancellation API", () => {
     OrderStatus.PRESCRIPTION_PENDING,
     OrderStatus.PRESCRIPTION_APPROVED,
     OrderStatus.CONFIRMED,
-    OrderStatus.PREPARING,
   ])("cancels from %s", async (status) => {
     prismaMock.order.findFirst
       .mockResolvedValueOnce(currentOrder(status))
@@ -198,6 +214,7 @@ describe("customer order cancellation API", () => {
         id: orderId,
         customerId,
         status,
+        inventoryCommittedAt: null,
       },
       data: {
         status: OrderStatus.CANCELLED,
@@ -208,6 +225,7 @@ describe("customer order cancellation API", () => {
 
   it.each([
     OrderStatus.PRESCRIPTION_REJECTED,
+    OrderStatus.PREPARING,
     OrderStatus.READY_FOR_PICKUP,
     OrderStatus.RIDER_ASSIGNED,
     OrderStatus.PICKED_UP,
@@ -274,6 +292,53 @@ describe("customer order cancellation API", () => {
     expect(prismaMock.$transaction.mock.calls[0][1]).toEqual({
       isolationLevel: "Serializable",
     });
+  });
+
+  it("restores committed inventory and records restoration with cancellation atomically", async () => {
+    const committedAt = new Date("2026-09-12T09:00:00.000Z");
+    prismaMock.order.findFirst
+      .mockResolvedValueOnce(currentOrder(OrderStatus.CONFIRMED, {
+        inventoryCommittedAt: committedAt,
+        items: [{ medicineId: "44444444-4444-4444-8444-444444444444", quantity: 2 }],
+      }))
+      .mockResolvedValueOnce(cancelledOrderResult());
+    prismaMock.pharmacyInventory.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.order.updateMany.mockResolvedValue({ count: 1 });
+
+    const response = await request(app).patch(path).set("Authorization", authHeader());
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.pharmacyInventory.updateMany).toHaveBeenCalledWith({
+      where: {
+        pharmacyId,
+        medicineId: "44444444-4444-4444-8444-444444444444",
+      },
+      data: { quantity: { increment: 2 }, lastUpdated: expect.any(Date) },
+    });
+    expect(prismaMock.order.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: orderId,
+        customerId,
+        status: OrderStatus.CONFIRMED,
+        inventoryCommittedAt: { not: null },
+        inventoryRestoredAt: null,
+      },
+      data: {
+        status: OrderStatus.CANCELLED,
+        cancelledAt: expect.any(Date),
+        inventoryRestoredAt: expect.any(Date),
+      },
+    });
+  });
+
+  it("does not restore legacy inventory", async () => {
+    prismaMock.order.findFirst
+      .mockResolvedValueOnce(currentOrder(OrderStatus.CREATED))
+      .mockResolvedValueOnce(cancelledOrderResult());
+    prismaMock.order.updateMany.mockResolvedValue({ count: 1 });
+
+    expect((await request(app).patch(path).set("Authorization", authHeader())).status).toBe(200);
+    expect(prismaMock.pharmacyInventory.updateMany).not.toHaveBeenCalled();
   });
 
   it("retries exact P2034 and re-reads state", async () => {

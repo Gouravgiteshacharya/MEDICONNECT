@@ -10,14 +10,21 @@ import type {
 
 
 const MAX_ENHANCED_MESSAGE_LENGTH = 2000;
+const DEFAULT_PROVIDER_TIMEOUT_MS = 5000;
 
 export class OperationalReplyEnhancer implements AssistantResponder {
   readonly #assistant: AssistantResponder;
   readonly #provider?: AIProvider;
+  readonly #providerTimeoutMs: number;
 
-  constructor(assistant: AssistantResponder, provider?: AIProvider) {
+  constructor(
+    assistant: AssistantResponder,
+    provider?: AIProvider,
+    providerTimeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS,
+  ) {
     this.#assistant = assistant;
     this.#provider = provider;
+    this.#providerTimeoutMs = providerTimeoutMs;
   }
 
   async respond(
@@ -32,7 +39,10 @@ export class OperationalReplyEnhancer implements AssistantResponder {
     }
 
     try {
-      const enhanced = await this.#provider.generateOperationalReply(input);
+      const enhanced = await withTimeout(
+        this.#provider.generateOperationalReply(input),
+        this.#providerTimeoutMs,
+      );
 
       if (
         enhanced.status !== "success" ||
@@ -109,4 +119,24 @@ function isMedicineDiscoveryData(data: unknown): data is MedicineDiscoveryData {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("Operational reply provider timed out")),
+      timeoutMs,
+    );
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }

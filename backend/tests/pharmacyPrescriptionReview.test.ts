@@ -33,6 +33,7 @@ vi.mock("../src/lib/prisma.js", () => ({
       updateMany: vi.fn(),
     },
     order: { updateMany: vi.fn() },
+    pharmacyInventory: { updateMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -49,6 +50,7 @@ const prismaMock = prisma as unknown as {
     updateMany: Mock;
   };
   order: { updateMany: Mock };
+  pharmacyInventory: { updateMany: Mock };
   $transaction: Mock;
 };
 
@@ -101,7 +103,12 @@ function currentPrescription(
     status: PrescriptionStatus.PENDING_REVIEW,
     supersededByPrescription: null,
     order: {
+      id: orderId,
       status: OrderStatus.PRESCRIPTION_PENDING,
+      pharmacyId,
+      inventoryCommittedAt: null,
+      inventoryRestoredAt: null,
+      items: [],
     },
     ...overrides,
   };
@@ -605,6 +612,51 @@ describe("pharmacy prescription review API", () => {
     ).toBe(
       OrderStatus.PRESCRIPTION_REJECTED,
     );
+  });
+
+  it("restores committed inventory when aggregation rejects the prescription", async () => {
+    mockReviewSuccess([PrescriptionStatus.REJECTED]);
+    prismaMock.prescription.findFirst.mockResolvedValue(currentPrescription({
+      order: {
+        id: orderId,
+        status: OrderStatus.PRESCRIPTION_PENDING,
+        pharmacyId,
+        inventoryCommittedAt: reviewedAt,
+        inventoryRestoredAt: null,
+        items: [{
+          medicineId: "77777777-7777-4777-8777-777777777777",
+          quantity: 3,
+        }],
+      },
+    }));
+    prismaMock.pharmacyInventory.updateMany.mockResolvedValue({ count: 1 });
+
+    const response = await request(app)
+      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
+      .set("Authorization", authHeader())
+      .send({ status: "REJECTED", rejectionReason: "Unreadable" });
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.pharmacyInventory.updateMany).toHaveBeenCalledWith({
+      where: {
+        pharmacyId,
+        medicineId: "77777777-7777-4777-8777-777777777777",
+      },
+      data: { quantity: { increment: 3 }, lastUpdated: expect.any(Date) },
+    });
+    expect(prismaMock.order.updateMany.mock.calls[0][0].data).toEqual({
+      status: OrderStatus.PRESCRIPTION_REJECTED,
+      inventoryRestoredAt: expect.any(Date),
+    });
+  });
+
+  it("does not restore inventory for additional information", async () => {
+    mockReviewSuccess([PrescriptionStatus.ADDITIONAL_INFO_REQUIRED]);
+    await request(app)
+      .patch(`/api/v1/pharmacies/${pharmacyId}/prescriptions/${prescriptionId}/review`)
+      .set("Authorization", authHeader())
+      .send({ status: "ADDITIONAL_INFO_REQUIRED", reviewNotes: "Retake" });
+    expect(prismaMock.pharmacyInventory.updateMany).not.toHaveBeenCalled();
   });
 
   it.each([
