@@ -51,27 +51,20 @@ describe('MediConnect demo data', () => {
     expect(keonjhar.some((pharmacy) => /^Ward \d+/.test(pharmacy.addressLine1))).toBe(false)
   })
 
-  it('selects unique inventory with strongly decreasing tier density', () => {
-    const tierTotals = [0, 0, 0, 0]
+  it('keeps only 100 canonical formulations active and customer-facing', () => {
+    const medicines = buildMedicines(DEFAULT_DEMO_SEED)
+    const active = medicines.filter((medicine) => medicine.isActive)
+    expect(active).toHaveLength(100)
+    expect(active.every((medicine) => !/\[(DEMO|SYNTHETIC)\s+\d+\]/i.test(medicine.name))).toBe(true)
+    expect(active.every((medicine) => !medicine.manufacturer.startsWith('Internal Synthetic'))).toBe(true)
+  })
+
+  it('stocks 95 unique canonical formulations per pharmacy', () => {
     for (let pharmacyIndex = 0; pharmacyIndex < 500; pharmacyIndex++) {
       const indexes = selectMedicineIndexes(95, pharmacyIndex)
       expect(new Set(indexes).size).toBe(95)
-      for (const index of indexes) tierTotals[index < 500 ? 0 : index < 3_500 ? 1 : index < 12_000 ? 2 : 3]++
+      expect(indexes.every((index) => index >= 0 && index < 100)).toBe(true)
     }
-    const density = [tierTotals[0] / 500, tierTotals[1] / 3_000, tierTotals[2] / 8_500, tierTotals[3] / 8_000]
-    expect(density[0]).toBeGreaterThan(density[1])
-    expect(density[1]).toBeGreaterThan(density[2])
-    expect(density[2]).toBeGreaterThan(density[3])
-  })
-
-  it('curates repeated 6/3/1/0 common-product coverage across Keonjhar', () => {
-    const selections = Array.from({ length: 10 }, (_, pharmacyIndex) => new Set(selectMedicineIndexes(95, pharmacyIndex)))
-    const coverage = Array.from({ length: 100 }, (_, medicineIndex) => selections.filter((selection) => selection.has(medicineIndex)).length)
-    expect(coverage[0]).toBe(6)
-    expect(coverage[1]).toBe(3)
-    expect(coverage[2]).toBe(1)
-    expect(coverage[3]).toBe(0)
-    expect(coverage.slice(0, 100).filter((count) => count === 6)).toHaveLength(25)
   })
 
   it('produces non-negative, status-consistent stock and bounded prices', () => {

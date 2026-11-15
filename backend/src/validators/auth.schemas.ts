@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { emailSchema, trimmedText } from "./common.schemas.js";
 
-const passwordSchema = z
+export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters long.")
   .max(128, "Password must be at most 128 characters long.");

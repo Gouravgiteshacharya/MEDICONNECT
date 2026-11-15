@@ -1,3 +1,4 @@
+
 import { z } from "zod";
 
 import {
@@ -8,6 +9,7 @@ import {
   VehicleType,
 } from "../../generated/prisma/client.js";
 import { emailSchema, trimmedText, uuidSchema } from "./common.schemas.js";
+import { passwordSchema } from "./auth.schemas.js";
 
 const optionalText = (max: number) =>
   z.preprocess(
@@ -29,6 +31,8 @@ export const pharmacyApplicationSchema = z.object({
   pharmacyName: trimmedText(160),
   contactName: trimmedText(120),
   contactEmail: emailSchema,
+  password: passwordSchema,
+  confirmPassword: passwordSchema,
   phone: trimmedText(20),
   addressLine1: trimmedText(200),
   addressLine2: optionalText(200),
@@ -55,6 +59,14 @@ export const pharmacyApplicationSchema = z.object({
       code: "custom",
       path: ["gstNumber"],
       message: "GSTIN is required when the pharmacy is GST-registered.",
+    });
+  }
+
+  if (value.password !== value.confirmPassword) {
+    context.addIssue({
+      code: "custom",
+      path: ["confirmPassword"],
+      message: "Passwords do not match.",
     });
   }
 });

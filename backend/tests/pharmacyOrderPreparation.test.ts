@@ -237,6 +237,7 @@ describe("pharmacy order preparation API", () => {
       select: {
         id: true,
         status: true,
+        fulfillmentMethod: true,
       },
     });
   });

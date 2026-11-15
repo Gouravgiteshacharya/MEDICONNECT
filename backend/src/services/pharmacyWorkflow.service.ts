@@ -33,12 +33,12 @@ type WorkflowClock = () => Date;
 
 type WorkflowTransactionClient = Pick<
   Prisma.TransactionClient,
-  "order" | "pharmacyStaff" | "prescription" | "pharmacyInventory"
+  "order" | "pharmacyStaff" | "prescription" | "pharmacyInventory" | "dispatchJob"
 >;
 
 export type PharmacyWorkflowDataSource = Pick<
   PrismaClient,
-  "order" | "prescription" | "pharmacyInventory"
+  "order" | "prescription" | "pharmacyInventory" | "dispatchJob"
 > & {
   $transaction<T>(
     callback: (tx: WorkflowTransactionClient) => Promise<T>,
@@ -740,6 +740,7 @@ async function updateOrderPreparationAttempt(
         select: {
           id: true,
           status: true,
+          fulfillmentMethod: true,
         },
       });
 
@@ -765,6 +766,17 @@ async function updateOrderPreparationAttempt(
 
       if (updated.count !== 1) {
         throw orderPreparationNotAllowedError();
+      }
+
+      if (
+        input.status === OrderStatus.READY_FOR_PICKUP &&
+        order.fulfillmentMethod === FulfillmentMethod.DELIVERY
+      ) {
+        await tx.dispatchJob.create({
+          data: {
+            orderId: order.id,
+          },
+        });
       }
 
       const result = await tx.order.findUnique({

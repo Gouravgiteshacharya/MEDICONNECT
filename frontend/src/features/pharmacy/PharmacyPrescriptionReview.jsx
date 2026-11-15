@@ -7,6 +7,7 @@ import {
   getPharmacyPrescription,
   reviewPharmacyPrescription,
 } from './pharmacyService'
+import { getPrescriptionDocumentAccess } from '../commerce/prescriptionService'
 import { usePharmacyContext } from './pharmacyWorkspace'
 
 const emptyForm = {
@@ -50,19 +51,58 @@ export default function PharmacyPrescriptionReview() {
   const [result, setResult] = useState(null)
   const [prescription, setPrescription] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [openingDocument, setOpeningDocument] = useState(false)
   const [error, setError] = useState('')
 
   async function load() {
     setError('')
-    try { setPrescription(await getPharmacyPrescription(pharmacyId, prescriptionId)) }
-    catch (requestError) { setError(requestError?.message || 'Unable to load this prescription.') }
+    try {
+      setPrescription(
+        await getPharmacyPrescription(pharmacyId, prescriptionId),
+      )
+    } catch (requestError) {
+      setError(requestError?.message || 'Unable to load this prescription.')
+    }
   }
 
-  useEffect(() => { load() }, [pharmacyId, prescriptionId])
+  useEffect(() => {
+    load()
+  }, [pharmacyId, prescriptionId])
 
   function updateField(event) {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
+  }
+
+  async function openPrescriptionDocument() {
+    const documentWindow = window.open('about:blank', '_blank')
+
+    if (!documentWindow) {
+      setError('Please allow pop-ups to open the prescription document.')
+      return
+    }
+
+    documentWindow.opener = null
+    setOpeningDocument(true)
+    setError('')
+
+    try {
+      const response = await getPrescriptionDocumentAccess(prescriptionId)
+      const documentUrl = response.documentAccess?.url
+
+      if (!documentUrl) {
+        throw new Error('The document link was not returned.')
+      }
+
+      documentWindow.location.href = documentUrl
+    } catch (requestError) {
+      documentWindow.close()
+      setError(
+        requestError?.message || 'Unable to open the prescription document.',
+      )
+    } finally {
+      setOpeningDocument(false)
+    }
   }
 
   async function submitReview(event) {
@@ -94,7 +134,11 @@ export default function PharmacyPrescriptionReview() {
       <header className="pharmacy-page-header">
         <div>
           <span>PRESCRIPTION REVIEW</span>
-          <h1>{prescription ? labelFromEnum(prescription.status) : 'Loading prescription...'}</h1>
+          <h1>
+            {prescription
+              ? labelFromEnum(prescription.status)
+              : 'Loading prescription...'}
+          </h1>
           <p>
             Pharmacist membership is required by the backend. This page does
             not interpret medical content or provide treatment advice.
@@ -114,9 +158,26 @@ export default function PharmacyPrescriptionReview() {
         <section className="pharmacy-card pharmacy-message">
           <strong>Order {prescription.order.orderNumber}</strong>
           <p>Order status: {labelFromEnum(prescription.order.status)}</p>
-          <p>Uploaded: {formatDate(prescription.uploadedAt)} · Reviewed: {formatDate(prescription.reviewedAt)}</p>
+          <p>
+            Uploaded: {formatDate(prescription.uploadedAt)} · Reviewed:{' '}
+            {formatDate(prescription.reviewedAt)}
+          </p>
+
+          <button
+            type="button"
+            className="pharmacy-secondary-button"
+            disabled={openingDocument}
+            onClick={openPrescriptionDocument}
+          >
+            {openingDocument
+              ? 'Opening document...'
+              : 'Open prescription document'}
+          </button>
+
           {prescription.reviewNotes && <p>Notes: {prescription.reviewNotes}</p>}
-          {prescription.rejectionReason && <p>Reason: {prescription.rejectionReason}</p>}
+          {prescription.rejectionReason && (
+            <p>Reason: {prescription.rejectionReason}</p>
+          )}
         </section>
       )}
 

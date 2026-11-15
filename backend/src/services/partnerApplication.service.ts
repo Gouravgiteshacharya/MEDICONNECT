@@ -180,6 +180,7 @@ export async function submitPharmacyApplication(input: PharmacyApplicationInput,
   const storagePath = `partner-applications/pharmacies/${applicationId}/${randomUUID()}-${filename}`;
   await prescriptionStorage.upload({ key: storagePath, content: file.buffer, contentType: file.mimetype });
   try {
+    const passwordHash = await hashPassword(input.password);
     const application = await prisma.pharmacyPartnerApplication.create({
       data: {
         id: applicationId,
@@ -205,6 +206,7 @@ export async function submitPharmacyApplication(input: PharmacyApplicationInput,
         photoStoragePath: storagePath,
         photoOriginalFilename: filename,
         photoMimeType: file.mimetype,
+        passwordHash,
         consentAcceptedAt: new Date(),
       },
       select: pharmacySummarySelect,
@@ -385,7 +387,11 @@ export async function transitionPharmacyApplication(applicationId: string, input
   if (input.status === PharmacyApplicationStatus.REJECTED && !input.reason) throw conflict("A rejection reason is required.", "REJECTION_REASON_REQUIRED");
   return prisma.pharmacyPartnerApplication.update({
     where: { id: applicationId },
-    data: { status: input.status, rejectionReason: input.status === PharmacyApplicationStatus.REJECTED ? input.reason : null },
+    data: {
+      status: input.status,
+      rejectionReason: input.status === PharmacyApplicationStatus.REJECTED ? input.reason : null,
+      ...(input.status === PharmacyApplicationStatus.REJECTED ? { passwordHash: null } : {}),
+    },
     select: pharmacyDetailSelect,
   });
 }
@@ -442,16 +448,24 @@ export async function approvePharmacyApplication(applicationId: string) {
   if (application.status !== PharmacyApplicationStatus.FIELD_VISIT_COMPLETED || application.fieldVisit?.result !== PartnerVerificationResult.PASSED) throw invalidTransition();
   const existing = await prisma.user.findFirst({ where: { OR: [{ email: { equals: application.contactEmail, mode: "insensitive" } }, { phone: application.phone }] }, select: { id: true } });
   if (existing) throw conflict("A user already exists with this email or phone.", "PARTNER_ACCOUNT_CONFLICT");
-  const credential = temporaryCredential();
-  const passwordHash = await hashPassword(credential);
+  const credential = application.passwordHash ? null : temporaryCredential();
+  const passwordHash = application.passwordHash ?? (await hashPassword(credential!));
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({ data: { name: application.contactName, email: application.contactEmail, phone: application.phone, passwordHash, role: UserRole.PHARMACY_STAFF }, select: { id: true, email: true, role: true } });
     const pharmacy = await tx.pharmacy.create({ data: { name: application.pharmacyName, phone: application.phone, email: application.contactEmail, licenseNumber: application.licenseNumber, addressLine1: application.addressLine1, addressLine2: application.addressLine2, city: application.city, state: application.state, postalCode: application.postalCode, latitude: application.latitude, longitude: application.longitude, isVerified: true, isActive: true, partnerStatus: PharmacyPartnerStatus.ACTIVE }, select: { id: true, name: true, partnerStatus: true } });
     await tx.pharmacyStaff.create({ data: { userId: user.id, pharmacyId: pharmacy.id, role: PharmacyStaffRole.OWNER, isActive: true } });
-    await tx.pharmacyPartnerApplication.update({ where: { id: applicationId }, data: { status: PharmacyApplicationStatus.APPROVED, approvedUserId: user.id, approvedPharmacyId: pharmacy.id } });
+    await tx.pharmacyPartnerApplication.update({
+      where: { id: applicationId },
+      data: {
+        status: PharmacyApplicationStatus.APPROVED,
+        approvedUserId: user.id,
+        approvedPharmacyId: pharmacy.id,
+        passwordHash: null,
+      },
+    });
     return { user, pharmacy };
   });
-  return { ...result, temporaryCredential: credential };
+  return { ...result, ...(credential ? { temporaryCredential: credential } : {}) };
 }
 
 export async function approveRiderApplication(applicationId: string) {
