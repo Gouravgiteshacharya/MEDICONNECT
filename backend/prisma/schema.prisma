@@ -184,6 +184,7 @@ model RiderPartnerApplication {
   id                               String                     @id @default(uuid()) @db.Uuid
   fullName                         String
   email                            String
+  passwordHash                     String?
   phone                            String
   addressLine1                     String
   addressLine2                     String?

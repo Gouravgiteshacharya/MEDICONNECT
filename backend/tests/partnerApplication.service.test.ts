@@ -51,6 +51,7 @@ const {
   submitPharmacyApplication,
   submitRiderApplication,
   transitionPharmacyApplication,
+  transitionRiderApplication,
 } = await import("../src/services/partnerApplication.service.js");
 
 const { hashPassword } = await import("../src/utils/password.js");
@@ -152,6 +153,55 @@ describe("partner application service", () => {
     expect(createCall.data).not.toHaveProperty("confirmPassword");
   });
 
+  it("hashes the rider's chosen password before storing the application", async () => {
+    prisma.riderPartnerApplication.findFirst.mockResolvedValue(null);
+    prisma.riderPartnerApplication.create.mockResolvedValue({
+      id: applicationId,
+    });
+
+    const password = "RiderChosen123!";
+
+    const riderInput = {
+      fullName: "Rider",
+      email: "rider@example.com",
+      phone: "8888888888",
+      password,
+      confirmPassword: password,
+      addressLine1: "Road",
+      addressLine2: "",
+      city: "Keonjhar",
+      state: "Odisha",
+      postalCode: "758001",
+      vehicleType: "BIKE",
+      vehicleNumber: "OD09AA1234",
+      drivingLicenseNumber: "DL-1",
+      identityDocumentType: "DRIVING_LICENCE",
+      consentAccepted: true,
+    } as never;
+
+    const identityDocument = {
+      originalname: "identity.pdf",
+      mimetype: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n"),
+    } as Express.Multer.File;
+
+    await submitRiderApplication(riderInput, identityDocument);
+
+    expect(hashPassword).toHaveBeenCalledWith(password);
+
+    const createCall =
+      prisma.riderPartnerApplication.create.mock.calls[0]?.[0];
+
+    expect(createCall.data).toEqual(
+      expect.objectContaining({
+        passwordHash: "hashed-temporary-credential",
+      }),
+    );
+
+    expect(createCall.data).not.toHaveProperty("password");
+    expect(createCall.data).not.toHaveProperty("confirmPassword");
+  });
+
   it("rejects obvious duplicate pharmacy and rider applications", async () => {
     prisma.pharmacyPartnerApplication.findFirst.mockResolvedValue({
       id: applicationId,
@@ -194,6 +244,8 @@ describe("partner application service", () => {
       fullName: "Rider",
       email: "rider@example.com",
       phone: "8888888888",
+      password: "RiderChosen123!",
+      confirmPassword: "RiderChosen123!",
       addressLine1: "Road",
       city: "Keonjhar",
       state: "Odisha",
@@ -247,7 +299,7 @@ describe("partner application service", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid transitions and clears the pending password hash", async () => {
+  it("rejects invalid transitions and clears the pending pharmacy password hash", async () => {
     prisma.pharmacyPartnerApplication.findUnique.mockResolvedValue({
       status: PharmacyApplicationStatus.APPLICATION_SUBMITTED,
       passwordHash: "pending-owner-password-hash",
@@ -280,6 +332,33 @@ describe("partner application service", () => {
     );
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("clears the pending rider password hash when the application is rejected", async () => {
+    prisma.riderPartnerApplication.findUnique.mockResolvedValue({
+      ...riderApplication,
+      status: RiderApplicationStatus.APPLICATION_SUBMITTED,
+      passwordHash: "pending-rider-password-hash",
+    });
+
+    prisma.riderPartnerApplication.update.mockResolvedValue({
+      id: applicationId,
+      status: RiderApplicationStatus.REJECTED,
+    });
+
+    await transitionRiderApplication(applicationId, {
+      status: RiderApplicationStatus.REJECTED,
+      reason: "Verification failed",
+    });
+
+    expect(prisma.riderPartnerApplication.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: RiderApplicationStatus.REJECTED,
+          passwordHash: null,
+        }),
+      }),
+    );
   });
 
   it("records passed field and office verification before completion", async () => {
@@ -451,7 +530,7 @@ describe("partner application service", () => {
     );
   });
 
-  it("approves a verified rider with DELIVERY_PARTNER and an active OFFLINE profile", async () => {
+  it("approves a verified rider with DELIVERY_PARTNER and an active OFFLINE profile using the legacy fallback", async () => {
     prisma.riderPartnerApplication.findUnique.mockResolvedValue(
       riderApplication,
     );
@@ -479,7 +558,7 @@ describe("partner application service", () => {
       callback(tx),
     );
 
-    await approveRiderApplication(applicationId);
+    const result = await approveRiderApplication(applicationId);
 
     expect(tx.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -495,6 +574,61 @@ describe("partner application service", () => {
         data: expect.objectContaining({
           availability: "OFFLINE",
           isActive: true,
+        }),
+      }),
+    );
+
+    expect(result.temporaryCredential).toEqual(expect.any(String));
+  });
+
+  it("approves a verified rider using the saved password hash without generating a temporary credential", async () => {
+    prisma.riderPartnerApplication.findUnique.mockResolvedValue({
+      ...riderApplication,
+      passwordHash: "hashed-rider-chosen-password",
+    });
+
+    const tx = {
+      user: {
+        create: vi.fn().mockResolvedValue({
+          id: "user",
+          role: UserRole.DELIVERY_PARTNER,
+        }),
+      },
+      deliveryPartner: {
+        create: vi.fn().mockResolvedValue({
+          id: "rider",
+          availability: "OFFLINE",
+          isActive: true,
+        }),
+      },
+      riderPartnerApplication: {
+        update: vi.fn().mockResolvedValue({}),
+      },
+    };
+
+    prisma.$transaction.mockImplementation(async (callback) =>
+      callback(tx),
+    );
+
+    const result = await approveRiderApplication(applicationId);
+
+    expect(tx.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          role: UserRole.DELIVERY_PARTNER,
+          passwordHash: "hashed-rider-chosen-password",
+        }),
+      }),
+    );
+
+    expect(hashPassword).not.toHaveBeenCalled();
+
+    expect(result).not.toHaveProperty("temporaryCredential");
+
+    expect(tx.riderPartnerApplication.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          passwordHash: null,
         }),
       }),
     );

@@ -40,6 +40,8 @@ const pharmacyInitial = {
 const riderInitial = {
   fullName: '',
   email: '',
+  password: '',
+  confirmPassword: '',
   phone: '',
   addressLine1: '',
   addressLine2: '',
@@ -250,6 +252,18 @@ export default function PartnerApplicationPage() {
 
         response = await submitPharmacyApplication(body)
       } else {
+        if (form.password.length < 8) {
+          throw new Error('Password must be at least 8 characters long.')
+        }
+
+        if (form.password.length > 128) {
+          throw new Error('Password must be at most 128 characters long.')
+        }
+
+        if (form.password !== form.confirmPassword) {
+          throw new Error('Password and confirm password do not match.')
+        }
+
         if (!form.identityDocumentType) {
           throw new Error(
             'Choose the identity proof type you are uploading.',
@@ -444,6 +458,30 @@ export default function PartnerApplicationPage() {
                 type="email"
                 maxLength={254}
                 autoComplete="email"
+                required
+              />
+
+              <Field
+                label="Create password"
+                name="password"
+                value={form.password}
+                onChange={change}
+                type="password"
+                minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
+                required
+              />
+
+              <Field
+                label="Confirm password"
+                name="confirmPassword"
+                value={form.confirmPassword}
+                onChange={change}
+                type="password"
+                minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
                 required
               />
 
