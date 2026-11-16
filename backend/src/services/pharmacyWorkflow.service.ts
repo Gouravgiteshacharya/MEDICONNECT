@@ -281,7 +281,7 @@ async function reviewPrescriptionAttempt(
       const membership = await requireMembership(
         userId,
         pharmacyId,
-        [PharmacyStaffRole.PHARMACIST],
+        workflowRoles,
         membershipReader,
         tx,
       );
